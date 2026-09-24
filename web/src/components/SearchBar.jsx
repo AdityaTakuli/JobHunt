@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconMapPin, IconSearch } from '../icons.jsx';
+import { IconLinkedIn, IconMapPin, IconSearch } from '../icons.jsx';
 
 // "What" and "where", like Glassdoor's search. Submitting runs that exact search on Google Jobs.
-export default function SearchBar({ cities, busy, onSearch }) {
+// The LinkedIn switch narrows the list (feed or search results) to LinkedIn jobs.
+export default function SearchBar({ cities, busy, onSearch, linkedinOnly, onLinkedin }) {
   const [what, setWhat] = useState('');
   const [where, setWhere] = useState('');
   const touchedWhere = useRef(false);
@@ -48,6 +49,16 @@ export default function SearchBar({ cities, busy, onSearch }) {
           ))}
         </datalist>
       </label>
+      <button
+        type="button"
+        className={`sb-linkedin${linkedinOnly ? ' is-on' : ''}`}
+        aria-pressed={linkedinOnly}
+        onClick={onLinkedin}
+        title={linkedinOnly ? 'Showing LinkedIn jobs only. Tap to show all.' : 'Show only LinkedIn jobs'}
+      >
+        <IconLinkedIn size={16} />
+        LinkedIn only
+      </button>
       <button type="submit" className="btn btn-primary sb-go" disabled={!ready || busy}>
         {busy ? 'Searching…' : 'Search'}
       </button>

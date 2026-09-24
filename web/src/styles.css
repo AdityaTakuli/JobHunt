@@ -2863,3 +2863,74 @@ dialog.dialog::backdrop {
   color: inherit;
   font-weight: 600;
 }
+
+/* ---------- LinkedIn switch and location panel ---------- */
+
+.sb-linkedin {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 46px;
+  margin: 6px 6px 0 0;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: none;
+  color: var(--text-2);
+  font-size: 13.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sb-linkedin:hover {
+  color: var(--text);
+}
+
+.sb-linkedin.is-on {
+  border-color: #0a66c2;
+  background: #0a66c2;
+  color: #fff;
+}
+
+.searchbar .sb-go {
+  flex: 1 1 auto;
+}
+
+@media (min-width: 720px) {
+  .sb-linkedin {
+    flex: none;
+    margin: 0 8px 0 4px;
+    min-height: 42px;
+    border-radius: 99px;
+  }
+
+  .searchbar .sb-go {
+    flex: none;
+  }
+}
+
+.location-panel {
+  width: 260px;
+  max-width: 100%;
+}
+
+.location-input {
+  min-height: 40px;
+  margin-bottom: 6px;
+}
+
+.location-options {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.opt-count {
+  margin-left: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}

@@ -442,6 +442,10 @@ describe('integration', { skip: !dbReady }, () => {
     assert.ok((await direct()).includes('Architecture Apply Intern'));
     const [card] = (await request('/api/jobs?city=Pune&exp=any&apply=company')).data.jobs;
     assert.equal(card.apply_options.length, 2, 'the app gets every option');
+    const linkedinOnly = async () => (await request('/api/jobs?city=pune&exp=any&linkedin=1')).data.jobs.map((j) => j.title);
+    assert.ok(!(await linkedinOnly()).includes('Architecture Apply Intern'), 'no LinkedIn link yet (and "pune" matches Pune)');
+    await ingestJobs([job([{ url: 'https://in.linkedin.com/jobs/view/42', publisher: 'LinkedIn' }])], { classifier, linkChecker: null, now });
+    assert.ok((await linkedinOnly()).includes('Architecture Apply Intern'), 'a LinkedIn apply option counts');
     await query("DELETE FROM jobs WHERE title = 'Architecture Apply Intern'");
   });
 

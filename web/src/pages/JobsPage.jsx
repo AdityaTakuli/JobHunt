@@ -27,6 +27,7 @@ const DEFAULT_FILTERS = {
   bim: false,
   source: '',
   apply: '',
+  linkedin: false,
   hideApplied: false,
   sort: 'recent',
 };
@@ -172,6 +173,7 @@ export default function JobsPage() {
       within: filters.within,
       source: filters.source,
       apply: filters.apply,
+      linkedin: filters.linkedin,
       bim: filters.bim,
       hideApplied: filters.hideApplied,
       sort: filters.sort,
@@ -264,7 +266,9 @@ export default function JobsPage() {
     return names;
   }, [meta, filters.city]);
 
-  const otherFilters = filters.role || filters.software.length || filters.within || filters.source || filters.apply || filters.bim || filters.hideApplied;
+  const otherFilters =
+    filters.role || filters.software.length || filters.within || filters.source || filters.apply || filters.linkedin || filters.bim || filters.hideApplied;
+  const pickedCity = !search && !['mine', 'all'].includes(filters.city) ? filters.city : null;
   const closeDetail = useCallback(() => setSelectedId(null), []);
   const selectedJob = jobs.find((j) => j.id === selectedId);
   const hiddenByFilters = search ? Math.max(0, search.ids.length - total) : 0;
@@ -308,6 +312,14 @@ export default function JobsPage() {
               <p>Try a broader title (for example "architect" instead of "junior BIM architect"), or another city.</p>
             </>
           )
+        ) : pickedCity && !otherFilters ? (
+          <>
+            <h2>No saved roles in {pickedCity} yet</h2>
+            <p>Type a role in the search bar above with {pickedCity} as the place to find roles there on Google Jobs.</p>
+            <button type="button" className="btn btn-sm" onClick={() => setFilters((f) => ({ ...f, city: 'mine' }))}>
+              Back to my cities
+            </button>
+          </>
         ) : otherFilters ? (
           <>
             <h2>No roles match these filters</h2>
@@ -358,14 +370,20 @@ export default function JobsPage() {
   return (
     <div className="jobs-page">
       <h1 className="visually-hidden">Jobs</h1>
-      <SearchBar cities={meta?.myCities || []} busy={searching} onSearch={runSearch} />
+      <SearchBar
+        cities={meta?.myCities || []}
+        busy={searching}
+        onSearch={runSearch}
+        linkedinOnly={filters.linkedin}
+        onLinkedin={() => setFilters((f) => ({ ...f, linkedin: !f.linkedin }))}
+      />
       <p className="search-hint">
         {meta?.search?.configured === false
           ? 'Google search is not set up on the server yet.'
           : `Searches Google Jobs live${meta?.search ? ` · ${meta.search.leftToday} search${meta.search.leftToday === 1 ? '' : 'es'} left today` : ''}. The same search again within 6 hours is free.`}
       </p>
 
-      <JobFilters filters={filters} setFilters={setFilters} cityOptions={cityOptions} searchMode={Boolean(search)} />
+      <JobFilters filters={filters} setFilters={setFilters} cityOptions={cityOptions} cityCounts={meta?.cities || []} searchMode={Boolean(search)} />
 
       <AnimatePresence initial={false}>
         {search && (

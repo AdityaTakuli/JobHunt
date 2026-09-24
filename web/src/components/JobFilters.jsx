@@ -1,4 +1,5 @@
 import { motion } from 'motion/react';
+import { useState } from 'react';
 import { SOFTWARE_FILTERS, SOURCE_LABELS } from '../format.js';
 import { IconMapPin, IconSparkle } from '../icons.jsx';
 import { CheckList, FilterPill, OptionList } from './FilterPill.jsx';
@@ -40,6 +41,56 @@ const APPLY_ON = [
 
 const labelOf = (list, value) => list.find((o) => o.value === value)?.label;
 
+// Major cities for architecture and BIM work, offered even before any job there is saved.
+const POPULAR_CITIES = ['Bengaluru', 'Mumbai', 'Delhi', 'Gurugram', 'Noida', 'Pune', 'Hyderabad', 'Chennai', 'Kolkata', 'Ahmedabad', 'Kochi', 'Chandigarh', 'Jaipur', 'Goa', 'Mysuru', 'Remote'];
+
+// Location: type any city (Enter to apply) or pick one. Cities with saved jobs show their count.
+function LocationPanel({ value, cityOptions, cityCounts, onPick }) {
+  const [text, setText] = useState('');
+  const counts = Object.fromEntries(cityCounts.map((c) => [c.city, c.count]));
+  const names = [...new Set([...cityOptions, ...POPULAR_CITIES])];
+  const q = text.trim().toLowerCase();
+  const matches = q ? names.filter((c) => c.toLowerCase().includes(q)) : names;
+  const options = [
+    ...(q ? [] : [{ value: 'mine', label: 'My cities' }, { value: 'all', label: 'All cities' }]),
+    ...matches.map((c) => ({
+      value: c,
+      label: (
+        <>
+          {c}
+          {counts[c] ? <span className="opt-count">{counts[c]}</span> : null}
+        </>
+      ),
+    })),
+  ];
+  return (
+    <div className="location-panel">
+      <input
+        className="input location-input"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && text.trim()) {
+            e.preventDefault();
+            onPick(matches[0] || text.trim());
+          }
+        }}
+        placeholder="Type any city…"
+        aria-label="Type any city"
+        autoFocus
+      />
+      <div className="location-options">
+        <OptionList label="Location" options={options} value={value} onChange={onPick} />
+        {q && !matches.length && (
+          <button type="button" className="option" onClick={() => onPick(text.trim())}>
+            Use “{text.trim()}”
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Split pill: the switch turns the experience filter on or off in one tap; the rest opens the
 // levels. Off keeps the chosen level, so switching back on restores it.
 function ExperiencePill({ on, level, onToggle, onLevel }) {
@@ -72,7 +123,7 @@ function ExperiencePill({ on, level, onToggle, onLevel }) {
   );
 }
 
-export default function JobFilters({ filters, setFilters, cityOptions, searchMode }) {
+export default function JobFilters({ filters, setFilters, cityOptions, cityCounts = [], searchMode }) {
   const set = (key) => (value) => setFilters((f) => ({ ...f, [key]: value }));
   const toggleSoftware = (name) =>
     setFilters((f) => ({ ...f, software: f.software.includes(name) ? f.software.filter((s) => s !== name) : [...f.software, name] }));
@@ -102,12 +153,14 @@ export default function JobFilters({ filters, setFilters, cityOptions, searchMod
           panelLabel="Location"
         >
           {(close) => (
-            <OptionList
-              label="Location"
-              options={[{ value: 'mine', label: 'My cities' }, { value: 'all', label: 'All cities' }, ...cityOptions.map((c) => ({ value: c, label: c }))]}
+            <LocationPanel
               value={filters.city}
-              onChange={set('city')}
-              onDone={close}
+              cityOptions={cityOptions}
+              cityCounts={cityCounts}
+              onPick={(v) => {
+                set('city')(v);
+                close();
+              }}
             />
           )}
         </FilterPill>

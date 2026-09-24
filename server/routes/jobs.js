@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
 import { getEstimates } from '../lib/estimate.js';
+import { normalizeCity } from '../lib/normalize.js';
 import { getSettings } from '../lib/settings.js';
 import { DAY_MS, startOfIstDay } from '../lib/time.js';
 import { localSearchesThisMonth } from '../tasks/fetchJobs.js';
@@ -59,8 +60,9 @@ export function feedFilters(q, now = new Date(), myCities = []) {
       params.push(myCities);
     }
   } else if (q.city && q.city !== 'all') {
+    // Typed cities come in any spelling: "bangalore" finds the jobs stored as "Bengaluru".
     where.push('j.city = ?');
-    params.push(String(q.city));
+    params.push(normalizeCity(String(q.city).slice(0, 80)) || String(q.city));
   }
   // Experience: exp=N keeps roles asking for at most N years. Roles that do not say count only
   // when classified as an internship or fresher role. exp=any turns the filter off.
@@ -98,6 +100,13 @@ export function feedFilters(q, now = new Date(), myCities = []) {
     params.push(String(q.source));
   }
   if (q.bim === '1') where.push('j.is_bim = 1');
+  // LinkedIn jobs: from the LinkedIn alert emails, or with a LinkedIn apply link from Google.
+  if (q.linkedin === '1') {
+    where.push(
+      `(j.apply_kind = 'linkedin' OR JSON_SEARCH(j.sources, 'one', 'linkedin_email', NULL, '$[*].source') IS NOT NULL
+        OR JSON_SEARCH(j.apply_options, 'one', 'linkedin', NULL, '$[*].kind') IS NOT NULL)`,
+    );
+  }
   // Where she can apply: company = the firm's own site, direct = + LinkedIn, trusted = + job boards.
   const APPLY_KINDS = { company: ['company'], direct: ['company', 'linkedin'], trusted: ['company', 'linkedin', 'board'] };
   if (APPLY_KINDS[q.apply]) {
