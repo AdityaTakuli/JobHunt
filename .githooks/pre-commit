@@ -1,0 +1,10 @@
+#!/bin/sh
+# Rebuilds web/dist and adds it to the commit whenever the web app's source is being committed,
+# so the deployed build (Hostinger cannot run Vite) never lags behind the code.
+# Enabled once per clone with: git config core.hooksPath .githooks
+
+if git diff --cached --name-only | grep -qE '^(web/(src|public|index\.html)|shared/|vite\.config\.js|package(-lock)?\.json)'; then
+  echo "pre-commit: building web/dist…"
+  npm run build --silent || { echo "pre-commit: web build failed, commit aborted"; exit 1; }
+  git add -A web/dist
+fi

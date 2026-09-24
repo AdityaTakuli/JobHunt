@@ -1,6 +1,6 @@
-# Dependencies and build output (Hostinger runs `npm install` and `npm run build`)
+# Dependencies. web/dist IS committed: Vite's native bundler cannot run on Hostinger shared
+# hosting, so the web app is built locally (the pre-commit hook does it) and deployed as files.
 node_modules/
-web/dist/
 
 # Secrets: set these in hPanel's environment settings, never commit them
 .env

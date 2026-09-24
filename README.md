@@ -75,7 +75,7 @@ Daily totals are stored in the `ai_usage` table, so every task and restart share
 The plan needs Node.js hosting (hPanel → Websites → *Node.js* / "Node.js Web App"). If it is not there, upgrade the plan or use a small VPS.
 
 1. **Database:** hPanel → Databases → MySQL Databases → create a database and user. Put the values in `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`. Tables are created automatically on first start.
-2. **App:** create the Node.js app from this repo (Git or upload), Node 22, build command `npm run build`, start command `npm start` (entry `server/index.js`).
+2. **App:** create the Node.js app from this repo (GitHub), framework preset **Express**, Node 22, entry file `server/index.js`. There is no build step on Hostinger: Vite's native bundler cannot run there, so `web/dist` is built locally and committed. After cloning, run `git config core.hooksPath .githooks` once; the pre-commit hook then rebuilds and adds `web/dist` whenever web code changes.
 3. **Environment:** add every variable from `.env.example` in the app's environment settings (never commit `.env`). Set `NODE_ENV=production` and `PUBLIC_URL=https://yourdomain`. In production the API refuses all requests until `APP_PASSWORD` is set.
 4. **Scheduling — pick one:**
    - `ENABLE_SCHEDULER=true` runs node-cron inside the app. Simplest, but only works while the app process stays up.
