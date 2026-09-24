@@ -10,7 +10,7 @@ import { useJobActions } from '../useJobActions.js';
 
 const PAGE = 30;
 const STORAGE_KEY = 'aj-job-filters';
-const DEFAULT_FILTERS = { q: '', city: 'Bengaluru', role: '', software: [], within: '', source: '', bim: false, hideApplied: false };
+const DEFAULT_FILTERS = { q: '', city: 'mine', role: '', software: [], within: '', source: '', bim: false, hideApplied: false };
 
 function loadFilters() {
   try {
@@ -170,9 +170,10 @@ export default function JobsPage() {
   const toggleSoftware = (name) =>
     setFilters((f) => ({ ...f, software: f.software.includes(name) ? f.software.filter((s) => s !== name) : [...f.software, name] }));
 
+  // Her chosen cities first (even before they have jobs), then every other city in the feed.
   const cityOptions = useMemo(() => {
-    const names = (meta?.cities || []).map((c) => c.city);
-    if (filters.city && filters.city !== 'all' && !names.includes(filters.city)) names.unshift(filters.city);
+    const names = [...new Set([...(meta?.myCities || []), ...(meta?.cities || []).map((c) => c.city)])];
+    if (filters.city && !['all', 'mine'].includes(filters.city) && !names.includes(filters.city)) names.unshift(filters.city);
     return names;
   }, [meta, filters.city]);
 
@@ -200,6 +201,7 @@ export default function JobsPage() {
           <label>
             <span className="visually-hidden">City</span>
             <select className="select select-sm" value={filters.city} onChange={(e) => set('city', e.target.value)}>
+              <option value="mine">My cities</option>
               <option value="all">All cities</option>
               {cityOptions.map((c) => (
                 <option key={c} value={c}>

@@ -45,7 +45,6 @@ export const config = {
     reserve: num(env.SERPAPI_RESERVE, 10), // stop fetching when this many searches are left
     queriesPerRun: num(env.SERPAPI_QUERIES_PER_RUN, 3),
     runsPerDay: 2,
-    location: env.SERPAPI_LOCATION || 'Bengaluru,Karnataka,India',
   },
 
   // Token guardrails shared by the AI classifiers (lib/aiBudget.js).

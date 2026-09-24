@@ -56,7 +56,7 @@ export async function readInbox({ linkChecker, fetchImpl = fetch } = {}) {
 
         const { jobs, failures } = await parseMessages(sources);
         const settings = await getSettings();
-        const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, fetchImpl });
+        const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, cities: settings.cities, fetchImpl });
         const result = await ingestJobs(jobs, { classifier, ...(linkChecker !== undefined && { linkChecker }) });
         await client.messageFlagsAdd(uids, ['\\Seen'], { uid: true });
 

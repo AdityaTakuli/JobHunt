@@ -39,8 +39,10 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const wordRe = (word) => new RegExp(`\\b${escapeRe(word)}\\b`, 'i');
 const EXCLUDE_RES = EXCLUDE.map(wordRe);
 
-export function isBengaluru(city) {
-  return /^(bengaluru|bangalore)$/i.test(String(city || '').trim());
+// True when the job is in one of her chosen cities (both already normalized, e.g. "Bengaluru").
+export function isPreferredCity(city, cities = []) {
+  const c = String(city || '').trim().toLowerCase();
+  return Boolean(c) && cities.some((p) => String(p).trim().toLowerCase() === c);
 }
 
 // Minimum years of experience asked for, or null. "3+ years", "3-5 yrs", "minimum 4 years".
@@ -77,7 +79,7 @@ export function detectSoftware(text) {
   return SOFTWARE.filter(([, re]) => re.test(text)).map(([name]) => name);
 }
 
-export function classifyWithRules(job, { extraExclude = [] } = {}) {
+export function classifyWithRules(job, { extraExclude = [], cities = [] } = {}) {
   const title = String(job.title || '');
   const description = String(job.description || '');
   const text = `${title}\n${description}`;
@@ -99,7 +101,7 @@ export function classifyWithRules(job, { extraExclude = [] } = {}) {
     score = 40;
     if (isBim) score += 20;
     if (roleType === 'internship' || roleType === 'fresher') score += 20;
-    if (isBengaluru(job.city)) score += 20;
+    if (isPreferredCity(job.city, cities)) score += 20;
   }
 
   let reason;

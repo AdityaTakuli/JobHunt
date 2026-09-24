@@ -120,12 +120,12 @@ function SettingsForm() {
         <label className="field span-2">
           <span>Search queries</span>
           <textarea className="textarea" value={form.search_queries} onChange={set('search_queries')} rows={6} />
-          <small>One per line. Each fetch runs up to 3 of these in rotation to stay within the SerpApi quota.</small>
+          <small>One per line, without a city: each one is searched in every city you pick. Each fetch runs up to 3 searches in rotation to stay within the SerpApi quota.</small>
         </label>
         <label className="field">
-          <span>Cities</span>
-          <input className="input" value={form.cities} onChange={set('cities')} placeholder="Bengaluru, Mumbai" />
-          <small>Comma-separated. Used for the daily digest.</small>
+          <span>Cities to search</span>
+          <input className="input" value={form.cities} onChange={set('cities')} placeholder="Bengaluru, Mumbai, Pune, Remote" />
+          <small>Comma-separated, any city (or Remote). New jobs come in from the next fetch; these cities rank higher and fill the daily digest.</small>
         </label>
         <label className="field">
           <span>Notification email</span>

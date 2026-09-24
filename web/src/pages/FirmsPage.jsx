@@ -6,7 +6,7 @@ import { firmsFromCsv } from '../csv.js';
 import { FIRM_STATUSES, FIRM_TYPES, formatDate } from '../format.js';
 import { IconEdit, IconMail, IconPlus, IconSearch } from '../icons.jsx';
 
-const EMPTY = { name: '', city: 'Bengaluru', type: 'design studio', website: '', contact_email: '', status: 'not contacted', notes: '' };
+const EMPTY = { name: '', city: '', type: 'design studio', website: '', contact_email: '', status: 'not contacted', notes: '' };
 
 function FirmDialog({ firm, onClose, onSaved, onDeleted }) {
   const isNew = !firm.id;

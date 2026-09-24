@@ -15,8 +15,8 @@ export class LlmError extends Error {
   }
 }
 
-export const SYSTEM_PROMPT = `You label job postings for a final-year B.Arch (architecture) student in Bengaluru, India,
-who wants BIM or architecture internships and fresher roles.
+export const SYSTEM_PROMPT = `You label job postings for a final-year B.Arch (architecture) student in India who wants
+BIM or architecture internships and fresher roles, preferably in her chosen cities (listed with each posting).
 
 Relevant = the work is architecture, architectural design, interior/landscape architecture, or BIM
 (Revit, Navisworks, BIM modelling/coordination) in the building/construction industry.
@@ -30,7 +30,7 @@ Reply with one JSON object and nothing else, with exactly these keys:
   "is_bim": boolean,
   "software": string[],            // tools named in the posting, e.g. "Revit", "AutoCAD", "SketchUp"
   "stipend_or_salary": string | null, // pay exactly as written in the posting, else null
-  "match_score": integer 0-100,    // fit for this student: BIM/Revit, internship/fresher, Bengaluru score higher
+  "match_score": integer 0-100,    // fit for this student: BIM/Revit, internship/fresher, her cities score higher
   "reason": string                 // one short line
 }
 role_type: internship for intern/trainee roles, fresher for 0-1 year or graduate roles,
@@ -38,7 +38,7 @@ experienced when 3+ years of experience are required.`;
 
 // Long descriptions are cut: the role, skills and pay are almost always in the first part, and
 // input tokens are what the free tiers run out of first.
-export function userPrompt(job, { extraExclude = [], maxDescriptionChars = 2500 } = {}) {
+export function userPrompt(job, { extraExclude = [], cities = [], maxDescriptionChars = 2500 } = {}) {
   const description = String(job.description || '').slice(0, maxDescriptionChars);
   const lines = [
     `Title: ${job.title}`,
@@ -47,6 +47,7 @@ export function userPrompt(job, { extraExclude = [], maxDescriptionChars = 2500 
     job.salary_text ? `Listed pay: ${job.salary_text}` : null,
     `Description:\n${description || '(none)'}`,
   ];
+  if (cities?.length) lines.push(`\nThe student's cities: ${cities.join(', ')}.`);
   if (extraExclude?.length) {
     lines.push(`\nThe student has also marked these kinds of roles as not relevant: ${extraExclude.join(', ')}.`);
   }

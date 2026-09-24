@@ -32,7 +32,9 @@ const { createClassifier } = await import('../server/lib/classify.js');
 const { ingestJobs } = await import('../server/lib/ingest.js');
 const { parseLinkedInAlert } = await import('../server/sources/linkedinEmail.js');
 const { normalizeSerpJob } = await import('../server/sources/serpapi.js');
-const { fetchJobs, searchesForThisRun, pickQueries } = await import('../server/tasks/fetchJobs.js');
+const { fetchJobs, searchesForThisRun, pickQueries, searchPairs, searchText } = await import('../server/tasks/fetchJobs.js');
+const { resolveLocation } = await import('../server/sources/serpapi.js');
+const { feedFilters } = await import('../server/routes/jobs.js');
 const { parseMessages } = await import('../server/tasks/readInbox.js');
 const { archiveOldJobs } = await import('../server/tasks/archive.js');
 const { digestDue, renderDigest } = await import('../server/tasks/sendDigest.js');
@@ -319,17 +321,24 @@ describe('integration', { skip: !dbReady }, () => {
     assert.deepEqual(rows.map((r) => r.is_archived), [1, 0]);
   });
 
-  it('fetches from SerpApi within the quota, rotating queries', async () => {
+  it('fetches from SerpApi within the quota, rotating queries across her cities', async () => {
     const serpFixture = fixture('serpapi-google-jobs.json');
     let searchesLeft = 5;
     const searched = [];
+    const lookups = [];
     const fetchImpl = async (url) => {
       const u = new URL(url);
       if (u.pathname === '/account.json') return Response.json({ total_searches_left: searchesLeft, this_month_usage: 250 - searchesLeft });
+      if (u.pathname === '/locations.json') {
+        const city = u.searchParams.get('q');
+        lookups.push(city);
+        return Response.json([{ canonical_name: `${city},India`, country_code: 'IN' }]);
+      }
       if (u.pathname === '/search.json') {
         searched.push(u.searchParams.get('q'));
         assert.equal(u.searchParams.get('engine'), 'google_jobs');
         assert.equal(u.searchParams.get('gl'), 'in');
+        assert.equal(u.searchParams.get('location'), `${u.searchParams.get('q').split(' ').pop()},India`);
         return new Response(serpFixture, { headers: { 'content-type': 'application/json' } });
       }
       throw new Error(`unexpected ${url}`);
@@ -344,18 +353,58 @@ describe('integration', { skip: !dbReady }, () => {
       searchesLeft = 200;
       const run = await fetchJobs({ fetchImpl, linkChecker: null });
       assert.equal(run.requestsUsed, 3);
-      assert.deepEqual(searched, ['BIM intern Bengaluru', 'Revit architect intern Bangalore', 'architectural intern Bangalore']);
+      // Cities saved earlier in this suite: Bengaluru and Pune.
+      assert.deepEqual(searched, ['BIM intern Bengaluru', 'BIM intern Pune', 'Revit architect intern Bengaluru']);
       assert.equal(run.new, 0, 'fixture jobs are already stored');
 
       searched.length = 0;
       await fetchJobs({ fetchImpl, linkChecker: null });
-      assert.deepEqual(searched, ['BIM modeler fresher Bangalore', 'junior architect Bengaluru', 'BIM intern Bengaluru']);
+      assert.deepEqual(searched, ['Revit architect intern Pune', 'architectural intern Bengaluru', 'architectural intern Pune']);
+      assert.deepEqual(lookups, ['Bengaluru', 'Pune'], 'each city is looked up once, then cached');
 
       const [log] = await query("SELECT SUM(requests_used) AS used FROM fetch_log WHERE source = 'google_jobs'");
       assert.equal(Number(log.used), 6);
     } finally {
       config.serpapi.apiKey = '';
     }
+  });
+
+  it('pairs every query with every city', async () => {
+    assert.deepEqual(searchPairs(['a', 'b'], ['X', 'Y']), [
+      { query: 'a', city: 'X' },
+      { query: 'a', city: 'Y' },
+      { query: 'b', city: 'X' },
+      { query: 'b', city: 'Y' },
+    ]);
+    assert.deepEqual(searchPairs(['a'], []), [{ query: 'a', city: '' }]);
+    assert.equal(searchText({ query: 'BIM intern', city: 'Mumbai' }), 'BIM intern Mumbai');
+    assert.equal(searchText({ query: 'BIM intern Mumbai', city: 'Mumbai' }), 'BIM intern Mumbai');
+    assert.equal(searchText({ query: 'BIM intern', city: 'Remote' }), 'BIM intern remote');
+    assert.equal(searchText({ query: 'BIM intern', city: '' }), 'BIM intern');
+
+    const kochi = [
+      { canonical_name: 'Kochi,Japan', country_code: 'JP' },
+      { canonical_name: 'Kochi,Kerala,India', country_code: 'IN' },
+    ];
+    assert.deepEqual(await resolveLocation('Kochi', { fetchImpl: async () => Response.json(kochi) }), { location: 'Kochi,Kerala,India', gl: 'in' });
+    assert.deepEqual(await resolveLocation('Dubai', { fetchImpl: async () => Response.json([{ canonical_name: 'Dubai,United Arab Emirates', country_code: 'AE' }]) }), {
+      location: 'Dubai,United Arab Emirates',
+      gl: 'ae',
+    });
+    assert.equal(await resolveLocation('Nowhere', { fetchImpl: async () => Response.json([]) }), null);
+  });
+
+  it('filters the feed to her cities', async () => {
+    const mine = feedFilters({ city: 'mine' }, new Date(), ['Pune', 'Mumbai']);
+    assert.match(mine.where, /j\.city IN \(\?\) OR j\.city IN \('', 'Remote'\)/);
+    assert.deepEqual(mine.params, [['Pune', 'Mumbai']]);
+    assert.doesNotMatch(feedFilters({ city: 'mine' }, new Date(), []).where, /j\.city/, 'no cities = no city filter');
+
+    const meta = await request('/api/jobs/meta');
+    assert.deepEqual(meta.data.myCities, ['Bengaluru', 'Pune']);
+    const feed = await request('/api/jobs?city=mine');
+    assert.equal(feed.status, 200);
+    assert.ok(feed.data.jobs.every((j) => ['Bengaluru', 'Pune', '', 'Remote'].includes(j.city)));
   });
 
   it('spreads the SerpApi quota over the month', () => {

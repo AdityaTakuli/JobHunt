@@ -3,13 +3,9 @@ import { normalizeCity } from './normalize.js';
 
 // Values editable on the Settings screen.
 export const DEFAULT_SETTINGS = {
-  search_queries: [
-    'BIM intern Bengaluru',
-    'Revit architect intern Bangalore',
-    'architectural intern Bangalore',
-    'BIM modeler fresher Bangalore',
-    'junior architect Bengaluru',
-  ],
+  // Searched in every city below, so no place names here.
+  search_queries: ['BIM intern', 'Revit architect intern', 'architectural intern', 'BIM modeler fresher', 'junior architect'],
+  // Where to search, which cities rank higher, and what the digest covers. Editable any time.
   cities: ['Bengaluru'],
   digest_enabled: true,
   digest_time: '08:00',
@@ -20,6 +16,7 @@ export const DEFAULT_SETTINGS = {
 // Internal bookkeeping, never shown or edited in the UI.
 const INTERNAL_DEFAULTS = {
   query_rotation_index: 0,
+  serp_locations: {}, // city (lowercase) -> { location, gl } | null, from SerpApi's locations API
   last_digest_at: null,
   last_digest_on: null,
 };

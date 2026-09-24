@@ -5,7 +5,7 @@ import { LlmError, MAX_OUTPUT_TOKENS, parseLabels, requestError, retryInvalidJso
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-async function callGemini(job, { apiKey, model, thinkingLevel, timeoutMs, extraExclude, maxDescriptionChars, fetchImpl, onUsage }) {
+async function callGemini(job, { apiKey, model, thinkingLevel, timeoutMs, extraExclude, cities, maxDescriptionChars, fetchImpl, onUsage }) {
   let res;
   try {
     res = await fetchImpl(`${GEMINI_URL}/${encodeURIComponent(model)}:generateContent`, {
@@ -13,7 +13,7 @@ async function callGemini(job, { apiKey, model, thinkingLevel, timeoutMs, extraE
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt(job, { extraExclude, maxDescriptionChars }) }] }],
+        contents: [{ role: 'user', parts: [{ text: userPrompt(job, { extraExclude, cities, maxDescriptionChars }) }] }],
         generationConfig: {
           temperature: 0,
           maxOutputTokens: MAX_OUTPUT_TOKENS,
@@ -48,8 +48,8 @@ async function callGemini(job, { apiKey, model, thinkingLevel, timeoutMs, extraE
 
 // Labels one job. Invalid JSON is retried once; any other failure throws immediately.
 export async function classifyWithGemini(job, options) {
-  const { apiKey, model, thinkingLevel = '', timeoutMs = 15_000, extraExclude = [], maxDescriptionChars, fetchImpl = fetch, onUsage } = options;
+  const { apiKey, model, thinkingLevel = '', timeoutMs = 15_000, extraExclude = [], cities = [], maxDescriptionChars, fetchImpl = fetch, onUsage } = options;
   if (!apiKey) throw new LlmError('GEMINI_API_KEY is not set', 'not_configured');
-  const args = { apiKey, model, thinkingLevel, timeoutMs, extraExclude, maxDescriptionChars, fetchImpl, onUsage };
+  const args = { apiKey, model, thinkingLevel, timeoutMs, extraExclude, cities, maxDescriptionChars, fetchImpl, onUsage };
   return retryInvalidJsonOnce(() => callGemini(job, args));
 }

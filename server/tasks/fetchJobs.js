@@ -1,5 +1,6 @@
 // Runs at 07:00 and 18:00 IST: searches Google Jobs via SerpApi with a rotating subset of the
-// saved queries, stays inside the monthly quota, then archives stale jobs.
+// saved queries x cities (both set on the Settings screen), stays inside the monthly quota, then
+// archives stale jobs.
 
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
@@ -7,7 +8,7 @@ import { createClassifier } from '../lib/classify.js';
 import { ingestJobs } from '../lib/ingest.js';
 import { getSettings, saveSettings } from '../lib/settings.js';
 import { daysLeftInIstMonth, startOfIstMonth } from '../lib/time.js';
-import { getAccount, searchGoogleJobs, SOURCE } from '../sources/serpapi.js';
+import { getAccount, resolveLocation, searchGoogleJobs, SOURCE } from '../sources/serpapi.js';
 import { archiveOldJobs } from './archive.js';
 
 export async function localSearchesThisMonth(now = new Date()) {
@@ -34,6 +35,34 @@ export function pickQueries(queries, startIndex, count) {
     picked.push(queries[(startIndex + i) % queries.length]);
   }
   return { picked, nextIndex: (startIndex + picked.length) % queries.length };
+}
+
+// Every query is searched in every city, one (query, city) pair per search. Pairs are ordered
+// so consecutive searches alternate cities, and they rotate across runs, so adding a city shares
+// the same quota instead of multiplying it. No cities = search without a location.
+export function searchPairs(queries, cities) {
+  if (!cities?.length) return queries.map((query) => ({ query, city: '' }));
+  return queries.flatMap((query) => cities.map((city) => ({ query, city })));
+}
+
+// "BIM intern" + "Mumbai" -> "BIM intern Mumbai". Queries that already name a place are kept.
+export function searchText({ query, city }) {
+  if (!city || query.toLowerCase().includes(city.toLowerCase())) return query;
+  return `${query} ${city === 'Remote' ? 'remote' : city}`;
+}
+
+// SerpApi location for a city, looked up once and cached in settings. A failed lookup is not
+// cached; the search still runs with the city in the query text.
+async function locationFor(city, cache, fetchImpl) {
+  if (!city || city === 'Remote') return null;
+  const key = city.toLowerCase();
+  if (key in cache) return cache[key];
+  try {
+    cache[key] = await resolveLocation(city, { fetchImpl });
+    return cache[key];
+  } catch {
+    return null;
+  }
 }
 
 async function logRun(entry) {
@@ -68,7 +97,8 @@ export async function fetchJobs({ fetchImpl = fetch, linkChecker, now = new Date
       runsPerDay: serpapi.runsPerDay,
       daysLeft: daysLeftInIstMonth(now),
     });
-    const { picked, nextIndex } = pickQueries(settings.search_queries, settings.query_rotation_index, count);
+    const pairs = searchPairs(settings.search_queries, settings.cities);
+    const { picked, nextIndex } = pickQueries(pairs, settings.query_rotation_index, count);
 
     if (!picked.length) {
       summary.skipped = `Paused: ${searchesLeft} searches left (reserve ${serpapi.reserve})`;
@@ -76,20 +106,23 @@ export async function fetchJobs({ fetchImpl = fetch, linkChecker, now = new Date
     } else {
       const jobs = [];
       const errors = [];
+      const locations = { ...settings.serp_locations };
       let used = 0;
-      for (const q of picked) {
+      for (const pair of picked) {
+        const q = searchText(pair);
+        const loc = await locationFor(pair.city, locations, fetchImpl);
         try {
-          jobs.push(...(await searchGoogleJobs(q, { apiKey: serpapi.apiKey, location: serpapi.location, fetchImpl, now })));
+          jobs.push(...(await searchGoogleJobs(q, { apiKey: serpapi.apiKey, location: loc?.location, gl: loc?.gl, fetchImpl, now })));
           used += 1;
         } catch (err) {
           errors.push(`"${q}": ${err.message}`);
         }
       }
-      await saveSettings({ query_rotation_index: nextIndex });
+      await saveSettings({ query_rotation_index: nextIndex, serp_locations: locations });
 
-      const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, fetchImpl });
+      const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, cities: settings.cities, fetchImpl });
       const result = await ingestJobs(jobs, { classifier, ...(linkChecker !== undefined && { linkChecker }), now });
-      Object.assign(summary, { queries: picked, requestsUsed: used, ...result, classifiedBy: classifier.stats });
+      Object.assign(summary, { queries: picked.map(searchText), requestsUsed: used, ...result, classifiedBy: classifier.stats });
       if (errors.length) summary.errors = errors;
       await logRun({
         source: SOURCE,

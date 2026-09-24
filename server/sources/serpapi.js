@@ -7,6 +7,7 @@ import { parseSalary } from '../lib/salary.js';
 
 const SEARCH_URL = 'https://serpapi.com/search.json';
 const ACCOUNT_URL = 'https://serpapi.com/account.json';
+const LOCATIONS_URL = 'https://serpapi.com/locations.json';
 export const SOURCE = 'google_jobs';
 
 // Apply links on these hosts are job boards, not the firm's own careers page.
@@ -98,8 +99,8 @@ async function getJson(url, fetchImpl, timeoutMs) {
   return { res, data };
 }
 
-export async function searchGoogleJobs(query, { apiKey, location, fetchImpl = fetch, timeoutMs = 30_000, now = new Date() }) {
-  const params = new URLSearchParams({ engine: 'google_jobs', q: query, gl: 'in', hl: 'en', api_key: apiKey });
+export async function searchGoogleJobs(query, { apiKey, location, gl = 'in', fetchImpl = fetch, timeoutMs = 30_000, now = new Date() }) {
+  const params = new URLSearchParams({ engine: 'google_jobs', q: query, gl, hl: 'en', api_key: apiKey });
   if (location) params.set('location', location);
   const { res, data } = await getJson(`${SEARCH_URL}?${params}`, fetchImpl, timeoutMs);
   if (data?.error) {
@@ -109,6 +110,17 @@ export async function searchGoogleJobs(query, { apiKey, location, fetchImpl = fe
   }
   if (!res.ok || !data) throw new Error(`SerpApi HTTP ${res.status}`);
   return (data.jobs_results || []).map((j) => normalizeSerpJob(j, now)).filter(Boolean);
+}
+
+// Turns a city typed on the Settings screen ("Mumbai", "Dubai") into SerpApi's canonical
+// location and Google country code. Free, needs no key and is not counted toward the quota.
+// Indian matches win, so "Kochi" is Kerala, not Japan. Returns null when nothing matches.
+export async function resolveLocation(city, { fetchImpl = fetch, timeoutMs = 15_000 } = {}) {
+  const { res, data } = await getJson(`${LOCATIONS_URL}?${new URLSearchParams({ q: city, limit: '10' })}`, fetchImpl, timeoutMs);
+  if (!res.ok || !Array.isArray(data)) throw new Error(`SerpApi locations: HTTP ${res.status}`);
+  if (!data.length) return null;
+  const best = data.find((l) => l.country_code === 'IN') || data[0];
+  return { location: best.canonical_name, gl: String(best.country_code || 'in').toLowerCase() };
 }
 
 // Free and not counted toward the quota.

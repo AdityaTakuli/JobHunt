@@ -21,6 +21,7 @@ export function createClassifier({
   gemini = config.gemini,
   ai = config.ai,
   extraExclude = [],
+  cities = [],
   fetchImpl = fetch,
   useRules = true,
   usageStore = dbUsageStore,
@@ -53,7 +54,7 @@ export function createClassifier({
   }
 
   async function tryProvider(p, job) {
-    const options = { ...p.cfg, extraExclude, maxDescriptionChars: ai?.maxDescriptionChars, fetchImpl };
+    const options = { ...p.cfg, extraExclude, cities, maxDescriptionChars: ai?.maxDescriptionChars, fetchImpl };
     const estimate = requestEstimate(job, options);
     let blocked;
     try {
@@ -111,7 +112,7 @@ export function createClassifier({
     }
     lastOutcome = 'rules';
     stats.rules += 1;
-    return { labels: classifyWithRules(job, { extraExclude }), classifier: 'rules' };
+    return { labels: classifyWithRules(job, { extraExclude, cities }), classifier: 'rules' };
   }
 
   return {

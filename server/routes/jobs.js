@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { parseJson, query } from '../db/pool.js';
 import { getEstimates } from '../lib/estimate.js';
+import { getSettings } from '../lib/settings.js';
 import { DAY_MS, startOfIstDay } from '../lib/time.js';
 
 export const jobsRouter = Router();
@@ -31,12 +32,18 @@ const intParam = (v, fallback, { min = 0, max = Infinity } = {}) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
-// Builds the feed WHERE clause from query-string filters.
-export function feedFilters(q, now = new Date()) {
+// Builds the feed WHERE clause from query-string filters. city=mine means her chosen cities
+// (Settings), plus remote jobs and jobs with no city.
+export function feedFilters(q, now = new Date(), myCities = []) {
   const where = ['j.is_archived = 0', 'j.is_hidden = 0', 'j.is_relevant = 1'];
   const params = [];
 
-  if (q.city && q.city !== 'all') {
+  if (q.city === 'mine') {
+    if (myCities.length) {
+      where.push(`(j.city IN (?) OR j.city IN ('', 'Remote'))`);
+      params.push(myCities);
+    }
+  } else if (q.city && q.city !== 'all') {
     where.push('j.city = ?');
     params.push(String(q.city));
   }
@@ -78,7 +85,8 @@ export function feedFilters(q, now = new Date()) {
 }
 
 jobsRouter.get('/', async (req, res) => {
-  const { where, params } = feedFilters(req.query);
+  const myCities = req.query.city === 'mine' ? (await getSettings()).cities : [];
+  const { where, params } = feedFilters(req.query, new Date(), myCities);
   const limit = intParam(req.query.limit, 50, { min: 1, max: 200 });
   const offset = intParam(req.query.offset, 0, { min: 0 });
   const [rows, [{ total }], estimates] = await Promise.all([
@@ -98,7 +106,7 @@ jobsRouter.get('/', async (req, res) => {
 // Filter options and the top-of-page counter.
 jobsRouter.get('/meta', async (req, res) => {
   const now = new Date();
-  const [cities, [counts], [followUps]] = await Promise.all([
+  const [cities, [counts], [followUps], settings] = await Promise.all([
     query(
       `SELECT city, COUNT(*) AS n FROM jobs
         WHERE is_archived = 0 AND is_hidden = 0 AND is_relevant = 1 AND city <> ''
@@ -115,9 +123,11 @@ jobsRouter.get('/meta', async (req, res) => {
         WHERE status IN ('applied', 'interview') AND follow_up_at IS NOT NULL AND follow_up_at <= ?`,
       [now],
     ),
+    getSettings(),
   ]);
   res.json({
     cities: cities.map((c) => ({ city: c.city, count: Number(c.n) })),
+    myCities: settings.cities,
     newToday: Number(counts.new_today || 0),
     activeJobs: Number(counts.active || 0),
     followUpsDue: Number(followUps.due || 0),

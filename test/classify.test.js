@@ -37,12 +37,14 @@ const session = (options) => createClassifier({ gemini: null, usageStore: memory
 
 describe('rule-based classifier', () => {
   it('keeps architecture/BIM roles and scores them per the PRD', () => {
-    const labels = classifyWithRules({ title: 'BIM Intern', city: 'Bengaluru', description: 'Revit and Navisworks. Stipend ₹12,000 per month.' });
+    const job = { title: 'BIM Intern', city: 'Bengaluru', description: 'Revit and Navisworks. Stipend ₹12,000 per month.' };
+    const labels = classifyWithRules(job, { cities: ['Mumbai', 'Bengaluru'] });
     assert.equal(labels.is_relevant, true);
     assert.equal(labels.role_type, 'internship');
     assert.equal(labels.is_bim, true);
     assert.deepEqual(labels.software, ['Revit', 'Navisworks']);
-    assert.equal(labels.match_score, 100); // 40 + BIM 20 + intern 20 + Bengaluru 20
+    assert.equal(labels.match_score, 100); // 40 + BIM 20 + intern 20 + one of her cities 20
+    assert.equal(classifyWithRules(job, { cities: ['Pune'] }).match_score, 80, 'no city bonus outside her cities');
     assert.match(labels.stipend_or_salary, /12,000/);
   });
 
@@ -312,6 +314,11 @@ describe('AI token guardrails', () => {
     const full = session({ groq: { ...groqConfig, limits: { minuteTokens: 7_000 } }, ai: { maxWaitMs: 0 }, useRules: false, usageStore, fetchImpl: () => assert.fail('no call') });
     assert.equal(await full.classify(JOB), null);
     assert.equal(full.lastOutcome, 'skipped');
+  });
+
+  it('tells the AI which cities she picked', () => {
+    assert.match(userPrompt(JOB, { cities: ['Mumbai', 'Remote'] }), /The student's cities: Mumbai, Remote\./);
+    assert.doesNotMatch(userPrompt(JOB, {}), /cities/);
   });
 
   it('cuts long descriptions before sending', () => {

@@ -31,7 +31,7 @@ export async function retryClassify({ fetchImpl = fetch } = {}) {
   if (!jobs.length) return summary;
 
   const settings = await getSettings();
-  const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, fetchImpl, useRules: false });
+  const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, cities: settings.cities, fetchImpl, useRules: false });
 
   for (const job of jobs) {
     if (!classifier.aiAvailable) break;

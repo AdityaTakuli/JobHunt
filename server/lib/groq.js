@@ -12,7 +12,7 @@ const header = (res, name) => {
   return value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 };
 
-async function callGroq(job, { apiKey, model, reasoningEffort, timeoutMs, extraExclude, maxDescriptionChars, fetchImpl, onUsage }) {
+async function callGroq(job, { apiKey, model, reasoningEffort, timeoutMs, extraExclude, cities, maxDescriptionChars, fetchImpl, onUsage }) {
   let res;
   try {
     res = await fetchImpl(GROQ_URL, {
@@ -27,7 +27,7 @@ async function callGroq(job, { apiKey, model, reasoningEffort, timeoutMs, extraE
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt(job, { extraExclude, maxDescriptionChars }) },
+          { role: 'user', content: userPrompt(job, { extraExclude, cities, maxDescriptionChars }) },
         ],
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -62,8 +62,8 @@ async function callGroq(job, { apiKey, model, reasoningEffort, timeoutMs, extraE
 
 // Labels one job. Invalid JSON is retried once; any other failure throws immediately.
 export async function classifyWithGroq(job, options) {
-  const { apiKey, model, reasoningEffort = '', timeoutMs = 10_000, extraExclude = [], maxDescriptionChars, fetchImpl = fetch, onUsage } = options;
+  const { apiKey, model, reasoningEffort = '', timeoutMs = 10_000, extraExclude = [], cities = [], maxDescriptionChars, fetchImpl = fetch, onUsage } = options;
   if (!apiKey) throw new LlmError('GROQ_API_KEY is not set', 'not_configured');
-  const args = { apiKey, model, reasoningEffort, timeoutMs, extraExclude, maxDescriptionChars, fetchImpl, onUsage };
+  const args = { apiKey, model, reasoningEffort, timeoutMs, extraExclude, cities, maxDescriptionChars, fetchImpl, onUsage };
   return retryInvalidJsonOnce(() => callGroq(job, args));
 }

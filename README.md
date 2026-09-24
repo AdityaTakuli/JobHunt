@@ -1,6 +1,6 @@
 # ArchJobs
 
-One dashboard for architecture and BIM internships and fresher jobs in Bengaluru: a filtered job feed with direct apply links, an application tracker, a cold-email firms list and a daily digest email. Spec: [docs/PRD.md](docs/PRD.md).
+One dashboard for architecture and BIM internships and fresher jobs in whichever cities she picks: a filtered job feed with direct apply links, an application tracker, a cold-email firms list and a daily digest email. Spec: [docs/PRD.md](docs/PRD.md).
 
 **Stack:** Node.js (Express 5) + MySQL, React (Vite), node-cron. Jobs come from the [SerpApi Google Jobs API](https://serpapi.com/google-jobs-api) and from LinkedIn job-alert emails forwarded to a mailbox. Groq labels each job (Gemini as backup), inside a daily token budget, with a rule-based fallback.
 
@@ -48,7 +48,9 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 | Digest email (SMTP) | Same Hostinger mailbox, or Brevo | `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` |
 | Dashboard password | Anything strong | `APP_PASSWORD`, `SESSION_SECRET` |
 
-**SerpApi quota.** Each fetch run (07:00 and 18:00 IST) asks SerpApi's free account endpoint how many searches are left, spreads them over the rest of the month (max 3 per run), and pauses when 10 are left. Queries rotate through the list on the Settings screen. Usage shows on Settings → Sources.
+**Cities.** Settings → *Cities to search* takes any list of cities (or `Remote`); there is no location in `.env`. Every search query is run in every city, one query + city pair per search, and the pairs rotate across runs, so adding a city shares the quota rather than multiplying it. Each city is turned into Google's location once through SerpApi's free locations API (Indian matches first, so "Kochi" is Kerala) and cached. Her cities also rank higher in the match score, fill the daily digest, and are the feed's default *My cities* filter.
+
+**SerpApi quota.** Each fetch run (07:00 and 18:00 IST) asks SerpApi's free account endpoint how many searches are left, spreads them over the rest of the month (max 3 per run), and pauses when 10 are left. Usage shows on Settings → Sources.
 
 **AI token budget.** Every call to Groq or Gemini is checked against four limits before it is made (defaults in `.env.example`):
 
@@ -62,7 +64,7 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 Daily totals are stored in the `ai_usage` table, so every task and restart shares one budget; Groq's own "requests left today" header also stops calls 25 short of zero. Descriptions are cut to 2,500 characters and reasoning/thinking tokens are turned off, so a full-length job costs about 1,150 tokens. A job that gets no AI call is labeled by keyword rules and re-sent by the hourly `retry-classify` once budget is back. Today's usage shows on Settings → Sources.
 
 **LinkedIn alerts (no scraping).**
-1. On LinkedIn, create job alerts: "BIM intern", "Revit", "architectural intern", "junior architect", location Bengaluru.
+1. On LinkedIn, create job alerts: "BIM intern", "Revit", "architectural intern", "junior architect", location set to each city she wants.
 2. Create the mailbox `jobs@yourdomain` in Hostinger hPanel → Emails.
 3. In Gmail → Settings → Forwarding, add `jobs@yourdomain` as a forwarding address and confirm it (Gmail emails a code to that mailbox).
 4. Gmail → Settings → Filters → Create filter: From `jobalerts-noreply@linkedin.com` → *Forward it to* `jobs@yourdomain`.

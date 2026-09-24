@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { FIRM_STATUSES } from '../../shared/format.js';
 import { query } from '../db/pool.js';
+import { getSettings } from '../lib/settings.js';
 
 export const firmsRouter = Router();
 
@@ -58,9 +59,11 @@ firmsRouter.get('/', async (req, res) => {
 
 // Cold-email ideas for empty states: firms not contacted yet, preferring her cities.
 firmsRouter.get('/suggestions', async (req, res) => {
+  const { cities } = await getSettings();
   const rows = await query(
     `SELECT * FROM firms WHERE status = 'not contacted'
-      ORDER BY (city IN ('Bengaluru', 'Bangalore')) DESC, created_at ASC LIMIT 5`,
+      ORDER BY ${cities.length ? '(city IN (?)) DESC,' : ''} created_at ASC LIMIT 5`,
+    cities.length ? [cities] : [],
   );
   res.json({ firms: rows });
 });
