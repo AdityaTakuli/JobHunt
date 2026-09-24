@@ -121,21 +121,25 @@ export function feedFilters(q, now = new Date(), myCities = []) {
     where.push('(j.title LIKE ? OR j.company LIKE ?)');
     params.push(like, like);
   }
-  return { where: where.join(' AND '), params };
+  return { where: where.join(' AND '), params, ids };
 }
 
 const SORTS = { match: 'j.match_score DESC,', direct: 'j.apply_url_rank DESC,' };
 
+// Search results sorted by relevance: roles judged relevant first, each group in Google's order.
+// `ids` are integers checked by idList, so they can sit in the SQL.
+const orderBy = (sort, ids) => (sort === 'relevance' && ids.length ? `j.is_relevant DESC, FIELD(j.id, ${ids.join(',')}),` : SORTS[sort] || '');
+
 jobsRouter.get('/', async (req, res) => {
   const myCities = req.query.city === 'mine' ? (await getSettings()).cities : [];
-  const { where, params } = feedFilters(req.query, new Date(), myCities);
+  const { where, params, ids } = feedFilters(req.query, new Date(), myCities);
   const limit = intParam(req.query.limit, 50, { min: 1, max: 200 });
   const offset = intParam(req.query.offset, 0, { min: 0 });
   const [rows, [{ total }], estimates] = await Promise.all([
     query(
       `SELECT ${LIST_COLUMNS} FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
         WHERE ${where}
-        ORDER BY ${SORTS[req.query.sort] || ''} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
+        ORDER BY ${orderBy(req.query.sort, ids)} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
         LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     ),

@@ -1,5 +1,7 @@
-// A search typed on the Jobs page: runs exactly that query (in that place) on Google Jobs through
-// SerpApi, stores the results like any other fetch, and returns their ids for the feed.
+// A search typed on the Jobs page: runs it (in that place) on Google Jobs through SerpApi, stores
+// the results like any other fetch, and returns their ids in Google's order for the feed.
+// What she typed is tidied first (lib/searchQuery.js: spelling, short forms, a city in the text,
+// "architecture" added to a bare keyword); exact=true searches her words as they are.
 // Guarded like the scheduled fetch: a repeat within CACHE_HOURS reuses the stored results, and
 // typed searches stop at a daily limit and before the monthly reserve kept for scheduled fetches.
 
@@ -8,6 +10,7 @@ import { parseJson, query } from '../db/pool.js';
 import { createClassifier } from '../lib/classify.js';
 import { ingestJobs, prepareJobs } from '../lib/ingest.js';
 import { cleanText, normalizeCity } from '../lib/normalize.js';
+import { understandSearch } from '../lib/searchQuery.js';
 import { getSettings, saveSettings } from '../lib/settings.js';
 import { startOfIstDay } from '../lib/time.js';
 import { getAccount, searchGoogleJobs, SOURCE } from '../sources/serpapi.js';
@@ -22,19 +25,27 @@ export async function typedSearchesToday(now = new Date()) {
   return Number(row.n);
 }
 
-export async function liveSearch({ q, location = '', fetchImpl = fetch, now = new Date() }) {
+export async function liveSearch({ q, location = '', exact = false, fetchImpl = fetch, now = new Date() }) {
   const { serpapi } = config;
-  const text = cleanText(q, 120);
-  // "begaluru" and "Bangalore" both mean Bengaluru, for the search and for the saved-results cache.
-  const typed = cleanText(location, 80);
-  const place = (typed && normalizeCity(typed)) || typed;
-  if (text.length < 2) throw fail(400, 'Type a role or keyword to search for.');
+  if (cleanText(q).length < 2) throw fail(400, 'Type a role or keyword to search for.');
+  let text;
+  let place;
+  let adjusted = false;
+  if (exact) {
+    text = cleanText(q, 120);
+    // "begaluru" and "Bangalore" both mean Bengaluru, for the search and for the saved-results cache.
+    place = cleanText(location, 80);
+    place = (place && normalizeCity(place)) || place;
+  } else {
+    ({ query: text, place, adjusted } = understandSearch(q, location));
+  }
+  const about = { searched: text, place, adjusted };
 
   const [cached] = await query(
     'SELECT job_ids, found, searched_at FROM searches WHERE query = ? AND location = ? AND searched_at >= ? ORDER BY searched_at DESC LIMIT 1',
     [text, place, new Date(now.getTime() - CACHE_HOURS * 3_600_000)],
   );
-  if (cached) return { ids: parseJson(cached.job_ids, []), found: cached.found, new: 0, cached: true, searchedAt: cached.searched_at, place };
+  if (cached) return { ids: parseJson(cached.job_ids, []), found: cached.found, new: 0, cached: true, searchedAt: cached.searched_at, ...about };
 
   if (!serpapi.apiKey) throw fail(503, 'Google search is not set up (SERPAPI_KEY is missing on the server).');
   if ((await typedSearchesToday(now)) >= serpapi.manualDailyLimit) {
@@ -72,9 +83,11 @@ export async function liveSearch({ q, location = '', fetchImpl = fetch, now = ne
   const classifier = createClassifier({ groq: null, gemini: null, extraExclude: settings.extra_exclude_keywords, cities: settings.cities });
   const result = await ingestJobs(found, { classifier, linkChecker: null, now });
   const keys = prepareJobs(found).map((j) => j.key);
-  const ids = keys.length ? (await query('SELECT id FROM jobs WHERE dedupe_key IN (?)', [keys])).map((r) => r.id) : [];
+  const rows = keys.length ? await query('SELECT id, dedupe_key FROM jobs WHERE dedupe_key IN (?)', [keys]) : [];
+  const idByKey = new Map(rows.map((r) => [r.dedupe_key, r.id]));
+  const ids = keys.map((k) => idByKey.get(k)).filter(Boolean);
 
   await query('INSERT INTO fetch_log SET ?', [{ source: SOURCE, run_at: now, jobs_found: found.length, jobs_new: result.new, requests_used: 1 }]);
   await query('INSERT INTO searches SET ?', [{ query: text, location: place, searched_at: now, job_ids: JSON.stringify(ids), found: found.length }]);
-  return { ids, found: found.length, new: result.new, cached: false, searchesLeft: searchesLeft - 1, place };
+  return { ids, found: found.length, new: result.new, cached: false, searchesLeft: searchesLeft - 1, ...about };
 }

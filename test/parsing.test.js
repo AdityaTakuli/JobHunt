@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { formatRange, formatSalary } from '../shared/format.js';
 import { applyKind, dedupeKey, normalizeCity, normalizeCompany, normalizeTitle, rankApplyOptions, repairCompany } from '../server/lib/normalize.js';
 import { parseSalary } from '../server/lib/salary.js';
+import { understandSearch } from '../server/lib/searchQuery.js';
 import { countJobLinks, parseLinkedInAlert } from '../server/sources/linkedinEmail.js';
 import { isJobBoard, normalizeSerpJob, parsePostedAt, pickApplyLink } from '../server/sources/serpapi.js';
 
@@ -74,6 +75,35 @@ describe('normalize + dedupe', () => {
       dedupeKey({ company: 'Studio Lotus', title: 'BIM Intern', city: 'Bengaluru' }),
       dedupeKey({ company: 'Studio Lotus', title: 'BIM Intern', city: 'Delhi' }),
     );
+  });
+});
+
+describe('understandSearch', () => {
+  const cases = [
+    // typed, where -> query, place, adjusted
+    ['BIM Architect', 'Delhi', 'BIM Architect', 'Delhi', false],
+    ['revti', '', 'Revit architect', '', true],
+    ['intern', 'Bengaluru', 'architecture intern', 'Bengaluru', true],
+    ['archtect intership', '', 'architect internship', '', true],
+    ['arch intership pune', 'Bengaluru', 'architecture internship', 'Pune', true],
+    ['revit jobs in mumbai', 'Bengaluru', 'Revit architect', 'Mumbai', true],
+    ['junoir desginer', '', 'architecture junior designer', '', true],
+    ['auto cad draftsman', '', 'AutoCAD draftsman', '', true],
+    ['skechup lumion', '', 'SketchUp Lumion architect', '', true],
+    ['work from home bim', 'Delhi', 'BIM', 'Remote', true],
+    ['jobs in pune', '', 'architecture', 'Pune', true],
+    ['landscape intern', 'banglore', 'landscape intern', 'Bengaluru', false],
+  ];
+  for (const [typed, where, query, place, adjusted] of cases) {
+    it(`${typed} (${where || 'anywhere'})`, () => {
+      assert.deepEqual(understandSearch(typed, where), { query, place, adjusted });
+    });
+  }
+
+  it('leaves firm names, other professions and ordinary words alone', () => {
+    for (const typed of ['Morphogenesis', 'Studio Lotus', 'site engineer', 'internal']) {
+      assert.equal(understandSearch(typed).query, typed);
+    }
   });
 });
 

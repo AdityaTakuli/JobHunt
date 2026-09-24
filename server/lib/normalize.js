@@ -59,6 +59,16 @@ const CITY_ALIASES = [
   [/\b(remote|work from home|wfh|anywhere)\b/i, 'Remote'],
 ];
 
+// A known city named anywhere in free text, with "in"/"at"/"near" before it:
+// "revit jobs in pune" -> { city: 'Pune', match: ' in pune' }. Unknown places are not guessed.
+export function findCity(text) {
+  for (const [pattern, city] of CITY_ALIASES) {
+    const m = String(text || '').match(new RegExp(`(?:\\s*\\b(?:in|at|near|around)\\s+)?${pattern.source}`, 'i'));
+    if (m) return { city, match: m[0] };
+  }
+  return null;
+}
+
 // "Bengaluru East, Karnataka, India" -> "Bengaluru". Unknown places keep their first segment.
 export function normalizeCity(location) {
   const text = cleanText(location);

@@ -147,10 +147,12 @@ export default function JobsPage() {
   const [error, setError] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
-  // A live Google search: { q, location, ids, found, new, cached }. While set, the list shows
-  // exactly those results (the other filters still apply).
+  // A live Google search: { q, searched, adjusted, location, ids, found, new, cached }. While set,
+  // the list shows exactly those results (the other filters still apply).
   const [search, setSearch] = useState(null);
   const [searching, setSearching] = useState(false);
+  // Search results start in Google's order (most relevant first); the feed keeps its own sort.
+  const [searchSort, setSearchSort] = useState('relevance');
   // The search bar's place, kept in step with the location filter below it.
   const [where, setWhere] = useState('');
   // Bumped on every fresh (offset 0) load: the list remounts and its cards stagger in again.
@@ -178,9 +180,9 @@ export default function JobsPage() {
       linkedin: filters.linkedin,
       bim: filters.bim,
       hideApplied: filters.hideApplied,
-      sort: filters.sort,
+      sort: search ? searchSort : filters.sort,
     }),
-    [search, filters],
+    [search, searchSort, filters],
   );
 
   const load = useCallback(
@@ -240,10 +242,10 @@ export default function JobsPage() {
     setWhere(filters.city === 'all' ? '' : filters.city === 'mine' ? mine[0] || '' : filters.city);
   }, [filters.city, myCitiesKey]);
 
-  async function runSearch({ q, location }) {
+  async function runSearch({ q, location, exact = false }) {
     setSearching(true);
     try {
-      const result = await api('/search', { method: 'POST', body: { q, location } });
+      const result = await api('/search', { method: 'POST', body: { q, location, exact } });
       const place = result.place || location;
       setSelectedId(null);
       setSearch({ q, ...result, location: place });
@@ -327,6 +329,11 @@ export default function JobsPage() {
             <>
               <h2>Google Jobs found nothing for this search</h2>
               <p>Try a broader title (for example "architect" instead of "junior BIM architect"), or another city.</p>
+              {search.adjusted && (
+                <button type="button" className="btn btn-sm" onClick={() => runSearch({ q: search.q, location: where, exact: true })}>
+                  Search exactly “{search.q}”
+                </button>
+              )}
             </>
           )
         ) : pickedCity && !otherFilters ? (
@@ -414,17 +421,27 @@ export default function JobsPage() {
             transition={{ duration: 0.25 }}
           >
             <div className="search-banner-inner">
-              <p>
-                <strong>
-                  {search.found} result{search.found === 1 ? '' : 's'}
-                </strong>{' '}
-                for “{search.q}”{search.location && <> in {search.location}</>}
-                <span className="muted">
-                  {' '}
-                  · {search.cached ? 'saved from an earlier search today' : `from Google Jobs just now${search.new ? `, ${search.new} new` : ''}`}
-                  {hiddenByFilters > 0 && jobs.length > 0 && ` · ${hiddenByFilters} hidden by your filters`}
-                </span>
-              </p>
+              <div className="search-banner-text">
+                <p>
+                  <strong>
+                    {search.found} result{search.found === 1 ? '' : 's'}
+                  </strong>{' '}
+                  for “{search.adjusted ? search.searched : search.q}”{search.location && <> in {search.location}</>}
+                  <span className="muted">
+                    {' '}
+                    · {search.cached ? 'saved from an earlier search today' : `from Google Jobs just now${search.new ? `, ${search.new} new` : ''}`}
+                    {hiddenByFilters > 0 && jobs.length > 0 && ` · ${hiddenByFilters} hidden by your filters`}
+                  </span>
+                </p>
+                {search.adjusted && (
+                  <p className="search-adjusted">
+                    You typed “{search.q}”.{' '}
+                    <button type="button" className="text-btn" disabled={searching} onClick={() => runSearch({ q: search.q, location: where, exact: true })}>
+                      Search exactly that
+                    </button>
+                  </p>
+                )}
+              </div>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch(null)}>
                 Back to your feed
               </button>
@@ -443,11 +460,19 @@ export default function JobsPage() {
               </span>
               <label className="sort">
                 <span className="visually-hidden">Sort by</span>
-                <select className="select select-sm" value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}>
-                  <option value="recent">Most recent</option>
-                  <option value="match">Best match</option>
-                  <option value="direct">Direct apply first</option>
-                </select>
+                {search ? (
+                  <select className="select select-sm" value={searchSort} onChange={(e) => setSearchSort(e.target.value)}>
+                    <option value="relevance">Most relevant</option>
+                    <option value="recent">Most recent</option>
+                    <option value="direct">Direct apply first</option>
+                  </select>
+                ) : (
+                  <select className="select select-sm" value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}>
+                    <option value="recent">Most recent</option>
+                    <option value="match">Best match</option>
+                    <option value="direct">Direct apply first</option>
+                  </select>
+                )}
               </label>
             </div>
           )}

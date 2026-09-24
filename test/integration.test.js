@@ -480,8 +480,7 @@ describe('integration', { skip: !dbReady }, () => {
       if (u.pathname === '/account.json') return Response.json({ total_searches_left: 200, this_month_usage: 50 });
       if (u.pathname === '/locations.json') return Response.json([{ canonical_name: 'Mumbai,Maharashtra,India', country_code: 'IN' }]);
       if (u.pathname === '/search.json') {
-        assert.equal(u.searchParams.get('q'), 'BIM intern');
-        assert.equal(u.searchParams.get('location'), 'Mumbai,Maharashtra,India');
+        calls.push(`${u.searchParams.get('q')} @ ${u.searchParams.get('location')}`);
         return new Response(serpFixture, { headers: { 'content-type': 'application/json' } });
       }
       throw new Error(`unexpected ${url}`);
@@ -492,6 +491,13 @@ describe('integration', { skip: !dbReady }, () => {
       assert.equal(first.cached, false);
       assert.ok(first.ids.length >= 1);
       assert.equal(first.found, JSON.parse(serpFixture).jobs_results.length);
+      assert.ok(calls.includes('BIM intern @ Mumbai,Maharashtra,India'));
+      assert.equal(first.adjusted, false);
+
+      // Ids come back in Google's order, and sort=relevance keeps it (relevant roles first).
+      const ranked = await request(`/api/jobs?ids=${first.ids.join(',')}&exp=any&sort=relevance`);
+      const relevantIds = ranked.data.jobs.filter((j) => j.is_relevant).map((j) => j.id);
+      assert.deepEqual(relevantIds, first.ids.filter((id) => relevantIds.includes(id)), 'relevant ones keep Google order');
 
       // The feed shows exactly those jobs, whatever the city filter says.
       const feed = await request(`/api/jobs?ids=${first.ids.join(',')}&city=Nowhere&exp=any`);
@@ -503,6 +509,16 @@ describe('integration', { skip: !dbReady }, () => {
       assert.equal(again.place, 'Mumbai');
       assert.deepEqual(again.ids, first.ids);
       assert.deepEqual(calls, [], 'no SerpApi call for a repeat');
+
+      // A keyword with a typo and a city in it: tidied for Google, and the exact words on request.
+      calls.length = 0;
+      const typo = await liveSearch({ q: 'revti jobs in mumbai', location: 'Bengaluru', fetchImpl });
+      assert.deepEqual([typo.searched, typo.place, typo.adjusted], ['Revit architect', 'Mumbai', true]);
+      assert.ok(calls.includes('Revit architect @ Mumbai,Maharashtra,India'), calls.join(', '));
+      calls.length = 0;
+      const exact = await liveSearch({ q: 'revti', location: 'Mumbai', exact: true, fetchImpl });
+      assert.deepEqual([exact.searched, exact.adjusted], ['revti', false]);
+      assert.ok(calls.includes('revti @ Mumbai,Maharashtra,India'));
 
       const limit = config.serpapi.manualDailyLimit;
       config.serpapi.manualDailyLimit = 1;
