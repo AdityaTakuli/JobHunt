@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, toQuery } from '../api.js';
 import { Dialog } from '../components/Dialog.jsx';
+import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { firmsFromCsv } from '../csv.js';
 import { FIRM_STATUSES, FIRM_TYPES, formatDate } from '../format.js';
@@ -276,7 +277,7 @@ export default function FirmsPage() {
           {error}
         </p>
       )}
-      {!firms && !error && <p className="center-note">Loading…</p>}
+      {!firms && !error && <RowsSkeleton rows={6} label="Loading firms" />}
       {firms && firms.length === 0 && (
         <div className="card empty">
           <h2>{q || status ? 'No firms match' : 'Your cold-email list is empty'}</h2>

@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'motion/react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
 const ToastContext = createContext(null);
@@ -30,31 +31,41 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={value}>
       {children}
       <div className="toast-region" role="status" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast${t.error ? ' is-error' : ''}`}>
-            <p>{t.message}</p>
-            <div className="toast-actions">
-              {(t.actions || []).map((a) => (
-                <button
-                  key={a.label}
-                  type="button"
-                  className={`btn${a.primary ? ' btn-primary' : ''}`}
-                  onClick={() => {
-                    dismiss(t.id);
-                    a.onClick?.();
-                  }}
-                >
-                  {a.label}
-                </button>
-              ))}
-              {!t.actions?.length && (
-                <button type="button" className="btn" onClick={() => dismiss(t.id)} aria-label="Dismiss">
-                  OK
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+        <AnimatePresence initial={false}>
+          {toasts.map((t) => (
+            <motion.div
+              key={t.id}
+              layout
+              className={`toast${t.error ? ' is-error' : ''}`}
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.97, transition: { duration: 0.15 } }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            >
+              <p>{t.message}</p>
+              <div className="toast-actions">
+                {(t.actions || []).map((a) => (
+                  <button
+                    key={a.label}
+                    type="button"
+                    className={`btn${a.primary ? ' btn-primary' : ''}`}
+                    onClick={() => {
+                      dismiss(t.id);
+                      a.onClick?.();
+                    }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+                {!t.actions?.length && (
+                  <button type="button" className="btn" onClick={() => dismiss(t.id)} aria-label="Dismiss">
+                    OK
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

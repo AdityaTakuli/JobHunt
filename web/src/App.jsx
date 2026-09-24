@@ -1,11 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
 import { api, setUnauthorizedHandler } from './api.js';
+import { LoadingQuote } from './components/Skeleton.jsx';
 import { IconBriefcase, IconBuilding, IconColumns, IconMonitor, IconMoon, IconSettings, IconSun } from './icons.jsx';
 import FirmsPage from './pages/FirmsPage.jsx';
 import JobsPage from './pages/JobsPage.jsx';
-import LoginPage from './pages/LoginPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import TrackerPage from './pages/TrackerPage.jsx';
+
+// GSAP and the drawings are only needed on these two screens, so they load on demand and the
+// everyday job list stays light.
+const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
+const Welcome = lazy(() => import('./components/Welcome.jsx'));
 
 const ROUTES = [
   { path: 'jobs', label: 'Jobs', Icon: IconBriefcase, Page: JobsPage },
@@ -33,6 +39,26 @@ function useRoute() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   return route;
+}
+
+// The welcome plays after every sign-in and on the first visit of each (IST) day.
+const WELCOME_KEY = 'aj-welcomed-on';
+const istToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+function welcomedToday() {
+  try {
+    return localStorage.getItem(WELCOME_KEY) === istToday();
+  } catch {
+    return true; // storage blocked: don't replay it on every load
+  }
+}
+
+function markWelcomed() {
+  try {
+    localStorage.setItem(WELCOME_KEY, istToday());
+  } catch {
+    // private mode
+  }
 }
 
 const THEMES = ['system', 'light', 'dark'];
@@ -72,17 +98,45 @@ function Counter({ meta }) {
   );
 }
 
+const BrandMark = () => (
+  <span className="brand-mark" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 26 16 6l10 20M10.5 19h11" />
+    </svg>
+  </span>
+);
+
+const PAGE_EASE = [0.22, 1, 0.36, 1];
+
 export default function App() {
+  return (
+    // Honour the OS "reduce motion" setting for every Motion animation in the app.
+    <MotionConfig reducedMotion="user">
+      <Shell />
+    </MotionConfig>
+  );
+}
+
+function Shell() {
   const [auth, setAuth] = useState('checking'); // checking | in | out
   const [meta, setMeta] = useState(null);
+  const [welcome, setWelcome] = useState(false);
   const route = useRoute();
   const [theme, cycleTheme] = useTheme();
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuth('out'));
     api('/me')
-      .then((me) => setAuth(me.authenticated ? 'in' : 'out'))
+      .then((me) => {
+        setAuth(me.authenticated ? 'in' : 'out');
+        if (me.authenticated && !welcomedToday()) setWelcome(true);
+      })
       .catch(() => setAuth('out'));
+  }, []);
+
+  const closeWelcome = useCallback(() => {
+    markWelcomed();
+    setWelcome(false);
   }, []);
 
   const refreshMeta = useCallback(() => {
@@ -102,8 +156,28 @@ export default function App() {
     document.title = `${route.label} · ArchJobs`;
   }, [route]);
 
-  if (auth === 'checking') return <p className="center-note">Loading…</p>;
-  if (auth === 'out') return <LoginPage onLogin={() => setAuth('in')} />;
+  const boot = (
+    <div className="boot" aria-busy="true" aria-label="Loading">
+      <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
+        <BrandMark />
+      </motion.span>
+      <LoadingQuote after={600} />
+    </div>
+  );
+
+  if (auth === 'checking') return boot;
+  if (auth === 'out') {
+    return (
+      <Suspense fallback={boot}>
+        <LoginPage
+          onLogin={() => {
+            setAuth('in');
+            setWelcome(true);
+          }}
+        />
+      </Suspense>
+    );
+  }
 
   const ThemeIcon = theme === 'light' ? IconSun : theme === 'dark' ? IconMoon : IconMonitor;
   const { Page } = route;
@@ -124,16 +198,15 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-inner">
           <a className="brand" href="#/jobs">
-            <span className="brand-mark" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 26 16 6l10 20M10.5 19h11" />
-              </svg>
-            </span>
+            <BrandMark />
             ArchJobs
           </a>
           <nav className="top-nav" aria-label="Main">
             {ROUTES.map(({ path, label, Icon }) => (
               <a key={path} href={`#/${path}`} aria-current={route.path === path ? 'page' : undefined}>
+                {route.path === path && (
+                  <motion.span layoutId="top-nav-pill" className="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
+                )}
                 <Icon size={18} />
                 {label}
               </a>
@@ -147,17 +220,37 @@ export default function App() {
       </header>
 
       <main id="main" tabIndex={-1}>
-        <Page />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={route.path}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.28, ease: PAGE_EASE } }}
+            exit={{ opacity: 0, y: -4, transition: { duration: 0.14, ease: 'easeIn' } }}
+          >
+            <Page />
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       <nav className="bottom-nav" aria-label="Main">
         {ROUTES.map(({ path, label, Icon }) => (
           <a key={path} href={`#/${path}`} aria-current={route.path === path ? 'page' : undefined}>
+            {route.path === path && (
+              <motion.span layoutId="bottom-nav-pill" className="bottom-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
+            )}
             <Icon size={22} />
             {label}
           </a>
         ))}
       </nav>
+
+      <AnimatePresence>
+        {welcome && (
+          <Suspense key="welcome" fallback={null}>
+            <Welcome name={meta?.displayName} meta={meta} onClose={closeWelcome} />
+          </Suspense>
+        )}
+      </AnimatePresence>
     </MetaContext.Provider>
   );
 }

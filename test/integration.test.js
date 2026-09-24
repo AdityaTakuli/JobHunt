@@ -266,6 +266,12 @@ describe('integration', { skip: !dbReady }, () => {
     assert.deepEqual(saved.data.settings.cities, ['Bengaluru', 'Pune']);
     assert.equal(saved.data.settings.digest_time, '07:30');
     assert.deepEqual(saved.data.settings.extra_exclude_keywords, ['sales']);
+    assert.equal(saved.data.settings.display_name, 'Kothu', 'welcome name defaults');
+    assert.equal((await request('/api/settings', { method: 'PUT', body: { display_name: 'x'.repeat(41) } })).status, 400);
+    const renamed = await request('/api/settings', { method: 'PUT', body: { display_name: '  Bhumika   J ' } });
+    assert.equal(renamed.data.settings.display_name, 'Bhumika J');
+    assert.equal((await request('/api/jobs/meta')).data.displayName, 'Bhumika J');
+    await request('/api/settings', { method: 'PUT', body: { display_name: 'Kothu' } });
     assert.equal(saved.data.settings.search_queries.length, 5, 'defaults kept');
 
     const system = await request('/api/system');

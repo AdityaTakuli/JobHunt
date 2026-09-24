@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useMeta } from '../App.jsx';
+import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDateTime, SOURCE_LABELS } from '../format.js';
 
@@ -61,6 +62,7 @@ function AiBudget({ label, ai }) {
 
 function SettingsForm() {
   const { toast } = useToast();
+  const { refreshMeta } = useMeta();
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -75,6 +77,7 @@ function SettingsForm() {
           digest_time: settings.digest_time,
           notification_email: settings.notification_email,
           extra_exclude_keywords: settings.extra_exclude_keywords.join(', '),
+          display_name: settings.display_name,
         }),
       )
       .catch((err) => setError(err.message));
@@ -94,9 +97,11 @@ function SettingsForm() {
           digest_time: form.digest_time,
           notification_email: form.notification_email,
           extra_exclude_keywords: commaList(form.extra_exclude_keywords),
+          display_name: form.display_name,
         },
       });
       toast({ message: 'Settings saved.' });
+      refreshMeta(); // cities and the welcome name live in /jobs/meta too
     } catch (err) {
       setError(err.message);
     } finally {
@@ -104,7 +109,7 @@ function SettingsForm() {
     }
   }
 
-  if (!form) return <section className="card section">{error ? <p className="form-error">{error}</p> : <p className="muted">Loading…</p>}</section>;
+  if (!form) return error ? <section className="card section"><p className="form-error">{error}</p></section> : <RowsSkeleton rows={6} label="Loading settings" />;
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
 
   return (
@@ -126,6 +131,10 @@ function SettingsForm() {
           <span>Cities to search</span>
           <input className="input" value={form.cities} onChange={set('cities')} placeholder="Bengaluru, Mumbai, Pune, Remote" />
           <small>Comma-separated, any city (or Remote). New jobs come in from the next fetch; these cities rank higher and fill the daily digest.</small>
+        </label>
+        <label className="field">
+          <span>Name for the welcome message</span>
+          <input className="input" value={form.display_name} onChange={set('display_name')} maxLength={40} placeholder="Kothu" />
         </label>
         <label className="field">
           <span>Notification email</span>
@@ -185,7 +194,7 @@ function SourcesSection() {
     }
   }
 
-  if (!system) return null;
+  if (!system) return <RowsSkeleton rows={4} label="Loading sources" />;
   const { configured, serpapi } = system;
   const pct = Math.min(100, Math.round((serpapi.searchesUsedThisMonth / serpapi.monthlyLimit) * 100));
   const items = [

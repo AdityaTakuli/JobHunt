@@ -128,6 +128,7 @@ jobsRouter.get('/meta', async (req, res) => {
   res.json({
     cities: cities.map((c) => ({ city: c.city, count: Number(c.n) })),
     myCities: settings.cities,
+    displayName: settings.display_name,
     newToday: Number(counts.new_today || 0),
     activeJobs: Number(counts.active || 0),
     followUpsDue: Number(followUps.due || 0),

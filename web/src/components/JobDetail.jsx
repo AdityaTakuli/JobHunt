@@ -1,8 +1,13 @@
+import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api.js';
 import { APP_STATUSES, formatDateTime, STATUS_LABELS } from '../format.js';
 import { IconBookmark, IconBookmarkFilled, IconExternal, IconX } from '../icons.jsx';
 import { JobBadges, postedLabel, Salary, sourceLabels } from './JobBits.jsx';
+import { DetailSkeleton } from './Skeleton.jsx';
+
+const EASE = [0.22, 1, 0.36, 1];
 
 const HIDE_REASONS = ['Not architecture/BIM', 'Too senior', 'Wrong city', 'Already applied elsewhere', 'Other'];
 const COLLAPSE_AT = 480;
@@ -47,10 +52,28 @@ export default function JobDetail({ jobId, listJob, onClose, actions }) {
   const description = job?.description || '';
   const long = description.length > COLLAPSE_AT;
 
-  return (
+  // Portaled to <body>: page transitions transform <main>, which would otherwise break
+  // position: fixed for the panel while they run.
+  return createPortal(
     <>
-      <div className="overlay" onClick={onClose} aria-hidden="true" />
-      <aside className="panel" role="dialog" aria-modal="true" aria-labelledby="job-detail-title">
+      <motion.div
+        className="overlay"
+        onClick={onClose}
+        aria-hidden="true"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+      />
+      <motion.aside
+        className="panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="job-detail-title"
+        initial={{ x: 48, opacity: 0 }}
+        animate={{ x: 0, opacity: 1, transition: { duration: 0.38, ease: EASE } }}
+        exit={{ x: 48, opacity: 0, transition: { duration: 0.2, ease: 'easeIn' } }}
+      >
         <div className="panel-head">
           <h2>Job details</h2>
           <button ref={closeRef} type="button" className="icon-btn" onClick={onClose} aria-label="Close details">
@@ -60,7 +83,7 @@ export default function JobDetail({ jobId, listJob, onClose, actions }) {
 
         <div className="panel-body">
           {error && <p className="form-error">{error}</p>}
-          {!job && !error && <div className="skeleton" />}
+          {!job && !error && <DetailSkeleton />}
           {job && (
             <>
               <div>
@@ -204,7 +227,8 @@ export default function JobDetail({ jobId, listJob, onClose, actions }) {
             </a>
           </div>
         )}
-      </aside>
-    </>
+      </motion.aside>
+    </>,
+    document.body,
   );
 }

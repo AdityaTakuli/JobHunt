@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useMeta } from '../App.jsx';
 import { Dialog } from '../components/Dialog.jsx';
+import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { APP_STATUSES, dayToIso, followUpState, formatDate, formatSalary, istDay, STATUS_LABELS } from '../format.js';
 import { IconEdit, IconExternal, IconPlus } from '../icons.jsx';
@@ -400,7 +401,7 @@ export default function TrackerPage() {
           {error}
         </p>
       )}
-      {!apps && !error && <p className="center-note">Loading…</p>}
+      {!apps && !error && <RowsSkeleton rows={5} label="Loading applications" />}
       {apps && apps.length === 0 && view === 'table' && (
         <div className="card empty">
           <h2>Nothing tracked yet</h2>

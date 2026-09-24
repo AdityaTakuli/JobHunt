@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS = {
   digest_time: '08:00',
   notification_email: '',
   extra_exclude_keywords: [],
+  // Name in the welcome message after sign-in.
+  display_name: 'Kothu',
 };
 
 // Internal bookkeeping, never shown or edited in the UI.
@@ -83,6 +85,11 @@ export function validateSettings(body) {
     const email = String(body.notification_email || '').trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'Enter a valid email address.' };
     values.notification_email = email;
+  }
+  if ('display_name' in body) {
+    const name = String(body.display_name ?? '').trim().replace(/\s+/g, ' ');
+    if (name.length > 40) return { error: 'Keep the name under 40 characters.' };
+    values.display_name = name;
   }
   if ('extra_exclude_keywords' in body) {
     const list = cleanList(body.extra_exclude_keywords, { max: 50, maxLength: 60 });

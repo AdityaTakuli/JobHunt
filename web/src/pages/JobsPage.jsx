@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, toQuery } from '../api.js';
 import { useMeta } from '../App.jsx';
 import JobCard from '../components/JobCard.jsx';
 import JobDetail from '../components/JobDetail.jsx';
+import { JobListSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { SOFTWARE_FILTERS, SOURCE_LABELS } from '../format.js';
 import { IconSearch } from '../icons.jsx';
+import { quoteOfTheDay } from '../quotes.js';
 import { useJobActions } from '../useJobActions.js';
+
+// Only drawn in the empty state, so GSAP loads only if the feed is ever empty.
+const Blueprint = lazy(() => import('../components/Blueprint.jsx'));
 
 const PAGE = 30;
 const STORAGE_KEY = 'aj-job-filters';
@@ -89,6 +95,20 @@ function FirmSuggestions() {
   );
 }
 
+// End of the feed: a quiet "all caught up" and the quote of the day.
+function FeedEnd() {
+  const quote = quoteOfTheDay();
+  return (
+    <motion.div className="feed-end" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
+      <span className="feed-end-rule" aria-hidden="true" />
+      <p>You're all caught up.</p>
+      <p className="feed-end-quote">
+        “{quote.text}”{quote.by && <span> — {quote.by}</span>}
+      </p>
+    </motion.div>
+  );
+}
+
 export default function JobsPage() {
   const { meta } = useMeta();
   const [filters, setFilters] = useState(loadFilters);
@@ -99,6 +119,8 @@ export default function JobsPage() {
   const [error, setError] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+  // Bumped on every fresh (offset 0) load: the list remounts and its cards stagger in again.
+  const [batch, setBatch] = useState(0);
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -132,6 +154,7 @@ export default function JobsPage() {
         const data = await api(`/jobs${toQuery({ ...params, limit: PAGE, offset })}`);
         if (id !== requestRef.current) return;
         setJobs((list) => (offset === 0 ? data.jobs : [...list, ...data.jobs]));
+        if (offset === 0) setBatch((b) => b + 1);
         setTotal(data.total);
         setStatus('ready');
         setError('');
@@ -260,13 +283,7 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {status === 'loading' && (
-        <div className="job-list" aria-busy="true" aria-label="Loading jobs">
-          <div className="skeleton" />
-          <div className="skeleton" />
-          <div className="skeleton" />
-        </div>
-      )}
+      {status === 'loading' && <JobListSkeleton count={4} />}
 
       {status === 'error' && (
         <div className="card empty" role="alert">
@@ -280,6 +297,9 @@ export default function JobsPage() {
 
       {status === 'ready' && jobs.length === 0 && (
         <div className="card empty">
+          <Suspense fallback={null}>
+            <Blueprint className="empty-drawing" duration={1.4} />
+          </Suspense>
           {filtersActive ? (
             <>
               <h2>No roles match these filters</h2>
@@ -304,22 +324,35 @@ export default function JobsPage() {
               {total} role{total === 1 ? '' : 's'}
             </span>
           </p>
-          <ul className="job-list">
-            {jobs.map((job) => (
-              <JobCard key={job.id} job={job} selected={job.id === selectedId} onOpen={(j) => setSelectedId(j.id)} actions={actions} />
-            ))}
+          <ul key={batch} className="job-list">
+            <AnimatePresence mode="popLayout">
+              {jobs.map((job, i) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  order={i % PAGE}
+                  selected={job.id === selectedId}
+                  onOpen={(j) => setSelectedId(j.id)}
+                  actions={actions}
+                />
+              ))}
+            </AnimatePresence>
           </ul>
-          {jobs.length < total && (
+          {jobs.length < total ? (
             <div className="load-more">
               <button type="button" className="btn" onClick={() => load(jobs.length)} disabled={loadingMore}>
                 {loadingMore ? 'Loading…' : 'Show more'}
               </button>
             </div>
+          ) : (
+            <FeedEnd />
           )}
         </>
       )}
 
-      {selectedId && <JobDetail jobId={selectedId} listJob={selectedJob} onClose={closeDetail} actions={actions} />}
+      <AnimatePresence>
+        {selectedId && <JobDetail key="detail" jobId={selectedId} listJob={selectedJob} onClose={closeDetail} actions={actions} />}
+      </AnimatePresence>
     </div>
   );
 }

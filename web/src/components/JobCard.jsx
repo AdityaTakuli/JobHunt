@@ -1,13 +1,22 @@
+import { motion } from 'motion/react';
 import { IconBookmark, IconBookmarkFilled, IconExternal, IconEyeOff } from '../icons.jsx';
 import { STATUS_LABELS } from '../format.js';
 import { JobBadges, postedLabel, Salary } from './JobBits.jsx';
 
-export default function JobCard({ job, selected, onOpen, actions }) {
+// Cards rise in with a short stagger (`order` = position within the batch just loaded), slide
+// out when hidden, and neighbours glide into the gap (layout). `ref` is forwarded so
+// AnimatePresence can measure the card while it leaves.
+export default function JobCard({ ref, job, order = 0, selected, onOpen, actions }) {
   const saved = Boolean(job.application_status);
   const saveLabel = !saved ? 'Save' : job.application_status === 'saved' ? 'Saved' : STATUS_LABELS[job.application_status];
 
   return (
-    <li
+    <motion.li
+      ref={ref}
+      layout="position"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.35, delay: Math.min(order, 8) * 0.045, ease: [0.22, 1, 0.36, 1] } }}
+      exit={{ opacity: 0, x: -24, transition: { duration: 0.22, ease: 'easeIn' } }}
       className={`card job-card${selected ? ' is-selected' : ''}`}
       onClick={(e) => {
         // Clicks on the card open details, but not clicks on its buttons and links.
@@ -54,6 +63,6 @@ export default function JobCard({ job, selected, onOpen, actions }) {
           Apply <IconExternal size={16} />
         </a>
       </div>
-    </li>
+    </motion.li>
   );
 }
