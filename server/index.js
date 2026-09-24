@@ -1,5 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { createApp } from './app.js';
-import { config } from './config.js';
+import { config, ROOT_DIR } from './config.js';
 import { closePool } from './db/pool.js';
 import { migrate } from './db/migrate.js';
 import { startScheduler } from './scheduler.js';
@@ -14,9 +16,25 @@ function warnAboutConfig() {
   if (missing.length) console.warn(`Not configured: ${missing.join('; ')}`);
 }
 
+// Hosts that skip the build step (or run it elsewhere) would otherwise serve no web app, so
+// build it here when it is missing. Takes a few seconds, once per deploy.
+async function ensureWebBuild() {
+  const index = path.join(ROOT_DIR, 'web', 'dist', 'index.html');
+  if (fs.existsSync(index)) return;
+  console.log('web/dist is missing: building the web app…');
+  try {
+    const { build } = await import('vite');
+    await build({ configFile: path.join(ROOT_DIR, 'vite.config.js'), logLevel: 'warn' });
+    console.log('Web app built.');
+  } catch (err) {
+    console.error(`Web build failed, serving the API only: ${err.message}`);
+  }
+}
+
 async function main() {
   // Tables are created with IF NOT EXISTS, so running this on every boot is safe.
   await migrate();
+  await ensureWebBuild();
   const app = createApp();
   const server = app.listen(config.port, () => {
     console.log(`ArchJobs listening on http://localhost:${config.port}`);
