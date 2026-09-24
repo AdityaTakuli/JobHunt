@@ -1,10 +1,11 @@
 import { motion } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api.js';
 import { APP_STATUSES, formatDateTime, ROLE_LABELS, STATUS_LABELS } from '../format.js';
 import { IconBookmark, IconBookmarkFilled, IconExternal, IconX } from '../icons.jsx';
-import { CompanyAvatar, experience, JobBadges, postedLabel, Salary, sourceLabels } from './JobBits.jsx';
+import { APPLY_KIND_LABELS, CompanyAvatar, experience, JobBadges, postedLabel, Salary } from './JobBits.jsx';
+import { extractKeywords, highlightParts } from '../keywords.js';
 import { DetailSkeleton } from './Skeleton.jsx';
 
 const EASE = [0.22, 1, 0.36, 1];
@@ -39,8 +40,47 @@ function useJobDetail(jobId, listJob) {
 }
 
 function applyLabel(job) {
-  const first = sourceLabels(job.sources || [])[0];
-  return first && first !== 'Google Jobs' ? `Apply on ${first}` : 'Apply';
+  if (job.apply_kind === 'company') return 'Apply on company site';
+  if (job.apply_kind === 'linkedin') return 'Apply on LinkedIn';
+  const publisher = job.apply_options?.[0]?.publisher;
+  return publisher && publisher !== 'Google Jobs' ? `Apply on ${publisher}` : 'Apply';
+}
+
+// Every place this role can be applied to, best first, and a way to find the firm's own
+// careers page when Google did not list it.
+function WhereToApply({ job, actions }) {
+  const options = job.apply_options?.length ? job.apply_options : [{ url: job.apply_url, publisher: 'Apply link', kind: job.apply_kind || 'site' }];
+  const hasCompany = options.some((o) => o.kind === 'company');
+  const onlyReposts = options.every((o) => o.kind === 'aggregator' || o.kind === 'site');
+  const careersSearch = `https://www.google.com/search?q=${encodeURIComponent(`${job.company} careers ${job.title}`)}`;
+  return (
+    <section className="detail-section">
+      <h3>Where to apply</h3>
+      <ul className="apply-list">
+        {options.map((o, i) => (
+          <li key={o.url}>
+            <a href={o.url} target="_blank" rel="noopener noreferrer" onClick={() => actions.promptApplied(job)}>
+              {o.publisher}
+            </a>
+            <span className={`apply-kind is-${o.kind}`}>{APPLY_KIND_LABELS[o.kind]}</span>
+            {i === 0 && options.length > 1 && <span className="muted small">best option</span>}
+          </li>
+        ))}
+      </ul>
+      {!hasCompany && job.company && (
+        <p className="apply-tip">
+          {onlyReposts ? 'These sites repost listings from elsewhere. ' : ''}
+          <a href={careersSearch} target="_blank" rel="noopener noreferrer">
+            Look for it on {job.company}'s own careers page
+          </a>{' '}
+          to apply at the source.
+        </p>
+      )}
+      <p className="small muted" style={{ margin: '8px 0 0' }}>
+        First seen {formatDateTime(job.created_at)} IST
+      </p>
+    </section>
+  );
 }
 
 function Actions({ job, actions, className = '' }) {
@@ -55,6 +95,44 @@ function Actions({ job, actions, className = '' }) {
         {saved ? STATUS_LABELS[job.application_status] : 'Save'}
       </button>
     </div>
+  );
+}
+
+// The tools, skills and requirements the posting mentions: what to put first on her CV and
+// portfolio for this application. The same words are highlighted in the description.
+function FocusKeywords({ keywords }) {
+  if (!keywords.groups.length) return null;
+  return (
+    <section className="detail-section focus-keywords">
+      <h3>Keywords to focus on</h3>
+      <p className="focus-hint">Mention these in your CV, cover note and portfolio for this role.</p>
+      <dl>
+        {keywords.groups.map((g) => (
+          <div key={g.name} className="kw-group">
+            <dt>{g.name}</dt>
+            <dd>
+              {g.items.map((item) => (
+                <span key={item} className="kw-chip">
+                  {item}
+                </span>
+              ))}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function Description({ text, pattern }) {
+  return highlightParts(text, pattern).map((part, i) =>
+    typeof part === 'string' ? (
+      part
+    ) : (
+      <mark key={i} className="kw-mark">
+        {part.mark}
+      </mark>
+    ),
   );
 }
 
@@ -84,6 +162,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
   const saved = Boolean(job.application_status);
   const description = job.description || '';
   const long = description.length > COLLAPSE_AT;
+  const keywords = useMemo(() => extractKeywords(`${job.title}\n${description}`, job.software || []), [job.title, description, job.software]);
 
   useEffect(() => setExpanded(false), [job.id]);
 
@@ -111,18 +190,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
       )}
       <JobBadges job={job} showSources={false} />
 
-      {job.software?.length > 0 && (
-        <section className="detail-section">
-          <h3>Software</h3>
-          <div className="badges">
-            {job.software.map((s) => (
-              <span key={s} className="badge">
-                {s}
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
+      <FocusKeywords keywords={keywords} />
 
       {job.classify_reason && (
         <section className="detail-section">
@@ -138,7 +206,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
         <section className="detail-section">
           <h3>Job description</h3>
           <div className={`description${long && !expanded ? ' is-collapsed' : ''}`} id={`desc-${job.id}`}>
-            {description}
+            <Description text={description} pattern={keywords.pattern} />
           </div>
           {long && (
             <button
@@ -154,24 +222,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
         </section>
       )}
 
-      {job.sources?.length > 0 && (
-        <section className="detail-section">
-          <h3>Found on</h3>
-          <ul className="link-list">
-            {job.sources.map((s, i) => (
-              <li key={`${s.url}-${i}`}>
-                <a href={s.url} target="_blank" rel="noopener noreferrer" onClick={() => actions.promptApplied(job)}>
-                  {sourceLabels([s])[0]}
-                </a>
-                {s.source === 'google_jobs' && <span className="muted small"> via Google Jobs</span>}
-              </li>
-            ))}
-          </ul>
-          <p className="small muted" style={{ margin: '8px 0 0' }}>
-            First seen {formatDateTime(job.created_at)} IST
-          </p>
-        </section>
-      )}
+      <WhereToApply job={job} actions={actions} />
 
       <section className="detail-section">
         <h3>Tracker</h3>

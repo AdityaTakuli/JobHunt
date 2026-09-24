@@ -25,7 +25,7 @@ Object.assign(process.env, {
 });
 
 const { config } = await import('../server/config.js');
-const { query, closePool } = await import('../server/db/pool.js');
+const { query, closePool, parseJson } = await import('../server/db/pool.js');
 const { migrate } = await import('../server/db/migrate.js');
 const { createApp } = await import('../server/app.js');
 const { createClassifier } = await import('../server/lib/classify.js');
@@ -412,6 +412,37 @@ describe('integration', { skip: !dbReady }, () => {
     const feed = await request('/api/jobs?city=mine');
     assert.equal(feed.status, 200);
     assert.ok(feed.data.jobs.every((j) => ['Bengaluru', 'Pune', '', 'Remote'].includes(j.city)));
+  });
+
+  it('keeps every apply link, best first, and filters by where she can apply', async () => {
+    const now = new Date();
+    const job = (applyOptions) => ({
+      source: 'google_jobs',
+      title: 'Architecture Apply Intern',
+      company: 'Nest Studio',
+      locationText: 'Pune',
+      description: '',
+      applyOptions,
+      applyUrl: applyOptions[0].url,
+      postedAt: now,
+    });
+    const classifier = createClassifier({ groq: null, gemini: null });
+    await ingestJobs([job([{ url: 'https://in.bebee.com/job/9', publisher: 'BeBee' }])], { classifier, linkChecker: null, now });
+    let [row] = await query("SELECT apply_url, apply_kind, apply_url_rank, apply_options FROM jobs WHERE title = 'Architecture Apply Intern'");
+    assert.equal(row.apply_kind, 'aggregator');
+    const direct = async () => (await request('/api/jobs?city=Pune&exp=any&apply=direct')).data.jobs.map((j) => j.title);
+    assert.ok(!(await direct()).includes('Architecture Apply Intern'), 'reposting-site jobs are left out of "company & LinkedIn"');
+
+    // Seen again with the firm's own careers page: that becomes the Apply link, and both are kept.
+    await ingestJobs([job([{ url: 'https://neststudio.in/careers/intern', publisher: 'Nest Studio Careers' }])], { classifier, linkChecker: null, now });
+    [row] = await query("SELECT apply_url, apply_kind, apply_url_rank, apply_options FROM jobs WHERE title = 'Architecture Apply Intern'");
+    assert.equal(row.apply_url, 'https://neststudio.in/careers/intern');
+    assert.equal(row.apply_kind, 'company');
+    assert.deepEqual(parseJson(row.apply_options, []).map((o) => o.kind), ['company', 'aggregator']);
+    assert.ok((await direct()).includes('Architecture Apply Intern'));
+    const [card] = (await request('/api/jobs?city=Pune&exp=any&apply=company')).data.jobs;
+    assert.equal(card.apply_options.length, 2, 'the app gets every option');
+    await query("DELETE FROM jobs WHERE title = 'Architecture Apply Intern'");
   });
 
   it('filters the feed by years of experience', async () => {

@@ -31,6 +31,13 @@ const SOURCES = [
   { value: 'linkedin_email', label: SOURCE_LABELS.linkedin_email },
 ];
 
+const APPLY_ON = [
+  { value: '', label: 'Any site', short: 'Apply on' },
+  { value: 'trusted', label: 'Company sites, LinkedIn & job boards', short: 'Trusted sites' },
+  { value: 'direct', label: 'Company sites & LinkedIn', short: 'Company & LinkedIn' },
+  { value: 'company', label: 'Company sites only', short: 'Company sites' },
+];
+
 const labelOf = (list, value) => list.find((o) => o.value === value)?.label;
 
 // Split pill: the switch turns the experience filter on or off in one tap; the rest opens the
@@ -72,7 +79,8 @@ export default function JobFilters({ filters, setFilters, cityOptions, searchMod
 
   const cityLabel = filters.city === 'mine' ? 'My cities' : filters.city === 'all' ? 'All cities' : filters.city;
   const softwareCount = filters.software.length + (filters.bim ? 1 : 0);
-  const anyActive = filters.role || filters.within || softwareCount || filters.source || filters.hideApplied || (!searchMode && filters.city !== 'mine');
+  const anyActive =
+    filters.role || filters.within || softwareCount || filters.source || filters.apply || filters.hideApplied || (!searchMode && filters.city !== 'mine');
 
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
@@ -105,6 +113,16 @@ export default function JobFilters({ filters, setFilters, cityOptions, searchMod
         </FilterPill>
       )}
 
+      <FilterPill label={APPLY_ON.find((o) => o.value === filters.apply)?.short || 'Apply on'} active={Boolean(filters.apply)} panelLabel="Apply on">
+        {(close) => (
+          <div>
+            <p className="panel-title">Where can you apply?</p>
+            <OptionList label="Apply on" options={APPLY_ON} value={filters.apply} onChange={set('apply')} onDone={close} />
+            <p className="panel-note">Company sites include their official hiring pages. Reposting sites copy listings from elsewhere and are left out of every option except "Any site".</p>
+          </div>
+        )}
+      </FilterPill>
+
       <FilterPill label={filters.role ? labelOf(JOB_TYPES, filters.role) : 'Job type'} active={Boolean(filters.role)} panelLabel="Job type">
         {(close) => <OptionList label="Job type" options={JOB_TYPES} value={filters.role} onChange={set('role')} onDone={close} />}
       </FilterPill>
@@ -131,7 +149,7 @@ export default function JobFilters({ filters, setFilters, cityOptions, searchMod
         <button
           type="button"
           className="btn btn-ghost btn-sm clear-filters"
-          onClick={() => setFilters((f) => ({ ...f, city: 'mine', role: '', within: '', software: [], bim: false, source: '', hideApplied: false }))}
+          onClick={() => setFilters((f) => ({ ...f, city: 'mine', role: '', within: '', software: [], bim: false, source: '', apply: '', hideApplied: false }))}
         >
           Clear
         </button>

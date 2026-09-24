@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   location_text VARCHAR(200) NULL,
   description MEDIUMTEXT NULL,
   apply_url VARCHAR(1000) NOT NULL,
-  apply_url_rank TINYINT NOT NULL DEFAULT 1, -- 3 direct company, 2 LinkedIn, 1 other
+  apply_url_rank TINYINT NOT NULL DEFAULT 1, -- 5 company site, 4 LinkedIn, 3 job board, 2 other site, 1 reposting site
+  apply_options JSON NULL,                   -- every apply link seen [{url, publisher, kind, rank}], best first
+  apply_kind VARCHAR(12) NULL,               -- kind of apply_url: company / linkedin / board / site / aggregator
   link_status VARCHAR(12) NOT NULL DEFAULT 'unknown', -- ok / broken / unknown
   sources JSON NULL,                         -- [{source, publisher, url}]
   posted_at DATETIME NULL,

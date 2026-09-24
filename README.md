@@ -52,6 +52,10 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 
 **Searching and filtering (Jobs page).** The search bar ("what" + "where") runs that exact search on Google Jobs through SerpApi and shows the results; the same search within 6 hours reuses the stored results for free, typed searches stop at `SERPAPI_MANUAL_DAILY_LIMIT` a day (default 10), and none run once the monthly reserve is reached. Each job stores the years of experience it asks for (`exp_min`/`exp_max`: the AI's reading, else parsed from the text: "0-1 years", "2+ yrs", "freshers can apply"). The *Fresher-friendly* switch filters on it (freshers only, or up to 1, 2, 3 or 5 years); roles that state nothing count only when they are internships or fresher roles.
 
+**Where to apply.** Google Jobs lists several apply links per role. Every one is kept and sorted: the firm's own site (including its official hiring-system pages such as Greenhouse, Lever, Workday, Keka or Zoho Recruit), then LinkedIn, then established job boards (Naukri, Indeed, Internshala…), then unknown sites, then reposting sites that copy listings (BeBee, Jooble, Talent.com…). Apply uses the best one; the detail pane lists all of them and, when the firm's own page is missing, links a search for its careers page. The *Apply on* filter and the *Direct apply first* sort use this ranking.
+
+**Keywords to focus on.** Each job's description is scanned for architecture tools, skills and requirements (Revit, working drawings, LOD 300, portfolio, COA registration…); they are listed in the detail pane and highlighted in the description (`web/src/keywords.js`).
+
 **SerpApi quota.** Each fetch run (07:00 and 18:00 IST) asks SerpApi's free account endpoint how many searches are left, spreads them over the rest of the month (max 3 per run), and pauses when 10 are left. Usage shows on Settings → Sources.
 
 **AI token budget.** Every call to Groq or Gemini is checked against four limits before it is made (defaults in `.env.example`):

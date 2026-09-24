@@ -9,7 +9,7 @@ import { typedSearchesToday } from '../tasks/liveSearch.js';
 
 export const jobsRouter = Router();
 
-const LIST_COLUMNS = `j.id, j.title, j.company, j.city, j.location_text, j.apply_url, j.link_status, j.sources,
+const LIST_COLUMNS = `j.id, j.title, j.company, j.city, j.location_text, j.apply_url, j.apply_kind, j.apply_options, j.link_status, j.sources,
   j.posted_at, j.created_at, j.salary_text, j.salary_min, j.salary_max, j.salary_period, j.salary_is_estimate,
   j.role_type, j.is_bim, j.software, j.match_score, j.exp_min, j.exp_max, j.classifier, j.classify_reason, j.is_relevant, j.is_hidden,
   a.id AS application_id, a.status AS application_status`;
@@ -22,6 +22,7 @@ export function serializeJob(row, estimates = {}) {
     is_hidden: Boolean(row.is_hidden),
     salary_is_estimate: Boolean(row.salary_is_estimate),
     sources: parseJson(row.sources, []),
+    apply_options: parseJson(row.apply_options, []),
     software: parseJson(row.software, []),
   };
   if (!job.salary_text && !job.salary_min && estimates[job.role_type]) {
@@ -97,6 +98,12 @@ export function feedFilters(q, now = new Date(), myCities = []) {
     params.push(String(q.source));
   }
   if (q.bim === '1') where.push('j.is_bim = 1');
+  // Where she can apply: company = the firm's own site, direct = + LinkedIn, trusted = + job boards.
+  const APPLY_KINDS = { company: ['company'], direct: ['company', 'linkedin'], trusted: ['company', 'linkedin', 'board'] };
+  if (APPLY_KINDS[q.apply]) {
+    where.push('j.apply_kind IN (?)');
+    params.push(APPLY_KINDS[q.apply]);
+  }
   if (q.hideApplied === '1') {
     where.push("(a.status IS NULL OR a.status = 'saved')");
   }
@@ -108,6 +115,8 @@ export function feedFilters(q, now = new Date(), myCities = []) {
   return { where: where.join(' AND '), params };
 }
 
+const SORTS = { match: 'j.match_score DESC,', direct: 'j.apply_url_rank DESC,' };
+
 jobsRouter.get('/', async (req, res) => {
   const myCities = req.query.city === 'mine' ? (await getSettings()).cities : [];
   const { where, params } = feedFilters(req.query, new Date(), myCities);
@@ -117,7 +126,7 @@ jobsRouter.get('/', async (req, res) => {
     query(
       `SELECT ${LIST_COLUMNS} FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
         WHERE ${where}
-        ORDER BY ${req.query.sort === 'match' ? 'j.match_score DESC,' : ''} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
+        ORDER BY ${SORTS[req.query.sort] || ''} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
         LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     ),

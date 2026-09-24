@@ -101,24 +101,101 @@ export function dedupeKey({ company, title, city }) {
   return crypto.createHash('sha1').update(key).digest('hex');
 }
 
-export const APPLY_RANK = { direct: 3, linkedin: 2, other: 1 };
+// Where an apply link leads, best first: the employer's own site (including its applicant-
+// tracking system), LinkedIn, an established job board, an unknown site, or a reposting site that
+// copies listings from elsewhere. Applying at the source is safer and more likely to be seen.
+export const APPLY_RANK = { company: 5, linkedin: 4, board: 3, site: 2, aggregator: 1 };
 
-export function isLinkedInUrl(url) {
-  return /(^|\.)linkedin\.com$/i.test(safeHost(url));
-}
+// Careers pages hosted by the employer's hiring software count as the company's own.
+const ATS_HOSTS = [
+  'greenhouse.io', 'lever.co', 'myworkdayjobs.com', 'myworkdaysite.com', 'smartrecruiters.com', 'ashbyhq.com', 'zohorecruit.com',
+  'zohorecruit.in', 'keka.com', 'darwinbox.in', 'darwinbox.com', 'freshteam.com', 'recruitee.com', 'bamboohr.com', 'jobvite.com',
+  'icims.com', 'successfactors.com', 'successfactors.eu', 'taleo.net', 'breezy.hr', 'workable.com', 'teamtailor.com', 'personio.de',
+  'oraclecloud.com', 'kekahire.com', 'hirehive.com', 'applytojob.com', 'jobs.lever.co',
+];
+const TRUSTED_BOARDS = [
+  'naukri.com', 'indeed.com', 'glassdoor.co.in', 'glassdoor.com', 'foundit.in', 'monsterindia.com', 'shine.com', 'internshala.com',
+  'instahyre.com', 'cutshort.io', 'hirist.tech', 'hirist.com', 'wellfound.com', 'apna.co', 'unstop.com', 'timesjobs.com',
+  'iimjobs.com', 'archinect.com', 'dezeen.com', 'dezeenjobs.com', 'freshersworld.com', 'teamlease.com', 'workindia.in',
+];
+const AGGREGATORS = [
+  'bebee.com', 'bebee.in', 'jooble.org', 'talent.com', 'whatjobs.com', 'jobleads.com', 'learn4good.com', 'recruit.net',
+  'trabajo.org', 'jobsora.com', 'expertini.com', 'careerjet.co.in', 'careerjet.com', 'jobrapido.com', 'adzuna.in',
+  'simplyhired.co.in', 'simplyhired.com', 'ziprecruiter.com', 'quikr.com', 'jobaaj.com', 'getmereferred.com', 'examassure.in',
+  'examassure.com', 'kitjob.in', 'jobisjob.co.in', 'jobted.in', 'jobtensor.com', 'jobs.google.com', 'google.com', 'google.co.in',
+  'grabjobs.co', 'jobscan.co', 'resume.io', 'wisdomjobs.com', 'jobstreet.com', 'placementindia.com', 'jobsinbangalore.com',
+];
+// Words too common in firm names to tell one firm's website from another.
+const GENERIC_WORDS = new Set([
+  'architects', 'architect', 'architecture', 'architectural', 'studio', 'studios', 'design', 'designs', 'designers', 'consultants',
+  'consultancy', 'consulting', 'group', 'associates', 'partners', 'projects', 'the', 'and', 'of', 'in', 'india', 'services',
+  'solutions', 'global', 'international', 'infra', 'infrastructure', 'engineering', 'careers', 'jobs', 'bim',
+]);
 
-function safeHost(url) {
+export function hostOf(url) {
   try {
-    return new URL(url).hostname;
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
   } catch {
     return '';
   }
 }
 
-export function applyRank(url, { isDirect = false } = {}) {
-  if (isDirect) return APPLY_RANK.direct;
-  if (isLinkedInUrl(url)) return APPLY_RANK.linkedin;
-  return APPLY_RANK.other;
+const onHost = (host, domains) => domains.some((d) => host === d || host.endsWith(`.${d}`));
+
+export function isLinkedInUrl(url) {
+  return onHost(hostOf(url), ['linkedin.com']);
+}
+
+// Does this host or apply-button label belong to the company? "careers.tataprojects.com" and
+// "Tata Projects Careers" both match "Tata Projects Pvt Ltd".
+function matchesCompany(host, publisher, company) {
+  const words = normalizeCompany(company)
+    .split(' ')
+    .filter((w) => w.length >= 3 && !GENERIC_WORDS.has(w));
+  if (!words.length) return false;
+  const labels = host.split('.').slice(0, -1).filter((l) => !['co', 'com', 'org', 'net', 'in', 'careers', 'jobs', 'www'].includes(l));
+  const hostText = labels.join('');
+  const joined = normalizeCompany(company).replace(/\s+/g, '');
+  const pub = normalizeCompany(publisher);
+  return (
+    (joined.length >= 4 && hostText.includes(joined)) ||
+    words.some((w) => (w.length >= 4 && hostText.includes(w)) || labels.includes(w)) ||
+    (pub && words.every((w) => pub.split(' ').includes(w)))
+  );
+}
+
+/** @returns 'company' | 'linkedin' | 'board' | 'site' | 'aggregator' */
+export function applyKind(url, { company = '', publisher = '' } = {}) {
+  const host = hostOf(url);
+  if (!host) return 'site';
+  if (onHost(host, ['linkedin.com'])) return 'linkedin';
+  if (onHost(host, AGGREGATORS)) return 'aggregator';
+  if (onHost(host, TRUSTED_BOARDS)) return 'board';
+  if (onHost(host, ATS_HOSTS)) return 'company';
+  if (matchesCompany(host, publisher, company)) return 'company';
+  return 'site';
+}
+
+export function isJobBoard(url) {
+  const host = hostOf(url);
+  return onHost(host, ['linkedin.com', ...TRUSTED_BOARDS, ...AGGREGATORS]);
+}
+
+export function applyRank(url, info) {
+  return APPLY_RANK[applyKind(url, info)];
+}
+
+// Apply options from any source, deduped and sorted best first: [{ url, publisher, kind, rank }].
+export function rankApplyOptions(options, company) {
+  const seen = new Set();
+  const out = [];
+  for (const o of options || []) {
+    if (!isHttpUrl(o?.url) || seen.has(o.url)) continue;
+    seen.add(o.url);
+    const kind = o.kind || applyKind(o.url, { company, publisher: o.publisher });
+    out.push({ url: o.url, publisher: cleanText(o.publisher, 80) || hostOf(o.url), kind, rank: APPLY_RANK[kind] });
+  }
+  return out.sort((a, b) => b.rank - a.rank).slice(0, 10);
 }
 
 export function isHttpUrl(url) {

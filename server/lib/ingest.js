@@ -1,11 +1,12 @@
 // Normalize + dedupe + classify + store. Every source hands its jobs to ingestJobs() in the
 // same shape: { source, title, company, locationText, city, description, applyUrl, applyRank,
-// postedAt, salary: { text, min, max, period } | null, publisher }.
+// applyKind, applyOptions?, postedAt, salary: { text, min, max, period } | null, publisher }.
+// Every apply option seen for a job is kept (best first); the best one becomes apply_url.
 
 import { parseJson, query } from '../db/pool.js';
 import { labelsToColumns } from './classify.js';
 import { checkLink, mapLimit } from './linkCheck.js';
-import { cleanText, dedupeKey, isHttpUrl, normalizeCity } from './normalize.js';
+import { cleanText, dedupeKey, isHttpUrl, normalizeCity, rankApplyOptions } from './normalize.js';
 
 const earliest = (a, b) => (!a ? b : !b ? a : a < b ? a : b);
 
@@ -17,12 +18,15 @@ function mergeSources(a, b) {
   return out.slice(0, 12);
 }
 
+// Picks the best of all apply options and mirrors it into applyUrl/applyRank/applyKind.
+function withBestApply(job, options) {
+  const best = options[0];
+  return { ...job, applyOptions: options, applyUrl: best.url, applyRank: best.rank, applyKind: best.kind };
+}
+
 function mergeCandidates(a, b) {
-  const better = b.applyRank > a.applyRank ? b : a;
   return {
-    ...a,
-    applyUrl: better.applyUrl,
-    applyRank: better.applyRank,
+    ...withBestApply(a, rankApplyOptions([...a.applyOptions, ...b.applyOptions], a.company)),
     description: (b.description?.length || 0) > (a.description?.length || 0) ? b.description : a.description,
     salary: a.salary || b.salary,
     postedAt: earliest(a.postedAt, b.postedAt),
@@ -37,14 +41,20 @@ export function prepareJobs(rawJobs) {
   for (const raw of rawJobs) {
     if (!raw?.title || !isHttpUrl(raw.applyUrl)) continue;
     const city = raw.city ?? normalizeCity(raw.locationText);
-    const job = {
-      ...raw,
-      title: cleanText(raw.title, 300),
-      company: cleanText(raw.company, 200),
-      city,
-      key: dedupeKey({ company: raw.company, title: raw.title, city }),
-      sources: [{ source: raw.source, publisher: raw.publisher || null, url: raw.applyUrl }],
-    };
+    const company = cleanText(raw.company, 200);
+    const options = rankApplyOptions(raw.applyOptions || [{ url: raw.applyUrl, publisher: raw.publisher, kind: raw.applyKind }], company);
+    if (!options.length) continue;
+    const job = withBestApply(
+      {
+        ...raw,
+        title: cleanText(raw.title, 300),
+        company,
+        city,
+        key: dedupeKey({ company: raw.company, title: raw.title, city }),
+        sources: [{ source: raw.source, publisher: raw.publisher || null, url: raw.applyUrl }],
+      },
+      options,
+    );
     const existing = byKey.get(job.key);
     byKey.set(job.key, existing ? mergeCandidates(existing, job) : job);
   }
@@ -69,9 +79,13 @@ async function mergeIntoExisting(row, job, now) {
   const sources = mergeSources(oldSources, job.sources);
   const updates = {};
   if (sources.length !== oldSources.length) updates.sources = JSON.stringify(sources);
-  if (job.applyRank > row.apply_url_rank) {
-    updates.apply_url = job.applyUrl;
-    updates.apply_url_rank = job.applyRank;
+  const oldOptions = parseJson(row.apply_options, []);
+  const options = rankApplyOptions([...oldOptions, ...job.applyOptions], job.company);
+  if (options.length !== oldOptions.length) updates.apply_options = JSON.stringify(options);
+  if (options[0].rank > row.apply_url_rank) {
+    updates.apply_url = options[0].url.slice(0, 1000);
+    updates.apply_url_rank = options[0].rank;
+    updates.apply_kind = options[0].kind;
     updates.link_status = 'unknown';
   }
   if ((job.description?.length || 0) > (row.description?.length || 0)) updates.description = job.description;
@@ -95,7 +109,7 @@ export async function ingestJobs(rawJobs, { classifier, linkChecker = checkLink,
   if (!prepared.length) return result;
 
   const rows = await query(
-    `SELECT id, dedupe_key, sources, apply_url, apply_url_rank, description, salary_text, posted_at, location_text
+    `SELECT id, dedupe_key, sources, apply_url, apply_url_rank, apply_options, description, salary_text, posted_at, location_text
        FROM jobs WHERE dedupe_key IN (?)`,
     [prepared.map((j) => j.key)],
   );
@@ -130,6 +144,8 @@ export async function ingestJobs(rawJobs, { classifier, linkChecker = checkLink,
       ...base,
       apply_url: job.applyUrl.slice(0, 1000),
       apply_url_rank: job.applyRank,
+      apply_kind: job.applyKind,
+      apply_options: JSON.stringify(job.applyOptions),
       link_status: linkStatuses[i],
       sources: JSON.stringify(job.sources),
       posted_at: job.postedAt || null,

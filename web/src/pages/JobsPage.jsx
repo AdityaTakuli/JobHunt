@@ -26,6 +26,7 @@ const DEFAULT_FILTERS = {
   software: [],
   bim: false,
   source: '',
+  apply: '',
   hideApplied: false,
   sort: 'recent',
 };
@@ -170,6 +171,7 @@ export default function JobsPage() {
       software: filters.software,
       within: filters.within,
       source: filters.source,
+      apply: filters.apply,
       bim: filters.bim,
       hideApplied: filters.hideApplied,
       sort: filters.sort,
@@ -262,7 +264,7 @@ export default function JobsPage() {
     return names;
   }, [meta, filters.city]);
 
-  const otherFilters = filters.role || filters.software.length || filters.within || filters.source || filters.bim || filters.hideApplied;
+  const otherFilters = filters.role || filters.software.length || filters.within || filters.source || filters.apply || filters.bim || filters.hideApplied;
   const closeDetail = useCallback(() => setSelectedId(null), []);
   const selectedJob = jobs.find((j) => j.id === selectedId);
   const hiddenByFilters = search ? Math.max(0, search.ids.length - total) : 0;
@@ -407,6 +409,7 @@ export default function JobsPage() {
                 <select className="select select-sm" value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}>
                   <option value="recent">Most recent</option>
                   <option value="match">Best match</option>
+                  <option value="direct">Direct apply first</option>
                 </select>
               </label>
             </div>

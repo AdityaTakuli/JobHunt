@@ -2,36 +2,15 @@
 // company career-page listings. One search = one request from the monthly quota.
 // Docs: https://serpapi.com/google-jobs-api
 
-import { cleanText, applyRank, APPLY_RANK, isHttpUrl, normalizeCity, repairCompany } from '../lib/normalize.js';
+import { APPLY_RANK, cleanText, isHttpUrl, normalizeCity, rankApplyOptions, repairCompany } from '../lib/normalize.js';
+
+export { isJobBoard } from '../lib/normalize.js';
 import { parseSalary } from '../lib/salary.js';
 
 const SEARCH_URL = 'https://serpapi.com/search.json';
 const ACCOUNT_URL = 'https://serpapi.com/account.json';
 const LOCATIONS_URL = 'https://serpapi.com/locations.json';
 export const SOURCE = 'google_jobs';
-
-// Apply links on these hosts are job boards, not the firm's own careers page.
-const JOB_BOARDS = [
-  'linkedin.com', 'naukri.com', 'indeed.com', 'glassdoor.co.in', 'glassdoor.com', 'foundit.in', 'monsterindia.com',
-  'shine.com', 'internshala.com', 'apna.co', 'timesjobs.com', 'instahyre.com', 'cutshort.io', 'hirist.tech',
-  'wellfound.com', 'ziprecruiter.com', 'jooble.org', 'talent.com', 'simplyhired.co.in', 'simplyhired.com',
-  'bebee.com', 'jobrapido.com', 'careerjet.co.in', 'whatjobs.com', 'adzuna.in', 'teamlease.com', 'workindia.in',
-  'freshersworld.com', 'unstop.com', 'google.com', 'google.co.in', 'expertini.com', 'jobleads.com', 'learn4good.com',
-  'recruit.net', 'trabajo.org', 'jobsora.com', 'archinect.com', 'dezeen.com', 'bebee.in', 'quikr.com', 'jobaaj.com',
-];
-
-function hostOf(url) {
-  try {
-    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-}
-
-export function isJobBoard(url) {
-  const host = hostOf(url);
-  return JOB_BOARDS.some((board) => host === board || host.endsWith(`.${board}`));
-}
 
 // "3 days ago", "20 hours ago", "30+ days ago", "Just posted" -> Date
 export function parsePostedAt(text, now = new Date()) {
@@ -45,26 +24,24 @@ export function parsePostedAt(text, now = new Date()) {
   return new Date(now.getTime() - Number(m[1]) * unitMs[m[2]]);
 }
 
-// Picks the best apply option: the firm's own site, then LinkedIn, then any job board.
-export function pickApplyLink(options, fallback) {
-  const candidates = (options || [])
-    .filter((o) => isHttpUrl(o?.link))
-    .map((o) => ({
-      url: o.link,
-      publisher: cleanText(o.title),
-      rank: isJobBoard(o.link) ? applyRank(o.link) : APPLY_RANK.direct,
-    }));
-  if (!candidates.length && isHttpUrl(fallback)) {
-    candidates.push({ url: fallback, publisher: 'Google Jobs', rank: APPLY_RANK.other });
-  }
-  candidates.sort((a, b) => b.rank - a.rank);
-  return candidates[0] || null;
+// Every apply option Google lists, best first: the firm's own site, LinkedIn, job boards, other
+// sites, reposting sites. Google's own share link is the last resort.
+export function applyOptionsFor(options, fallback, company = '') {
+  const list = rankApplyOptions(
+    (options || []).map((o) => ({ url: o?.link, publisher: o?.title })),
+    company,
+  );
+  if (!list.length && isHttpUrl(fallback)) list.push({ url: fallback, publisher: 'Google Jobs', kind: 'aggregator', rank: APPLY_RANK.aggregator });
+  return list;
+}
+
+export function pickApplyLink(options, fallback, company) {
+  return applyOptionsFor(options, fallback, company)[0] || null;
 }
 
 export function normalizeSerpJob(job, now = new Date()) {
   const title = cleanText(job.title, 300);
-  const apply = pickApplyLink(job.apply_options, job.share_link);
-  if (!title || !apply) return null;
+  if (!title) return null;
 
   const ext = job.detected_extensions || {};
   let description = String(job.description || '').trim();
@@ -73,6 +50,10 @@ export function normalizeSerpJob(job, now = new Date()) {
       .map((h) => [h.title, ...(h.items || []).map((i) => `• ${i}`)].filter(Boolean).join('\n'))
       .join('\n\n');
   }
+  const company = repairCompany(cleanText(job.company_name, 200), `${title}\n${description}`);
+  const applyOptions = applyOptionsFor(job.apply_options, job.share_link, company);
+  const apply = applyOptions[0];
+  if (!apply) return null;
   const salaryText = ext.salary ? cleanText(ext.salary, 200) : '';
   const parsed = salaryText ? parseSalary(salaryText) : null;
   const locationText = cleanText(job.location, 200) || (ext.work_from_home ? 'Remote' : '');
@@ -81,12 +62,14 @@ export function normalizeSerpJob(job, now = new Date()) {
   return {
     source: SOURCE,
     title,
-    company: repairCompany(cleanText(job.company_name, 200), `${title}\n${description}`),
+    company,
     locationText,
     city: normalizeCity(locationText),
     description,
     applyUrl: apply.url,
     applyRank: apply.rank,
+    applyKind: apply.kind,
+    applyOptions,
     postedAt: parsePostedAt(ext.posted_at, now),
     salary: salaryText ? { text: salaryText, min: parsed?.min ?? null, max: parsed?.max ?? null, period: parsed?.period ?? null } : null,
     publisher: apply.publisher || via || 'Google Jobs',

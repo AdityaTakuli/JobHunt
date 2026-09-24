@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { describe, it } from 'node:test';
 import { formatRange, formatSalary } from '../shared/format.js';
-import { dedupeKey, normalizeCity, normalizeCompany, normalizeTitle, repairCompany } from '../server/lib/normalize.js';
+import { applyKind, dedupeKey, normalizeCity, normalizeCompany, normalizeTitle, rankApplyOptions, repairCompany } from '../server/lib/normalize.js';
 import { parseSalary } from '../server/lib/salary.js';
 import { countJobLinks, parseLinkedInAlert } from '../server/sources/linkedinEmail.js';
 import { isJobBoard, normalizeSerpJob, parsePostedAt, pickApplyLink } from '../server/sources/serpapi.js';
@@ -124,6 +124,29 @@ describe('SerpApi Google Jobs', () => {
     assert.equal(normalizeSerpJob(results[0], now).applyUrl, 'https://studiolotus.in/careers/bim-intern');
     assert.equal(isJobBoard('https://www.naukri.com/x'), true);
     assert.equal(isJobBoard('https://careers.studio.in/x'), false);
+  });
+
+  it('sorts apply links: company site, LinkedIn, job board, other site, reposting site', () => {
+    assert.equal(applyKind('https://careers.tataprojects.com/job/1', { company: 'Tata Projects Pvt Ltd' }), 'company');
+    assert.equal(applyKind('https://bricknbolt.com/careers', { company: 'Brick&Bolt' }), 'company');
+    assert.equal(applyKind('https://boards.greenhouse.io/firm/jobs/1', { company: 'Anything' }), 'company', 'hiring-system pages count as the firm');
+    assert.equal(applyKind('https://x.example.org/job', { company: 'Studio Nest', publisher: 'Studio Nest Careers' }), 'company');
+    assert.equal(applyKind('https://in.linkedin.com/jobs/view/1'), 'linkedin');
+    assert.equal(applyKind('https://www.naukri.com/job/1'), 'board');
+    assert.equal(applyKind('https://in.bebee.com/job/1', { company: 'Bebee Architects' }), 'aggregator', 'reposting sites never count as the firm');
+    assert.equal(applyKind('https://random-jobs.example.com/1', { company: 'Studio Lotus' }), 'site');
+
+    const options = rankApplyOptions(
+      [
+        { url: 'https://in.bebee.com/job/1', publisher: 'BeBee' },
+        { url: 'https://www.naukri.com/job/1', publisher: 'Naukri' },
+        { url: 'https://studiolotus.in/careers/1', publisher: 'Studio Lotus' },
+        { url: 'https://in.linkedin.com/jobs/view/1', publisher: 'LinkedIn' },
+        { url: 'https://in.bebee.com/job/1', publisher: 'BeBee again' },
+      ],
+      'Studio Lotus',
+    );
+    assert.deepEqual(options.map((o) => o.kind), ['company', 'linkedin', 'board', 'aggregator'], 'best first, duplicates dropped');
   });
 
   it('normalizes a result', () => {

@@ -153,6 +153,7 @@ export function parseLinkedInAlert({ html, text, receivedAt = new Date() }) {
     description: '',
     applyUrl: canonicalJobUrl(card.id),
     applyRank: APPLY_RANK.linkedin,
+    applyKind: 'linkedin',
     postedAt: receivedAt,
     salary: null,
     publisher: 'LinkedIn',

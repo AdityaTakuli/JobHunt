@@ -1,5 +1,26 @@
 import { formatRange, formatSalary, isNew, ROLE_LABELS, SOURCE_LABELS, timeAgo } from '../format.js';
-import { IconAlert } from '../icons.jsx';
+import { IconAlert, IconCheck } from '../icons.jsx';
+
+export const APPLY_KIND_LABELS = {
+  company: 'Company site',
+  linkedin: 'LinkedIn',
+  board: 'Job board',
+  site: 'Other site',
+  aggregator: 'Reposting site',
+};
+
+// On cards: only the trustworthy kinds get a badge, so the list stays quiet.
+export function ApplyBadge({ job }) {
+  if (job.apply_kind === 'company') {
+    return (
+      <span className="badge badge-apply is-company">
+        <IconCheck size={13} /> Company site
+      </span>
+    );
+  }
+  if (job.apply_kind === 'linkedin') return <span className="badge badge-apply is-linkedin">LinkedIn</span>;
+  return null;
+}
 
 export function sourceLabels(sources = []) {
   const labels = sources.map((s) => (s.source === 'google_jobs' ? s.publisher || SOURCE_LABELS.google_jobs : SOURCE_LABELS[s.source] || s.source));
