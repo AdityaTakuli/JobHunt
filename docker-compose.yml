@@ -1,0 +1,15 @@
+# Local MySQL for development only: `docker compose up -d`
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: archjobs
+      MYSQL_USER: archjobs
+      MYSQL_PASSWORD: archjobs
+      MYSQL_ROOT_PASSWORD: archjobs-root
+    ports:
+      - "3307:3306"
+    volumes:
+      - archjobs-mysql:/var/lib/mysql
+volumes:
+  archjobs-mysql:

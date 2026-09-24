@@ -1,0 +1,52 @@
+{
+  "search_metadata": { "status": "Success" },
+  "search_parameters": { "engine": "google_jobs", "q": "BIM intern Bengaluru" },
+  "jobs_results": [
+    {
+      "title": "BIM Intern",
+      "company_name": "Studio Lotus",
+      "location": "Bengaluru, Karnataka",
+      "via": "LinkedIn",
+      "share_link": "https://www.google.com/search?ibp=htl;jobs#htivrt=jobs&htidocid=abc",
+      "extensions": ["2 days ago", "Internship"],
+      "detected_extensions": { "posted_at": "2 days ago", "schedule_type": "Internship" },
+      "description": "We are looking for a BIM intern with Revit and Navisworks skills to support our Bengaluru studio on large institutional projects. B.Arch students in their final year are welcome. Stipend: ₹15,000 - ₹20,000 per month.",
+      "apply_options": [
+        { "title": "LinkedIn", "link": "https://www.linkedin.com/jobs/view/bim-intern-at-studio-lotus-4012345678" },
+        { "title": "Studio Lotus Careers", "link": "https://studiolotus.in/careers/bim-intern" }
+      ],
+      "job_id": "eyJqb2JfdGl0bGUiOiJCSU0gSW50ZXJuIn0="
+    },
+    {
+      "title": "Software Architect - Cloud Platform",
+      "company_name": "Acme Software",
+      "location": "Bengaluru, Karnataka",
+      "via": "Naukri.com",
+      "detected_extensions": { "posted_at": "5 hours ago", "schedule_type": "Full-time", "salary": "₹30–45 LPA" },
+      "description": "Design scalable microservices on AWS. 8+ years of experience in Java and distributed data systems.",
+      "apply_options": [{ "title": "Naukri.com", "link": "https://www.naukri.com/job-listings-software-architect-acme-123" }],
+      "job_id": "eyJqb2JfdGl0bGUiOiJTb2Z0d2FyZSBBcmNoaXRlY3QifQ=="
+    },
+    {
+      "title": "Junior Architect",
+      "company_name": "Collage Architecture Studio",
+      "location": "Bengaluru, Karnataka",
+      "via": "Indeed",
+      "detected_extensions": { "posted_at": "20 hours ago", "schedule_type": "Full-time", "salary": "₹25K–₹35K a month" },
+      "description": "Junior architect (0-1 years of experience) to develop working drawings in AutoCAD and 3D models in SketchUp. Freshers with a strong portfolio can apply.",
+      "apply_options": [{ "title": "Indeed", "link": "https://in.indeed.com/viewjob?jk=abc123" }],
+      "job_id": "eyJqb2JfdGl0bGUiOiJKdW5pb3IgQXJjaGl0ZWN0In0="
+    },
+    {
+      "title": "Senior Architect",
+      "company_name": "Morphogenesis",
+      "location": "Anywhere",
+      "via": "Glassdoor",
+      "detected_extensions": { "posted_at": "3 days ago", "schedule_type": "Full-time", "work_from_home": true },
+      "description": "Minimum 6 years of experience leading architectural projects from concept to completion. Revit proficiency preferred.",
+      "apply_options": [{ "title": "Glassdoor", "link": "https://www.glassdoor.co.in/job-listing/senior-architect-JV_123.htm" }],
+      "job_id": "eyJqb2JfdGl0bGUiOiJTZW5pb3IgQXJjaGl0ZWN0In0="
+    }
+  ],
+  "serpapi_pagination": { "next_page_token": "eyJmYyI6Ik..." }
+}

@@ -1,0 +1,16 @@
+# Dependencies and build output (Hostinger runs `npm install` and `npm run build`)
+node_modules/
+web/dist/
+
+# Secrets: set these in hPanel's environment settings, never commit them
+.env
+.env.*
+!.env.example
+
+# Logs, editors, OS
+*.log
+coverage/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
