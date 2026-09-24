@@ -41,7 +41,7 @@ export function cleanText(text, maxLength) {
 }
 
 const CITY_ALIASES = [
-  [/\b(bangalore|bengaluru|bangaluru|bengalooru|blr)\b/i, 'Bengaluru'],
+  [/\b(bangalore|bengaluru|bangaluru|bengalooru|blr|banglore|bangalor|begaluru|bengluru|benguluru|bengalore|bangaluru)\b/i, 'Bengaluru'],
   [/\b(mumbai|bombay|navi mumbai|thane)\b/i, 'Mumbai'],
   [/\b(gurugram|gurgaon)\b/i, 'Gurugram'],
   [/\bnoida\b/i, 'Noida'],

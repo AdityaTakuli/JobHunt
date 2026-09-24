@@ -1,17 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { IconLinkedIn, IconMapPin, IconSearch } from '../icons.jsx';
 
 // "What" and "where", like Glassdoor's search. Submitting runs that exact search on Google Jobs.
+// "Where" is shared with the location filter (the page keeps them in step).
 // The LinkedIn switch narrows the list (feed or search results) to LinkedIn jobs.
-export default function SearchBar({ cities, busy, onSearch, linkedinOnly, onLinkedin }) {
+export default function SearchBar({ cities, where, onWhereChange, busy, onSearch, linkedinOnly, onLinkedin }) {
   const [what, setWhat] = useState('');
-  const [where, setWhere] = useState('');
-  const touchedWhere = useRef(false);
-
-  // Start with her first city once Settings has loaded, unless she already typed a place.
-  useEffect(() => {
-    if (!touchedWhere.current && cities.length) setWhere(cities[0]);
-  }, [cities]);
 
   const ready = what.trim().length >= 2;
 
@@ -35,10 +29,7 @@ export default function SearchBar({ cities, busy, onSearch, linkedinOnly, onLink
         <span className="visually-hidden">City</span>
         <input
           value={where}
-          onChange={(e) => {
-            touchedWhere.current = true;
-            setWhere(e.target.value);
-          }}
+          onChange={(e) => onWhereChange(e.target.value)}
           placeholder="City, or Remote"
           list="sb-cities"
           maxLength={80}

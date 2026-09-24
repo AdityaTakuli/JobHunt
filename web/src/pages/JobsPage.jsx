@@ -151,6 +151,8 @@ export default function JobsPage() {
   // exactly those results (the other filters still apply).
   const [search, setSearch] = useState(null);
   const [searching, setSearching] = useState(false);
+  // The search bar's place, kept in step with the location filter below it.
+  const [where, setWhere] = useState('');
   // Bumped on every fresh (offset 0) load: the list remounts and its cards stagger in again.
   const [batch, setBatch] = useState(0);
   const requestRef = useRef(0);
@@ -231,12 +233,27 @@ export default function JobsPage() {
     if (desktop && jobs.length && !jobs.some((j) => j.id === selectedId)) setSelectedId(jobs[0].id);
   }, [desktop, jobs, selectedId]);
 
+  // Location filter -> search bar: a picked city shows up as the place to search.
+  const myCitiesKey = (meta?.myCities || []).join('|');
+  useEffect(() => {
+    const mine = myCitiesKey ? myCitiesKey.split('|') : [];
+    setWhere(filters.city === 'all' ? '' : filters.city === 'mine' ? mine[0] || '' : filters.city);
+  }, [filters.city, myCitiesKey]);
+
   async function runSearch({ q, location }) {
     setSearching(true);
     try {
       const result = await api('/search', { method: 'POST', body: { q, location } });
+      const place = result.place || location;
       setSelectedId(null);
-      setSearch({ q, location, ...result });
+      setSearch({ q, ...result, location: place });
+      // Search bar -> location filter: the feed follows the place just searched ("My cities"
+      // stays when it is her main city, which is what that filter puts in the search bar).
+      const main = (meta?.myCities || [])[0] || '';
+      if (place) {
+        setWhere(place);
+        setFilters((f) => ({ ...f, city: place.toLowerCase() === main.toLowerCase() ? 'mine' : place }));
+      }
       refreshMeta();
     } catch (err) {
       toast({ message: err.message, error: true, duration: 8000 });
@@ -372,6 +389,8 @@ export default function JobsPage() {
       <h1 className="visually-hidden">Jobs</h1>
       <SearchBar
         cities={meta?.myCities || []}
+        where={where}
+        onWhereChange={setWhere}
         busy={searching}
         onSearch={runSearch}
         linkedinOnly={filters.linkedin}

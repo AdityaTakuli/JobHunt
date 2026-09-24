@@ -498,8 +498,9 @@ describe('integration', { skip: !dbReady }, () => {
       assert.deepEqual(feed.data.jobs.map((j) => j.id).sort(), [...first.ids].sort());
 
       calls.length = 0;
-      const again = await liveSearch({ q: 'BIM intern', location: 'Mumbai', fetchImpl });
-      assert.equal(again.cached, true, `repeat within ${CACHE_HOURS}h is free`);
+      const again = await liveSearch({ q: 'BIM intern', location: 'mumbai', fetchImpl });
+      assert.equal(again.cached, true, `repeat within ${CACHE_HOURS}h is free, however the city is spelt`);
+      assert.equal(again.place, 'Mumbai');
       assert.deepEqual(again.ids, first.ids);
       assert.deepEqual(calls, [], 'no SerpApi call for a repeat');
 
