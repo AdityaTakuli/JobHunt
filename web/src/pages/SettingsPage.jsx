@@ -1,29 +1,29 @@
-import { useCallback, useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useMeta } from '../App.jsx';
+import ChipInput from '../components/ChipInput.jsx';
 import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDateTime, SOURCE_LABELS } from '../format.js';
 
+const TABS = [
+  { id: 'preferences', label: 'Preferences' },
+  { id: 'connections', label: 'Connections' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'review', label: 'Review' },
+];
+const TAB_KEY = 'aj-settings-tab';
+
 const TASKS = [
-  { name: 'fetch-jobs', label: 'Fetch jobs now', note: 'Uses SerpApi searches' },
-  { name: 'read-inbox', label: 'Check LinkedIn inbox' },
-  { name: 'retry-classify', label: 'Re-run AI on rule-labeled jobs', note: 'Uses Groq/Gemini tokens' },
-  { name: 'send-digest', label: 'Send digest now' },
+  { name: 'fetch-jobs', label: 'Fetch jobs', hint: "Search Google Jobs now. Uses up to 3 of this month's searches." },
+  { name: 'read-inbox', label: 'Check LinkedIn inbox', hint: 'Read new job-alert emails in the jobs mailbox.' },
+  { name: 'retry-classify', label: 'Re-label with AI', hint: 'Send keyword-labelled jobs to Groq or Gemini. Uses AI tokens.' },
+  { name: 'send-digest', label: 'Send digest', hint: "Email today's digest right away." },
 ];
 
 const LOG_LABELS = { ...SOURCE_LABELS, groq: 'AI re-label', digest: 'Digest email' };
-
-const lines = (text) =>
-  text
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-const commaList = (text) =>
-  text
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+const EASE = [0.22, 1, 0.36, 1];
 
 function summarize(result) {
   if (result.skipped) return `Skipped: ${result.skipped}`;
@@ -35,71 +35,106 @@ function summarize(result) {
   const parts = [];
   if (result.found != null) parts.push(`${result.found} found, ${result.new} new`);
   if (result.messages != null) parts.unshift(`${result.messages} emails`);
-  if (result.errors?.length || result.error) parts.push('with errors (see log)');
+  if (result.errors?.length || result.error) parts.push('with errors (see Activity)');
   return parts.join(', ') || 'Done.';
 }
 
-// Today's AI spend against the daily token budget. Past it, jobs get keyword rules until tomorrow
-// and the hourly re-label upgrades them.
-function AiBudget({ label, ai }) {
-  const used = ai.today.tokens;
-  const pct = Math.min(100, Math.round((used / ai.dailyTokens) * 100));
+const toForm = (s) => ({
+  display_name: s.display_name,
+  notification_email: s.notification_email,
+  cities: s.cities,
+  search_queries: s.search_queries,
+  extra_exclude_keywords: s.extra_exclude_keywords,
+  digest_enabled: s.digest_enabled,
+  digest_time: s.digest_time,
+});
+
+/* ---------- Layout pieces ---------- */
+
+function Section({ id, title, description, action, children }) {
   return (
-    <div className="quota">
-      <span>
-        {label} tokens today: <strong>{used.toLocaleString('en-IN')}</strong> of {ai.dailyTokens.toLocaleString('en-IN')}
-        <span className="muted">
-          {' '}
-          · {ai.today.requests} of {ai.dailyRequests} requests
-        </span>
-      </span>
-      <div className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={ai.dailyTokens} aria-valuenow={used} aria-label={`${label} tokens used today`}>
-        <span style={{ width: `${pct}%` }} />
+    <section className="card set-section" aria-labelledby={id}>
+      <header className="set-section-head">
+        <div>
+          <h2 id={id}>{title}</h2>
+          {description && <p>{description}</p>}
+        </div>
+        {action}
+      </header>
+      <div className="set-section-body">{children}</div>
+    </section>
+  );
+}
+
+// One setting: label and explanation on the left, the control on the right (stacked on phones).
+function Row({ label, hint, htmlFor, children }) {
+  const hintId = htmlFor ? `${htmlFor}-hint` : undefined;
+  return (
+    <div className="set-row">
+      <div className="set-row-text">
+        {htmlFor ? (
+          <label className="set-label" htmlFor={htmlFor}>
+            {label}
+          </label>
+        ) : (
+          <span className="set-label">{label}</span>
+        )}
+        {hint && (
+          <p className="set-hint" id={hintId}>
+            {hint}
+          </p>
+        )}
       </div>
+      <div className="set-row-control">{children}</div>
     </div>
   );
 }
 
-function SettingsForm() {
+function Switch({ id, checked, onChange, describedBy }) {
+  return (
+    <button type="button" role="switch" id={id} aria-checked={checked} aria-describedby={describedBy} className="switch" onClick={() => onChange(!checked)}>
+      <motion.span className="switch-thumb" layout transition={{ type: 'spring', stiffness: 700, damping: 40 }} />
+    </button>
+  );
+}
+
+function StatusBadge({ ok, okLabel = 'Connected', offLabel = 'Not set' }) {
+  return <span className={`status-badge ${ok ? 'is-ok' : 'is-off'}`}>{ok ? okLabel : offLabel}</span>;
+}
+
+/* ---------- Preferences ---------- */
+
+function PreferencesPanel() {
   const { toast } = useToast();
   const { refreshMeta } = useMeta();
+  const [baseline, setBaseline] = useState(null);
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api('/settings')
-      .then(({ settings }) =>
-        setForm({
-          search_queries: settings.search_queries.join('\n'),
-          cities: settings.cities.join(', '),
-          digest_enabled: settings.digest_enabled,
-          digest_time: settings.digest_time,
-          notification_email: settings.notification_email,
-          extra_exclude_keywords: settings.extra_exclude_keywords.join(', '),
-          display_name: settings.display_name,
-        }),
-      )
+      .then(({ settings }) => {
+        setBaseline(toForm(settings));
+        setForm(toForm(settings));
+      })
       .catch((err) => setError(err.message));
   }, []);
 
+  const dirty = useMemo(() => form && baseline && JSON.stringify(form) !== JSON.stringify(baseline), [form, baseline]);
+  const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
+  const setInput = (key) => (e) => set(key)(e.target.value);
+
   async function save(e) {
-    e.preventDefault();
+    e?.preventDefault();
+    if (!dirty || busy) return;
     setBusy(true);
     setError('');
     try {
-      await api('/settings', {
-        method: 'PUT',
-        body: {
-          search_queries: lines(form.search_queries),
-          cities: commaList(form.cities),
-          digest_enabled: form.digest_enabled,
-          digest_time: form.digest_time,
-          notification_email: form.notification_email,
-          extra_exclude_keywords: commaList(form.extra_exclude_keywords),
-          display_name: form.display_name,
-        },
-      });
+      const { settings } = await api('/settings', { method: 'PUT', body: form });
+      // The server tidies values (e.g. "Bangalore" -> "Bengaluru"); show what was stored.
+      setBaseline(toForm(settings));
+      setForm(toForm(settings));
       toast({ message: 'Settings saved.' });
       refreshMeta(); // cities and the welcome name live in /jobs/meta too
     } catch (err) {
@@ -109,76 +144,148 @@ function SettingsForm() {
     }
   }
 
-  if (!form) return error ? <section className="card section"><p className="form-error">{error}</p></section> : <RowsSkeleton rows={6} label="Loading settings" />;
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  if (!form) {
+    return error ? (
+      <p className="form-error" role="alert">
+        {error}
+      </p>
+    ) : (
+      <RowsSkeleton rows={6} label="Loading settings" />
+    );
+  }
 
   return (
-    <section className="card section" aria-labelledby="prefs-title">
-      <h2 id="prefs-title">Search & alerts</h2>
-      <p>What to look for, and when to email you.</p>
-      <form className="form-grid two" onSubmit={save}>
-        {error && (
-          <p className="form-error span-2" role="alert">
-            {error}
-          </p>
+    <form className="set-stack" onSubmit={save}>
+      <Section id="set-profile" title="Profile" description="How the app greets you, and where the daily digest is sent.">
+        <Row label="Your name" hint="Shown in the welcome message after you sign in." htmlFor="set-name">
+          <input id="set-name" className="input" value={form.display_name} onChange={setInput('display_name')} maxLength={40} placeholder="Kothu" aria-describedby="set-name-hint" />
+        </Row>
+        <Row label="Digest email" hint="Where the daily list of new roles goes." htmlFor="set-email">
+          <input
+            id="set-email"
+            className="input"
+            type="email"
+            value={form.notification_email}
+            onChange={setInput('notification_email')}
+            placeholder="you@gmail.com"
+            aria-describedby="set-email-hint"
+          />
+        </Row>
+      </Section>
+
+      <Section id="set-search" title="Job search" description="Every search query runs in every city, a few per fetch, so the free search quota lasts the month.">
+        <Row label="Cities" hint="Any city, or Remote. These also rank higher and fill the digest." htmlFor="set-cities">
+          <ChipInput id="set-cities" value={form.cities} onChange={set('cities')} placeholder="Bengaluru, Mumbai, Remote…" addLabel="Add a city" max={10} maxLength={60} describedBy="set-cities-hint" />
+        </Row>
+        <Row label="Search queries" hint="Job titles to look for, without a city." htmlFor="set-queries">
+          <ChipInput
+            id="set-queries"
+            value={form.search_queries}
+            onChange={set('search_queries')}
+            placeholder="BIM intern…"
+            addLabel="Add a search"
+            max={20}
+            splitOnComma={false}
+            describedBy="set-queries-hint"
+          />
+        </Row>
+        <Row label="Exclude roles mentioning" hint="On top of the built-in list (software, cloud, data, AWS, Java…)." htmlFor="set-exclude">
+          <ChipInput
+            id="set-exclude"
+            value={form.extra_exclude_keywords}
+            onChange={set('extra_exclude_keywords')}
+            placeholder="sales, marketing…"
+            addLabel="Add a word"
+            maxLength={60}
+            describedBy="set-exclude-hint"
+          />
+        </Row>
+      </Section>
+
+      <Section id="set-digest" title="Daily digest" description="One email a day with new roles and follow-ups that are due.">
+        <Row label="Send the digest" hint={form.digest_enabled ? 'On.' : 'Off. No daily email.'} htmlFor="set-digest-on">
+          <Switch id="set-digest-on" checked={form.digest_enabled} onChange={set('digest_enabled')} describedBy="set-digest-on-hint" />
+        </Row>
+        <Row label="Time (IST)" hint="Sent at the first check after this time." htmlFor="set-time">
+          <input
+            id="set-time"
+            className="input set-time"
+            type="time"
+            value={form.digest_time}
+            onChange={setInput('digest_time')}
+            disabled={!form.digest_enabled}
+            required
+            aria-describedby="set-time-hint"
+          />
+        </Row>
+      </Section>
+
+      <AnimatePresence>
+        {(dirty || error) && (
+          <motion.div
+            className="save-bar"
+            role="region"
+            aria-label="Unsaved changes"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.25, ease: EASE }}
+          >
+            {error ? (
+              <p className="save-bar-error" role="alert">
+                {error}
+              </p>
+            ) : (
+              <p>Unsaved changes</p>
+            )}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setForm(baseline);
+                setError('');
+              }}
+              disabled={busy}
+            >
+              Discard
+            </button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !dirty}>
+              {busy ? 'Saving…' : 'Save changes'}
+            </button>
+          </motion.div>
         )}
-        <label className="field span-2">
-          <span>Search queries</span>
-          <textarea className="textarea" value={form.search_queries} onChange={set('search_queries')} rows={6} />
-          <small>One per line, without a city: each one is searched in every city you pick. Each fetch runs up to 3 searches in rotation to stay within the SerpApi quota.</small>
-        </label>
-        <label className="field">
-          <span>Cities to search</span>
-          <input className="input" value={form.cities} onChange={set('cities')} placeholder="Bengaluru, Mumbai, Pune, Remote" />
-          <small>Comma-separated, any city (or Remote). New jobs come in from the next fetch; these cities rank higher and fill the daily digest.</small>
-        </label>
-        <label className="field">
-          <span>Name for the welcome message</span>
-          <input className="input" value={form.display_name} onChange={set('display_name')} maxLength={40} placeholder="Kothu" />
-        </label>
-        <label className="field">
-          <span>Notification email</span>
-          <input className="input" type="email" value={form.notification_email} onChange={set('notification_email')} placeholder="you@example.com" />
-        </label>
-        <div className="field">
-          <span className="field-label">Daily digest</span>
-          <label className="check">
-            <input type="checkbox" checked={form.digest_enabled} onChange={set('digest_enabled')} />
-            Email me new roles every day
-          </label>
-        </div>
-        <label className="field">
-          <span>Digest time (IST)</span>
-          <input className="input" type="time" value={form.digest_time} onChange={set('digest_time')} disabled={!form.digest_enabled} required />
-        </label>
-        <label className="field span-2">
-          <span>Also exclude roles mentioning</span>
-          <input className="input" value={form.extra_exclude_keywords} onChange={set('extra_exclude_keywords')} placeholder="sales, marketing, civil site engineer" />
-          <small>Comma-separated. Added to the built-in list (software, cloud, data, AWS, Java…).</small>
-        </label>
-        <div className="span-2">
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? 'Saving…' : 'Save settings'}
-          </button>
-        </div>
-      </form>
-    </section>
+      </AnimatePresence>
+    </form>
   );
 }
 
-function SourcesSection() {
+/* ---------- Connections ---------- */
+
+function Usage({ label, period, used, limit, note }) {
+  const pct = limit ? Math.min(100, (used / limit) * 100) : 0;
+  const tone = pct >= 90 ? 'is-high' : pct >= 70 ? 'is-mid' : '';
+  return (
+    <div className="usage">
+      <div className="usage-top">
+        <span className="usage-label">{label}</span>
+        <span className="usage-period">{period}</span>
+      </div>
+      <div className="usage-value">
+        <strong>{used.toLocaleString('en-IN')}</strong>
+        <span> / {limit.toLocaleString('en-IN')}</span>
+      </div>
+      <div className={`meter ${tone}`} role="progressbar" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={used} aria-label={`${label} used ${period}`}>
+        <motion.span initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.8, ease: EASE }} />
+      </div>
+      {note && <p className="usage-note">{note}</p>}
+    </div>
+  );
+}
+
+function ConnectionsPanel({ system, onRan }) {
   const { toast } = useToast();
   const { refreshMeta } = useMeta();
-  const [system, setSystem] = useState(null);
   const [running, setRunning] = useState('');
-
-  const load = useCallback(() => {
-    api('/system')
-      .then(setSystem)
-      .catch((err) => toast({ message: err.message, error: true }));
-  }, [toast]);
-
-  useEffect(load, [load]);
 
   async function run(task) {
     setRunning(task.name);
@@ -190,101 +297,122 @@ function SourcesSection() {
       toast({ message: err.message, error: true, duration: 7000 });
     } finally {
       setRunning('');
-      load();
+      onRan();
     }
   }
 
-  if (!system) return <RowsSkeleton rows={4} label="Loading sources" />;
-  const { configured, serpapi } = system;
-  const pct = Math.min(100, Math.round((serpapi.searchesUsedThisMonth / serpapi.monthlyLimit) * 100));
-  const items = [
-    ['SerpApi (Google Jobs)', configured.serpapi],
-    [`Groq (${system.groqModel})`, configured.groq],
-    [`Gemini (${system.ai.gemini.model})`, configured.gemini],
-    ['LinkedIn inbox (IMAP)', configured.imap],
-    ['Digest email (SMTP)', configured.smtp],
-    ['Scheduler', configured.scheduler || configured.cron],
+  if (!system) return <RowsSkeleton rows={6} label="Loading connections" />;
+  const { configured, serpapi, ai } = system;
+  const scheduler = configured.scheduler ? 'Runs inside the app' : configured.cron ? 'Hostinger cron jobs' : 'Nothing runs on its own yet';
+  const connections = [
+    { name: 'Google Jobs', detail: 'Job search via SerpApi', ok: configured.serpapi },
+    { name: 'Groq', detail: `Main AI · ${ai.groq.model}`, ok: configured.groq },
+    { name: 'Gemini', detail: `Backup AI · ${ai.gemini.model}`, ok: configured.gemini },
+    { name: 'LinkedIn alerts', detail: 'Jobs mailbox (IMAP)', ok: configured.imap },
+    { name: 'Digest email', detail: 'Sending (SMTP)', ok: configured.smtp },
+    { name: 'Schedule', detail: scheduler, ok: configured.scheduler || configured.cron, okLabel: 'Active' },
   ];
 
   return (
-    <section className="card section" aria-labelledby="sources-title">
-      <h2 id="sources-title">Sources</h2>
-      <p>Connections are set in the server's .env file.</p>
-      <div className="status-grid">
-        {items.map(([label, ok]) => (
-          <div key={label} className="status-item">
-            <span className={`dot ${ok ? 'ok' : 'off'}`} aria-hidden="true" />
-            <span>
-              {label}
-              <span className="visually-hidden">{ok ? ': connected' : ': not configured'}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="quota">
-        <span>
-          SerpApi searches this month: <strong>{serpapi.searchesUsedThisMonth}</strong> of {serpapi.monthlyLimit}
-          <span className="muted"> · pauses with {serpapi.reserve} left</span>
-        </span>
-        <div className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={serpapi.monthlyLimit} aria-valuenow={serpapi.searchesUsedThisMonth} aria-label="SerpApi searches used">
-          <span style={{ width: `${pct}%` }} />
+    <div className="set-stack">
+      <Section id="set-usage" title="Usage" description="Free-tier budgets. Searches and AI pause on their own before a limit is reached.">
+        <div className="usage-grid">
+          <Usage label="Searches" period="this month" used={serpapi.searchesUsedThisMonth} limit={serpapi.monthlyLimit} note={`Pauses with ${serpapi.reserve} left`} />
+          {ai.groq.configured && <Usage label="Groq tokens" period="today" used={ai.groq.today.tokens} limit={ai.groq.dailyTokens} note={`${ai.groq.today.requests} of ${ai.groq.dailyRequests} requests`} />}
+          {ai.gemini.configured && (
+            <Usage label="Gemini tokens" period="today" used={ai.gemini.today.tokens} limit={ai.gemini.dailyTokens} note={`${ai.gemini.today.requests} of ${ai.gemini.dailyRequests} requests`} />
+          )}
         </div>
-      </div>
+      </Section>
 
-      {Object.entries(system.ai)
-        .filter(([, ai]) => ai.configured)
-        .map(([name, ai]) => (
-          <AiBudget key={name} label={name === 'groq' ? 'Groq' : 'Gemini'} ai={ai} />
-        ))}
+      <Section id="set-connections" title="Connections" description="Keys and passwords live in the server's environment variables (hPanel on Hostinger).">
+        <ul className="conn-list">
+          {connections.map((c) => (
+            <li key={c.name}>
+              <span className={`conn-dot ${c.ok ? 'is-ok' : ''}`} aria-hidden="true" />
+              <div className="grow">
+                <div className="conn-name">{c.name}</div>
+                <div className="conn-detail">{c.detail}</div>
+              </div>
+              <StatusBadge ok={c.ok} okLabel={c.okLabel} />
+            </li>
+          ))}
+        </ul>
+      </Section>
 
-      <div className="button-row" style={{ marginBottom: 20 }}>
-        {TASKS.map((task) => (
-          <button key={task.name} type="button" className="btn btn-sm" disabled={Boolean(running)} onClick={() => run(task)} title={task.note}>
-            {running === task.name ? 'Running…' : task.label}
-          </button>
-        ))}
-      </div>
+      <Section id="set-run" title="Run now" description="All of these also run on their own schedule.">
+        <ul className="conn-list">
+          {TASKS.map((task) => (
+            <li key={task.name}>
+              <div className="grow">
+                <div className="conn-name">{task.label}</div>
+                <div className="conn-detail">{task.hint}</div>
+              </div>
+              <button type="button" className="btn btn-sm" disabled={Boolean(running)} onClick={() => run(task)}>
+                {running === task.name ? 'Running…' : 'Run'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Section>
+    </div>
+  );
+}
 
-      <h3 className="field-label" style={{ marginBottom: 8 }}>
-        Recent runs
-      </h3>
-      {system.fetchLog.length === 0 ? (
-        <p className="small muted">Nothing has run yet.</p>
+/* ---------- Activity ---------- */
+
+function ActivityPanel({ system, onRefresh }) {
+  if (!system) return <RowsSkeleton rows={6} label="Loading activity" />;
+  const log = system.fetchLog;
+  return (
+    <Section
+      id="set-activity"
+      title="Recent runs"
+      description="The last 40 fetches, inbox checks, AI re-labels and digests."
+      action={
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onRefresh}>
+          Refresh
+        </button>
+      }
+    >
+      {log.length === 0 ? (
+        <p className="set-empty">Nothing has run yet. Runs appear here after the first scheduled fetch or a “Run now”.</p>
       ) : (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table run-table">
             <thead>
               <tr>
                 <th>When (IST)</th>
-                <th>Source</th>
-                <th>Found</th>
-                <th>New</th>
-                <th>Requests</th>
+                <th>What</th>
+                <th className="num">Found</th>
+                <th className="num">New</th>
+                <th className="num">Requests</th>
               </tr>
             </thead>
             <tbody>
-              {system.fetchLog.map((row) => (
-                <tr key={row.id}>
-                  <td className="small">{formatDateTime(row.run_at)}</td>
+              {log.map((row) => (
+                <tr key={row.id} className={row.error ? 'has-error' : undefined}>
+                  <td className="small nowrap">{formatDateTime(row.run_at)}</td>
                   <td>
-                    {LOG_LABELS[row.source] || row.source}
+                    <span className={`conn-dot ${row.error ? 'is-error' : 'is-ok'}`} aria-hidden="true" /> {LOG_LABELS[row.source] || row.source}
                     {row.error && <div className="log-error">{row.error}</div>}
                   </td>
-                  <td>{row.jobs_found}</td>
-                  <td>{row.jobs_new}</td>
-                  <td>{row.requests_used}</td>
+                  <td className="num">{row.jobs_found}</td>
+                  <td className="num">{row.jobs_new}</td>
+                  <td className="num">{row.requests_used}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-    </section>
+    </Section>
   );
 }
 
-function ReviewSection() {
+/* ---------- Filter review ---------- */
+
+function ReviewPanel() {
   const { toast } = useToast();
   const { refreshMeta } = useMeta();
   const [data, setData] = useState(null);
@@ -307,83 +435,144 @@ function ReviewSection() {
     }
   }
 
-  if (!data) return null;
-  const item = (job, extra) => (
-    <>
-      <div className="grow">
-        <div className="truncate" style={{ fontWeight: 600 }}>
-          <a href={job.apply_url} target="_blank" rel="noopener noreferrer">
-            {job.title}
-          </a>
-        </div>
-        <div className="small muted truncate">{[job.company, job.city, extra].filter(Boolean).join(' · ')}</div>
-      </div>
-    </>
-  );
+  if (!data) return <RowsSkeleton rows={5} label="Loading filtered jobs" />;
+  const list = (jobs, extraKey, button, path, message) =>
+    jobs.length === 0 ? (
+      <p className="set-empty">None.</p>
+    ) : (
+      <ul className="conn-list">
+        {jobs.map((job) => (
+          <li key={job.id}>
+            <div className="grow">
+              <div className="conn-name truncate">
+                <a href={job.apply_url} target="_blank" rel="noopener noreferrer">
+                  {job.title}
+                </a>
+              </div>
+              <div className="conn-detail truncate">{[job.company, job.city, job[extraKey]].filter(Boolean).join(' · ')}</div>
+            </div>
+            <button type="button" className="btn btn-sm" onClick={() => act(path(job), message)}>
+              {button}
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
 
   return (
-    <section className="card section" aria-labelledby="review-title">
-      <h2 id="review-title">Tune the filter</h2>
-      <p>Roles you hid and roles the classifier filtered out. Spot a pattern? Add it to the exclude list above.</p>
-
-      <h3 className="field-label" style={{ marginBottom: 8 }}>
-        Filtered out automatically (last 30 days)
-      </h3>
-      {data.filtered.length === 0 ? (
-        <p className="small muted">None.</p>
-      ) : (
-        <ul className="review-list" style={{ marginBottom: 20 }}>
-          {data.filtered.map((job) => (
-            <li key={job.id}>
-              {item(job, job.classify_reason)}
-              <button type="button" className="btn btn-sm" onClick={() => act(`/jobs/${job.id}/restore`, 'Moved to your feed.')}>
-                Show in feed
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3 className="field-label" style={{ margin: '16px 0 8px' }}>
-        Hidden by you
-      </h3>
-      {data.hidden.length === 0 ? (
-        <p className="small muted">None.</p>
-      ) : (
-        <ul className="review-list">
-          {data.hidden.map((job) => (
-            <li key={job.id}>
-              {item(job, job.hide_reason)}
-              <button type="button" className="btn btn-sm" onClick={() => act(`/jobs/${job.id}/unhide`, 'Job restored.')}>
-                Unhide
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <div className="set-stack">
+      <Section id="set-filtered" title="Filtered out automatically" description="Roles the classifier judged not relevant in the last 30 days. Spot a mistake? Put it back in the feed.">
+        {list(data.filtered, 'classify_reason', 'Show in feed', (j) => `/jobs/${j.id}/restore`, 'Moved to your feed.')}
+      </Section>
+      <Section id="set-hidden" title="Hidden by you" description="Roles you marked as not relevant, with your reason. Recurring patterns are worth adding to Exclude roles.">
+        {list(data.hidden, 'hide_reason', 'Unhide', (j) => `/jobs/${j.id}/unhide`, 'Job restored.')}
+      </Section>
+    </div>
   );
 }
 
+/* ---------- Page ---------- */
+
+function loadTab() {
+  try {
+    const t = localStorage.getItem(TAB_KEY);
+    return TABS.some((x) => x.id === t) ? t : 'preferences';
+  } catch {
+    return 'preferences';
+  }
+}
+
 export default function SettingsPage() {
+  const { toast } = useToast();
+  const [tab, setTab] = useState(loadTab);
+  const [system, setSystem] = useState(null);
+  const tabRefs = useRef({});
+
+  const loadSystem = useCallback(() => {
+    api('/system')
+      .then(setSystem)
+      .catch((err) => toast({ message: err.message, error: true }));
+  }, [toast]);
+  useEffect(loadSystem, [loadSystem]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TAB_KEY, tab);
+    } catch {
+      // not remembered in private mode
+    }
+  }, [tab]);
+
+  // Arrow keys move between tabs (the standard tablist pattern).
+  function onTabKey(e) {
+    const i = TABS.findIndex((t) => t.id === tab);
+    const next = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : null;
+    if (next == null) return;
+    e.preventDefault();
+    const t = TABS[(next + TABS.length) % TABS.length];
+    setTab(t.id);
+    tabRefs.current[t.id]?.focus();
+  }
+
   async function logout() {
     await api('/logout', { method: 'POST' }).catch(() => {});
     window.location.reload();
   }
 
+  const panels = {
+    preferences: <PreferencesPanel />,
+    connections: <ConnectionsPanel system={system} onRan={loadSystem} />,
+    activity: <ActivityPanel system={system} onRefresh={loadSystem} />,
+    review: <ReviewPanel />,
+  };
+
   return (
-    <div className="page-narrow">
-      <div className="page-head">
-        <h1>Settings</h1>
-        <button type="button" className="btn btn-sm" onClick={logout}>
+    <div className="page-narrow settings">
+      <header className="settings-head">
+        <div>
+          <h1>Settings</h1>
+          <p>Your search, alerts and connections.</p>
+        </div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>
           Log out
         </button>
+      </header>
+
+      <div className="tabs" role="tablist" aria-label="Settings sections" onKeyDown={onTabKey}>
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            ref={(el) => (tabRefs.current[t.id] = el)}
+            type="button"
+            role="tab"
+            id={`tab-${t.id}`}
+            aria-selected={tab === t.id}
+            aria-controls={`panel-${t.id}`}
+            tabIndex={tab === t.id ? 0 : -1}
+            className="tab"
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            {tab === t.id && <motion.span layoutId="settings-tab" className="tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
+          </button>
+        ))}
       </div>
-      <div className="stack">
-        <SettingsForm />
-        <SourcesSection />
-        <ReviewSection />
-      </div>
+
+      {/* All panels stay mounted so unsaved edits survive a tab switch; only the active one shows. */}
+      {TABS.map((t) => (
+        <motion.div
+          key={t.id}
+          role="tabpanel"
+          id={`panel-${t.id}`}
+          aria-labelledby={`tab-${t.id}`}
+          hidden={tab !== t.id}
+          initial={false}
+          animate={tab === t.id ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
+          transition={{ duration: 0.25, ease: EASE }}
+        >
+          {panels[t.id]}
+        </motion.div>
+      ))}
     </div>
   );
 }

@@ -48,50 +48,62 @@ function FirmSuggestions() {
   if (!firms) return null;
   if (!firms.length) {
     return (
-      <p>
-        Build your cold-email list on the <a href="#/firms">Firms</a> page, and the next quiet day will suggest who to write to.
-      </p>
+      <>
+        <h2>No new roles right now</h2>
+        <p>
+          New roles arrive with the morning and evening search. Meanwhile, add studios you'd love to work at to your Firms list, and quiet days
+          will suggest who to cold-email.
+        </p>
+        <a className="btn btn-sm" href="#/firms">
+          Open Firms
+        </a>
+      </>
     );
   }
   return (
-    <ul className="suggest-list">
-      {firms.map((f) => (
-        <li key={f.id}>
-          <div className="grow">
-            <div className="truncate" style={{ fontWeight: 600 }}>
-              {f.website ? (
-                <a href={f.website} target="_blank" rel="noopener noreferrer">
-                  {f.name}
-                </a>
-              ) : (
-                f.name
-              )}
+    <>
+      <h2>
+        No new roles today. Here {firms.length === 1 ? 'is 1 firm' : `are ${firms.length} firms`} to cold-email.
+      </h2>
+      <ul className="suggest-list">
+        {firms.map((f) => (
+          <li key={f.id}>
+            <div className="grow">
+              <div className="truncate" style={{ fontWeight: 600 }}>
+                {f.website ? (
+                  <a href={f.website} target="_blank" rel="noopener noreferrer">
+                    {f.name}
+                  </a>
+                ) : (
+                  f.name
+                )}
+              </div>
+              <div className="small muted truncate">{[f.city, f.type, f.contact_email].filter(Boolean).join(' · ')}</div>
             </div>
-            <div className="small muted truncate">{[f.city, f.type, f.contact_email].filter(Boolean).join(' · ')}</div>
-          </div>
-          {f.contact_email && (
-            <a className="btn btn-sm" href={`mailto:${f.contact_email}`}>
-              Email
-            </a>
-          )}
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={async () => {
-              try {
-                await api(`/firms/${f.id}/emailed`, { method: 'POST' });
-                setFirms((list) => list.filter((x) => x.id !== f.id));
-                toast({ message: `Marked ${f.name} as emailed.` });
-              } catch (err) {
-                toast({ message: err.message, error: true });
-              }
-            }}
-          >
-            Mark emailed
-          </button>
-        </li>
-      ))}
-    </ul>
+            {f.contact_email && (
+              <a className="btn btn-sm" href={`mailto:${f.contact_email}`}>
+                Email
+              </a>
+            )}
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={async () => {
+                try {
+                  await api(`/firms/${f.id}/emailed`, { method: 'POST' });
+                  setFirms((list) => list.filter((x) => x.id !== f.id));
+                  toast({ message: `Marked ${f.name} as emailed.` });
+                } catch (err) {
+                  toast({ message: err.message, error: true });
+                }
+              }}
+            >
+              Mark emailed
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -296,7 +308,7 @@ export default function JobsPage() {
       )}
 
       {status === 'ready' && jobs.length === 0 && (
-        <div className="card empty">
+        <div className="card empty is-centered">
           <Suspense fallback={null}>
             <Blueprint className="empty-drawing" duration={1.4} />
           </Suspense>
@@ -309,10 +321,7 @@ export default function JobsPage() {
               </button>
             </>
           ) : (
-            <>
-              <h2>No new BIM roles today — here are 5 firms to cold-email.</h2>
-              <FirmSuggestions />
-            </>
+            <FirmSuggestions />
           )}
         </div>
       )}

@@ -3,6 +3,7 @@ import gsap from 'gsap';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import Blueprint from '../components/Blueprint.jsx';
+import { LogoMark } from '../components/Logo.jsx';
 import { randomQuote } from '../quotes.js';
 
 gsap.registerPlugin(useGSAP);
@@ -74,11 +75,7 @@ export default function LoginPage({ onLogin }) {
         <div className="card login-card" ref={cardRef}>
           <form onSubmit={submit}>
             <div className="login-reveal login-brand">
-              <span className="brand-mark" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 26 16 6l10 20M10.5 19h11" />
-                </svg>
-              </span>
+              <LogoMark size={44} />
               <div>
                 <h1>ArchJobs</h1>
                 <p>Architecture & BIM roles, in one place.</p>

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
 import { api, setUnauthorizedHandler } from './api.js';
+import Logo, { LogoMark } from './components/Logo.jsx';
 import { LoadingQuote } from './components/Skeleton.jsx';
 import { IconBriefcase, IconBuilding, IconColumns, IconMonitor, IconMoon, IconSettings, IconSun } from './icons.jsx';
 import FirmsPage from './pages/FirmsPage.jsx';
@@ -98,14 +99,6 @@ function Counter({ meta }) {
   );
 }
 
-const BrandMark = () => (
-  <span className="brand-mark" aria-hidden="true">
-    <svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 26 16 6l10 20M10.5 19h11" />
-    </svg>
-  </span>
-);
-
 const PAGE_EASE = [0.22, 1, 0.36, 1];
 
 export default function App() {
@@ -159,7 +152,7 @@ function Shell() {
   const boot = (
     <div className="boot" aria-busy="true" aria-label="Loading">
       <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
-        <BrandMark />
+        <LogoMark size={48} />
       </motion.span>
       <LoadingQuote after={600} />
     </div>
@@ -197,9 +190,8 @@ function Shell() {
       </a>
       <header className="app-header">
         <div className="app-header-inner">
-          <a className="brand" href="#/jobs">
-            <BrandMark />
-            ArchJobs
+          <a className="brand" href="#/jobs" aria-label="ArchJobs home">
+            <Logo size={30} />
           </a>
           <nav className="top-nav" aria-label="Main">
             {ROUTES.map(({ path, label, Icon }) => (
