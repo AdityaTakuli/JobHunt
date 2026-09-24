@@ -119,3 +119,28 @@ export const IconAlert = (p) => (
     <path d="M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
   </Icon>
 );
+
+export const IconChevronDown = (p) => (
+  <Icon {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </Icon>
+);
+
+export const IconCheck = (p) => (
+  <Icon {...p}>
+    <path d="M5 12.5 10 17.5 19 7" />
+  </Icon>
+);
+
+export const IconMapPin = (p) => (
+  <Icon {...p}>
+    <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z" />
+    <circle cx="12" cy="10" r="2.3" />
+  </Icon>
+);
+
+export const IconSparkle = (p) => (
+  <Icon {...p}>
+    <path d="M12 3.5 13.9 9.1 19.5 11 13.9 12.9 12 18.5 10.1 12.9 4.5 11 10.1 9.1Z" />
+  </Icon>
+);

@@ -31,6 +31,8 @@ Reply with one JSON object and nothing else, with exactly these keys:
   "software": string[],            // tools named in the posting, e.g. "Revit", "AutoCAD", "SketchUp"
   "stipend_or_salary": string | null, // pay exactly as written in the posting, else null
   "match_score": integer 0-100,    // fit for this student: BIM/Revit, internship/fresher, her cities score higher
+  "min_years_experience": integer | null, // years of work experience required: 0 for internships and
+                                   // fresher roles, null if the posting does not say
   "reason": string                 // one short line
 }
 role_type: internship for intern/trainee roles, fresher for 0-1 year or graduate roles,
@@ -79,6 +81,8 @@ export function validateLabels(value) {
     software: [...new Set(software.map((s) => s.trim()).filter(Boolean))].slice(0, 12),
     stipend_or_salary: stipend_or_salary?.trim() ? stipend_or_salary.trim().slice(0, 200) : null,
     match_score: Math.max(0, Math.min(100, Math.round(match_score))),
+    // Optional: older answers and odd values just mean "not stated".
+    min_years_experience: Number.isInteger(value.min_years_experience) && value.min_years_experience >= 0 && value.min_years_experience <= 30 ? value.min_years_experience : null,
     reason: reason.trim().slice(0, 300),
   };
 }

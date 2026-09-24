@@ -53,7 +53,7 @@ export function searchText({ query, city }) {
 
 // SerpApi location for a city, looked up once and cached in settings. A failed lookup is not
 // cached; the search still runs with the city in the query text.
-async function locationFor(city, cache, fetchImpl) {
+export async function locationFor(city, cache, fetchImpl) {
   if (!city || city === 'Remote') return null;
   const key = city.toLowerCase();
   if (key in cache) return cache[key];

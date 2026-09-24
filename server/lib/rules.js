@@ -45,14 +45,36 @@ export function isPreferredCity(city, cities = []) {
   return Boolean(c) && cities.some((p) => String(p).trim().toLowerCase() === c);
 }
 
-// Minimum years of experience asked for, or null. "3+ years", "3-5 yrs", "minimum 4 years".
-export function minYearsRequired(text) {
-  const re = /(\d{1,2})\s*\+?\s*(?:(?:-|–|to)\s*\d{1,2}\s*\+?\s*)?(?:years?|yrs?)\b/gi;
-  let min = null;
-  for (const m of String(text || '').matchAll(re)) {
+const EXPERIENCE_RE = /(\d{1,2})\s*(\+?)\s*(?:(?:-|–|to)\s*(\d{1,2})\s*\+?\s*)?(?:years?|yrs?)\b/gi;
+const EXPERIENCE_CONTEXT = /experience|exp\b|work|practice|industry|professional|relevant|minimum|at least|min\./;
+const FRESHER_TEXT =
+  /\b(freshers?|fresh graduates?|recent graduates?|entry[- ]level|no (?:prior )?experience|final[- ]year students?|graduate trainees?)\b/i;
+
+// Years of experience a posting asks for, as { min, max } (max null = open-ended), or null when
+// it does not say. "0-1 years" -> 0..1, "2+ yrs" -> 2.., "freshers can apply" -> 0..0.
+export function parseExperience(title, description) {
+  const text = `${title || ''}\n${description || ''}`;
+  let best = null;
+  for (const m of text.matchAll(EXPERIENCE_RE)) {
     // Skip durations that are not experience, e.g. "5-year B.Arch", "2 years old firm".
     const around = text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 30).toLowerCase();
-    if (!/experience|exp\b|work|practice|industry|professional|relevant|minimum|at least|min\./.test(around)) continue;
+    if (!EXPERIENCE_CONTEXT.test(around)) continue;
+    const min = Number(m[1]);
+    const max = m[3] != null ? Number(m[3]) : null;
+    if (min > 30 || (max != null && max < min)) continue;
+    if (!best || min < best.min) best = { min, max };
+  }
+  if (best) return best;
+  if (FRESHER_TEXT.test(text) || /\bintern(s|ship)?\b|\btrainee\b|\bapprentice/i.test(String(title || ''))) return { min: 0, max: 0 };
+  return null;
+}
+
+// Minimum years of experience asked for, or null. "3+ years", "3-5 yrs", "minimum 4 years".
+export function minYearsRequired(text) {
+  let min = null;
+  for (const m of String(text || '').matchAll(EXPERIENCE_RE)) {
+    const around = text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 30).toLowerCase();
+    if (!EXPERIENCE_CONTEXT.test(around)) continue;
     const n = Number(m[1]);
     if (min == null || n < min) min = n;
   }

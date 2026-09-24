@@ -7,7 +7,7 @@ import { createBudget, dbUsageStore } from './aiBudget.js';
 import { classifyWithGemini } from './gemini.js';
 import { classifyWithGroq } from './groq.js';
 import { LlmError, requestEstimate } from './llm.js';
-import { classifyWithRules, SOFTWARE } from './rules.js';
+import { classifyWithRules, parseExperience, SOFTWARE } from './rules.js';
 import { parseSalary } from './salary.js';
 
 const CALLERS = { groq: classifyWithGroq, gemini: classifyWithGemini };
@@ -142,9 +142,21 @@ export function canonicalSoftware(list) {
   return out;
 }
 
+// Experience asked for: the AI's reading when it gave one, else what the posting text says.
+// Internships and fresher roles that state nothing count as 0 years.
+export function experienceColumns(labels, job) {
+  const parsed = parseExperience(job.title, job.description);
+  const ai = labels.min_years_experience ?? null;
+  let min = ai ?? parsed?.min ?? null;
+  if (min == null && (labels.role_type === 'internship' || labels.role_type === 'fresher')) min = 0;
+  const max = parsed && parsed.min === min ? parsed.max : min === 0 && labels.role_type === 'internship' ? 0 : null;
+  return { exp_min: min, exp_max: max, exp_parsed: 1 };
+}
+
 // Maps classifier labels onto `jobs` columns. Keeps a salary already found at ingest.
 export function labelsToColumns(labels, classifier, job) {
   const cols = {
+    ...experienceColumns(labels, job),
     is_relevant: labels.is_relevant ? 1 : 0,
     role_type: labels.role_type,
     is_bim: labels.is_bim ? 1 : 0,

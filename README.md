@@ -50,6 +50,8 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 
 **Cities.** Settings → *Cities to search* takes any list of cities (or `Remote`); there is no location in `.env`. Every search query is run in every city, one query + city pair per search, and the pairs rotate across runs, so adding a city shares the quota rather than multiplying it. Each city is turned into Google's location once through SerpApi's free locations API (Indian matches first, so "Kochi" is Kerala) and cached. Her cities also rank higher in the match score, fill the daily digest, and are the feed's default *My cities* filter.
 
+**Searching and filtering (Jobs page).** The search bar ("what" + "where") runs that exact search on Google Jobs through SerpApi and shows the results; the same search within 6 hours reuses the stored results for free, typed searches stop at `SERPAPI_MANUAL_DAILY_LIMIT` a day (default 10), and none run once the monthly reserve is reached. Each job stores the years of experience it asks for (`exp_min`/`exp_max`: the AI's reading, else parsed from the text: "0-1 years", "2+ yrs", "freshers can apply"). The *Fresher-friendly* switch filters on it (freshers only, or up to 1, 2, 3 or 5 years); roles that state nothing count only when they are internships or fresher roles.
+
 **SerpApi quota.** Each fetch run (07:00 and 18:00 IST) asks SerpApi's free account endpoint how many searches are left, spreads them over the rest of the month (max 3 per run), and pauses when 10 are left. Usage shows on Settings → Sources.
 
 **AI token budget.** Every call to Groq or Gemini is checked against four limits before it is made (defaults in `.env.example`):

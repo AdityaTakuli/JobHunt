@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createBudget, memoryUsageStore, SERVER_REQUEST_RESERVE } from '../server/lib/aiBudget.js';
-import { canonicalSoftware, createClassifier, labelsToColumns } from '../server/lib/classify.js';
+import { canonicalSoftware, createClassifier, experienceColumns, labelsToColumns } from '../server/lib/classify.js';
 import { classifyWithGemini } from '../server/lib/gemini.js';
 import { classifyWithGroq, validateLabels } from '../server/lib/groq.js';
 import { requestEstimate, userPrompt } from '../server/lib/llm.js';
-import { classifyWithRules, detectRoleType, minYearsRequired } from '../server/lib/rules.js';
+import { classifyWithRules, detectRoleType, minYearsRequired, parseExperience } from '../server/lib/rules.js';
 import { istDateString } from '../server/lib/time.js';
 
 const GOOD = {
@@ -154,6 +154,32 @@ describe('Groq classifier', () => {
     assert.equal(cols.software, '["Revit","Navisworks"]');
     assert.equal(cols.salary_min, 15000);
     assert.equal(cols.salary_period, 'month');
+  });
+});
+
+describe('experience', () => {
+  it('reads the years a posting asks for', () => {
+    assert.deepEqual(parseExperience('Junior Architect', '0-1 years of experience in AutoCAD'), { min: 0, max: 1 });
+    assert.deepEqual(parseExperience('BIM Modeler', '2 to 4 yrs relevant experience'), { min: 2, max: 4 });
+    assert.deepEqual(parseExperience('Architect', 'Minimum 3+ years experience'), { min: 3, max: null });
+    assert.deepEqual(parseExperience('Architect', 'Freshers can apply'), { min: 0, max: 0 });
+    assert.deepEqual(parseExperience('BIM Intern', 'Revit modelling'), { min: 0, max: 0 });
+    assert.equal(parseExperience('Architect', 'A 5-year B.Arch degree is required'), null);
+    assert.equal(parseExperience('Architect', ''), null);
+  });
+
+  it('prefers the AI reading, falls back to the text, and treats unstated fresher roles as 0', () => {
+    const job = { title: 'Architect', description: '1-2 years of experience' };
+    assert.deepEqual(experienceColumns({ role_type: 'fresher', min_years_experience: 1 }, job), { exp_min: 1, exp_max: 2, exp_parsed: 1 });
+    assert.deepEqual(experienceColumns({ role_type: 'fresher', min_years_experience: null }, job), { exp_min: 1, exp_max: 2, exp_parsed: 1 });
+    assert.deepEqual(experienceColumns({ role_type: 'fresher' }, { title: 'Architect', description: '' }), { exp_min: 0, exp_max: null, exp_parsed: 1 });
+    assert.deepEqual(experienceColumns({ role_type: 'experienced' }, { title: 'Architect', description: '' }), { exp_min: null, exp_max: null, exp_parsed: 1 });
+  });
+
+  it('accepts the optional AI field and ignores odd values', () => {
+    assert.equal(validateLabels({ ...GOOD, min_years_experience: 2 }).min_years_experience, 2);
+    assert.equal(validateLabels({ ...GOOD, min_years_experience: '2' }).min_years_experience, null);
+    assert.equal(validateLabels(GOOD).min_years_experience, null);
   });
 });
 

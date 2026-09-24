@@ -35,6 +35,7 @@ const { normalizeSerpJob } = await import('../server/sources/serpapi.js');
 const { fetchJobs, searchesForThisRun, pickQueries, searchPairs, searchText } = await import('../server/tasks/fetchJobs.js');
 const { resolveLocation } = await import('../server/sources/serpapi.js');
 const { feedFilters } = await import('../server/routes/jobs.js');
+const { liveSearch, CACHE_HOURS } = await import('../server/tasks/liveSearch.js');
 const { parseMessages } = await import('../server/tasks/readInbox.js');
 const { archiveOldJobs } = await import('../server/tasks/archive.js');
 const { digestDue, renderDigest } = await import('../server/tasks/sendDigest.js');
@@ -78,7 +79,7 @@ describe('integration', { skip: !dbReady }, () => {
   before(async () => {
     await migrate();
     await query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage']) await query(`TRUNCATE TABLE ${table}`);
+    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches']) await query(`TRUNCATE TABLE ${table}`);
     await query('SET FOREIGN_KEY_CHECKS = 1');
     server = createApp().listen(0);
     await new Promise((resolve) => server.once('listening', resolve));
@@ -411,6 +412,73 @@ describe('integration', { skip: !dbReady }, () => {
     const feed = await request('/api/jobs?city=mine');
     assert.equal(feed.status, 200);
     assert.ok(feed.data.jobs.every((j) => ['Bengaluru', 'Pune', '', 'Remote'].includes(j.city)));
+  });
+
+  it('filters the feed by years of experience', async () => {
+    const make = (title, exp_min, role_type) =>
+      query('INSERT INTO jobs SET ?', [
+        { dedupe_key: `exp-${title}`.padEnd(40, 'x').slice(0, 40), title, company: 'Exp Studio', city: 'Pune', apply_url: 'https://x.in', role_type, exp_min, exp_parsed: 1, created_at: NOW, updated_at: NOW },
+      ]);
+    await make('Exp Fresher', 0, 'fresher');
+    await make('Exp One', 1, 'fresher');
+    await make('Exp Three', 3, 'experienced');
+    await make('Exp Unstated Intern', null, 'internship');
+    await make('Exp Unstated Senior', null, 'experienced');
+    const titles = async (qs) => (await request(`/api/jobs?city=Pune&${qs}`)).data.jobs.map((j) => j.title).sort();
+    assert.deepEqual(await titles('exp=0'), ['Exp Fresher', 'Exp Unstated Intern']);
+    assert.deepEqual(await titles('exp=1'), ['Exp Fresher', 'Exp One', 'Exp Unstated Intern']);
+    assert.deepEqual(await titles('exp=3'), ['Exp Fresher', 'Exp One', 'Exp Three', 'Exp Unstated Intern']);
+    assert.equal((await titles('exp=any')).length, 5, 'filter off shows every level');
+    assert.deepEqual(await titles('exp=any&role=internship'), ['Exp Unstated Intern']);
+    assert.ok(!(await titles('exp=any&role=job')).includes('Exp Unstated Intern'));
+    const [first] = (await request('/api/jobs?city=Pune&exp=any')).data.jobs;
+    assert.ok('exp_min' in first && 'exp_max' in first, 'years are sent to the app');
+    await query("DELETE FROM jobs WHERE company = 'Exp Studio'");
+  });
+
+  it('runs a typed search on Google Jobs, then reuses it for a few hours', async () => {
+    const serpFixture = fixture('serpapi-google-jobs.json');
+    const calls = [];
+    const fetchImpl = async (url) => {
+      const u = new URL(url);
+      calls.push(u.pathname);
+      if (u.pathname === '/account.json') return Response.json({ total_searches_left: 200, this_month_usage: 50 });
+      if (u.pathname === '/locations.json') return Response.json([{ canonical_name: 'Mumbai,Maharashtra,India', country_code: 'IN' }]);
+      if (u.pathname === '/search.json') {
+        assert.equal(u.searchParams.get('q'), 'BIM intern');
+        assert.equal(u.searchParams.get('location'), 'Mumbai,Maharashtra,India');
+        return new Response(serpFixture, { headers: { 'content-type': 'application/json' } });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    config.serpapi.apiKey = 'test-key';
+    try {
+      const first = await liveSearch({ q: '  BIM intern ', location: 'Mumbai', fetchImpl });
+      assert.equal(first.cached, false);
+      assert.ok(first.ids.length >= 1);
+      assert.equal(first.found, JSON.parse(serpFixture).jobs_results.length);
+
+      // The feed shows exactly those jobs, whatever the city filter says.
+      const feed = await request(`/api/jobs?ids=${first.ids.join(',')}&city=Nowhere&exp=any`);
+      assert.deepEqual(feed.data.jobs.map((j) => j.id).sort(), [...first.ids].sort());
+
+      calls.length = 0;
+      const again = await liveSearch({ q: 'BIM intern', location: 'Mumbai', fetchImpl });
+      assert.equal(again.cached, true, `repeat within ${CACHE_HOURS}h is free`);
+      assert.deepEqual(again.ids, first.ids);
+      assert.deepEqual(calls, [], 'no SerpApi call for a repeat');
+
+      const limit = config.serpapi.manualDailyLimit;
+      config.serpapi.manualDailyLimit = 1;
+      await assert.rejects(liveSearch({ q: 'junior architect', location: 'Mumbai', fetchImpl }), (err) => err.status === 429);
+      config.serpapi.manualDailyLimit = limit;
+      await assert.rejects(liveSearch({ q: 'x', fetchImpl }), (err) => err.status === 400);
+    } finally {
+      config.serpapi.apiKey = '';
+    }
+    const meta = await request('/api/jobs/meta');
+    assert.equal(meta.data.search.configured, false);
+    assert.equal(typeof meta.data.search.leftToday, 'number');
   });
 
   it('spreads the SerpApi quota over the month', () => {

@@ -44,6 +44,8 @@ export const config = {
     monthlyLimit: num(env.SERPAPI_MONTHLY_LIMIT, 250), // Free plan: 250 searches/month
     reserve: num(env.SERPAPI_RESERVE, 10), // stop fetching when this many searches are left
     queriesPerRun: num(env.SERPAPI_QUERIES_PER_RUN, 3),
+    // Searches typed on the Jobs page, per IST day (repeats within a few hours are free).
+    manualDailyLimit: num(env.SERPAPI_MANUAL_DAILY_LIMIT, 10),
     runsPerDay: 2,
   },
 

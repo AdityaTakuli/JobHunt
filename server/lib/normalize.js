@@ -25,6 +25,16 @@ export function stripHtml(html) {
     .trim();
 }
 
+// Google Jobs sometimes drops the first letter of a company name ("ana Urban Space" for "Jana Urban
+// Space"). When the name starts in lowercase and the posting spells it with one more letter in
+// front, use the posting's spelling.
+export function repairCompany(company, text) {
+  if (!company || !/^[a-z]/.test(company)) return company;
+  const escaped = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = String(text || '').match(new RegExp(`(?<![\\p{L}\\p{N}])\\p{L}${escaped}`, 'iu'));
+  return m ? m[0] : company;
+}
+
 export function cleanText(text, maxLength) {
   const out = decodeEntities(String(text ?? '')).replace(/\s+/g, ' ').trim();
   return maxLength && out.length > maxLength ? `${out.slice(0, maxLength - 1)}…` : out;

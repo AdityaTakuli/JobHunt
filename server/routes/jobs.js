@@ -1,14 +1,17 @@
 import { Router } from 'express';
+import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
 import { getEstimates } from '../lib/estimate.js';
 import { getSettings } from '../lib/settings.js';
 import { DAY_MS, startOfIstDay } from '../lib/time.js';
+import { localSearchesThisMonth } from '../tasks/fetchJobs.js';
+import { typedSearchesToday } from '../tasks/liveSearch.js';
 
 export const jobsRouter = Router();
 
 const LIST_COLUMNS = `j.id, j.title, j.company, j.city, j.location_text, j.apply_url, j.link_status, j.sources,
   j.posted_at, j.created_at, j.salary_text, j.salary_min, j.salary_max, j.salary_period, j.salary_is_estimate,
-  j.role_type, j.is_bim, j.software, j.match_score, j.classifier, j.classify_reason, j.is_relevant, j.is_hidden,
+  j.role_type, j.is_bim, j.software, j.match_score, j.exp_min, j.exp_max, j.classifier, j.classify_reason, j.is_relevant, j.is_hidden,
   a.id AS application_id, a.status AS application_status`;
 
 export function serializeJob(row, estimates = {}) {
@@ -32,13 +35,24 @@ const intParam = (v, fallback, { min = 0, max = Infinity } = {}) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
-// Builds the feed WHERE clause from query-string filters. city=mine means her chosen cities
-// (Settings), plus remote jobs and jobs with no city.
-export function feedFilters(q, now = new Date(), myCities = []) {
-  const where = ['j.is_archived = 0', 'j.is_hidden = 0', 'j.is_relevant = 1'];
-  const params = [];
+const idList = (v) =>
+  String(v || '')
+    .split(',')
+    .map((s) => Number.parseInt(s, 10))
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .slice(0, 200);
 
-  if (q.city === 'mine') {
+// Builds the feed WHERE clause from query-string filters. city=mine means her chosen cities
+// (Settings), plus remote jobs and jobs with no city. ids=1,2,3 limits the list to the results of
+// a live search: those are shown even if archived or judged not relevant, since she asked for them.
+export function feedFilters(q, now = new Date(), myCities = []) {
+  const ids = idList(q.ids);
+  const where = ids.length ? ['j.is_hidden = 0', 'j.id IN (?)'] : ['j.is_archived = 0', 'j.is_hidden = 0', 'j.is_relevant = 1'];
+  const params = ids.length ? [ids] : [];
+
+  if (ids.length) {
+    // City and keyword were part of the search itself.
+  } else if (q.city === 'mine') {
     if (myCities.length) {
       where.push(`(j.city IN (?) OR j.city IN ('', 'Remote'))`);
       params.push(myCities);
@@ -47,11 +61,21 @@ export function feedFilters(q, now = new Date(), myCities = []) {
     where.push('j.city = ?');
     params.push(String(q.city));
   }
-  if (['internship', 'fresher', 'experienced'].includes(q.role)) {
+  // Experience: exp=N keeps roles asking for at most N years. Roles that do not say count only
+  // when classified as an internship or fresher role. exp=any turns the filter off.
+  const exp = q.exp === undefined || q.exp === '' || q.exp === 'any' ? null : intParam(q.exp, null, { min: 0, max: 30 });
+  if (exp != null) {
+    where.push("(j.exp_min <= ? OR (j.exp_min IS NULL AND j.role_type IN ('internship', 'fresher')))");
+    params.push(exp);
+  }
+
+  if (q.role === 'job') {
+    where.push("(j.role_type IS NULL OR j.role_type <> 'internship')");
+  } else if (['internship', 'fresher', 'experienced'].includes(q.role)) {
     where.push('j.role_type = ?');
     params.push(q.role);
-  } else if (q.role !== 'all') {
-    // Experienced roles are hidden by default.
+  } else if (q.role !== 'all' && q.exp === undefined) {
+    // Without an experience filter, experienced roles are hidden by default.
     where.push("(j.role_type IS NULL OR j.role_type <> 'experienced')");
   }
   const software = String(q.software || '')
@@ -76,7 +100,7 @@ export function feedFilters(q, now = new Date(), myCities = []) {
   if (q.hideApplied === '1') {
     where.push("(a.status IS NULL OR a.status = 'saved')");
   }
-  if (q.q) {
+  if (q.q && !ids.length) {
     const like = `%${String(q.q).slice(0, 100).replace(/[\\%_]/g, '\\$&')}%`;
     where.push('(j.title LIKE ? OR j.company LIKE ?)');
     params.push(like, like);
@@ -93,7 +117,7 @@ jobsRouter.get('/', async (req, res) => {
     query(
       `SELECT ${LIST_COLUMNS} FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
         WHERE ${where}
-        ORDER BY COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
+        ORDER BY ${req.query.sort === 'match' ? 'j.match_score DESC,' : ''} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
         LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     ),
@@ -106,7 +130,7 @@ jobsRouter.get('/', async (req, res) => {
 // Filter options and the top-of-page counter.
 jobsRouter.get('/meta', async (req, res) => {
   const now = new Date();
-  const [cities, [counts], [followUps], settings] = await Promise.all([
+  const [cities, [counts], [followUps], settings, searchesUsed, typedToday] = await Promise.all([
     query(
       `SELECT city, COUNT(*) AS n FROM jobs
         WHERE is_archived = 0 AND is_hidden = 0 AND is_relevant = 1 AND city <> ''
@@ -124,8 +148,15 @@ jobsRouter.get('/meta', async (req, res) => {
       [now],
     ),
     getSettings(),
+    localSearchesThisMonth(now),
+    typedSearchesToday(now),
   ]);
   res.json({
+    search: {
+      configured: Boolean(config.serpapi.apiKey),
+      leftThisMonth: Math.max(0, config.serpapi.monthlyLimit - searchesUsed),
+      leftToday: Math.max(0, config.serpapi.manualDailyLimit - typedToday),
+    },
     cities: cities.map((c) => ({ city: c.city, count: Number(c.n) })),
     myCities: settings.cities,
     displayName: settings.display_name,

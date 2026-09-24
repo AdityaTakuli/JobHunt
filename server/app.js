@@ -6,6 +6,7 @@ import { config, ROOT_DIR } from './config.js';
 import { applicationsRouter } from './routes/applications.js';
 import { firmsRouter } from './routes/firms.js';
 import { jobsRouter } from './routes/jobs.js';
+import { searchRouter } from './routes/search.js';
 import { settingsRouter } from './routes/settings.js';
 import { runTask, TASKS } from './tasks/index.js';
 
@@ -38,6 +39,7 @@ export function createApp() {
 
   app.use('/api', requireAuth);
   app.use('/api/jobs', jobsRouter);
+  app.use('/api/search', searchRouter);
   app.use('/api/applications', applicationsRouter);
   app.use('/api/firms', firmsRouter);
   app.use('/api', settingsRouter);

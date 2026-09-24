@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { describe, it } from 'node:test';
 import { formatRange, formatSalary } from '../shared/format.js';
-import { dedupeKey, normalizeCity, normalizeCompany, normalizeTitle } from '../server/lib/normalize.js';
+import { dedupeKey, normalizeCity, normalizeCompany, normalizeTitle, repairCompany } from '../server/lib/normalize.js';
 import { parseSalary } from '../server/lib/salary.js';
 import { countJobLinks, parseLinkedInAlert } from '../server/sources/linkedinEmail.js';
 import { isJobBoard, normalizeSerpJob, parsePostedAt, pickApplyLink } from '../server/sources/serpapi.js';
@@ -52,6 +52,10 @@ describe('format', () => {
 describe('normalize + dedupe', () => {
   it('normalizes Indian city names', () => {
     assert.equal(normalizeCity('Bengaluru East, Karnataka, India'), 'Bengaluru');
+    assert.equal(repairCompany('ana Urban Space (JanaUSP)', 'Vacancy for Interns at Jana Urban Space (JanaUSP) | Hyderabad'), 'Jana Urban Space (JanaUSP)');
+    assert.equal(repairCompany('ergate architecture', 'Join Tergate Architecture as an intern'), 'Tergate Architecture');
+    assert.equal(repairCompany('ergate architecture', 'No mention here'), 'ergate architecture', 'kept when the posting does not say');
+    assert.equal(repairCompany('Studio Lotus', 'at Studio Lotus'), 'Studio Lotus', 'normal names untouched');
     assert.equal(normalizeCity('Bangalore Urban'), 'Bengaluru');
     assert.equal(normalizeCity('Gurgaon, Haryana'), 'Gurugram');
     assert.equal(normalizeCity('Anywhere'), 'Remote');

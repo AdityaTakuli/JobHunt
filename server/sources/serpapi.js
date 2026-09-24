@@ -2,7 +2,7 @@
 // company career-page listings. One search = one request from the monthly quota.
 // Docs: https://serpapi.com/google-jobs-api
 
-import { cleanText, applyRank, APPLY_RANK, isHttpUrl, normalizeCity } from '../lib/normalize.js';
+import { cleanText, applyRank, APPLY_RANK, isHttpUrl, normalizeCity, repairCompany } from '../lib/normalize.js';
 import { parseSalary } from '../lib/salary.js';
 
 const SEARCH_URL = 'https://serpapi.com/search.json';
@@ -81,7 +81,7 @@ export function normalizeSerpJob(job, now = new Date()) {
   return {
     source: SOURCE,
     title,
-    company: cleanText(job.company_name, 200),
+    company: repairCompany(cleanText(job.company_name, 200), `${title}\n${description}`),
     locationText,
     city: normalizeCity(locationText),
     description,

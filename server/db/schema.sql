@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   is_bim TINYINT(1) NOT NULL DEFAULT 0,
   software JSON NULL,
   match_score TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  exp_min TINYINT UNSIGNED NULL,             -- years of experience asked for (NULL = not stated)
+  exp_max TINYINT UNSIGNED NULL,             -- upper end of a range ("0-1 years"), NULL = open-ended
+  exp_parsed TINYINT(1) NOT NULL DEFAULT 0,  -- 1 once exp_* were worked out (see migrate.js backfill)
   classifier VARCHAR(8) NULL,                -- groq / gemini / rules / manual
   classify_reason VARCHAR(300) NULL,
   classify_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -89,6 +92,18 @@ CREATE TABLE IF NOT EXISTS settings (
   k VARCHAR(64) NOT NULL PRIMARY KEY,
   v TEXT NOT NULL,                           -- JSON-encoded value
   updated_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Searches typed on the Jobs page. Repeating one within a few hours reuses these results instead
+-- of spending another SerpApi search.
+CREATE TABLE IF NOT EXISTS searches (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  query VARCHAR(120) NOT NULL,
+  location VARCHAR(80) NOT NULL DEFAULT '',
+  searched_at DATETIME NOT NULL,
+  job_ids JSON NULL,
+  found INT UNSIGNED NOT NULL DEFAULT 0,
+  KEY idx_searches_lookup (query, location, searched_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- AI tokens and requests spent per provider per IST day, for the guardrails in lib/aiBudget.js.
