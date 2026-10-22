@@ -11,7 +11,7 @@ import { createClassifier } from '../lib/classify.js';
 import { ingestJobs, prepareJobs } from '../lib/ingest.js';
 import { cleanText, normalizeCity } from '../lib/normalize.js';
 import { understandSearch } from '../lib/searchQuery.js';
-import { getSettings, saveSettings } from '../lib/settings.js';
+import { classifierContext, getSettings, saveSettings } from '../lib/settings.js';
 import { startOfIstDay } from '../lib/time.js';
 import { getAccount, searchGoogleJobs, SOURCE } from '../sources/serpapi.js';
 import { localSearchesThisMonth, locationFor, searchText } from './fetchJobs.js';
@@ -20,12 +20,29 @@ export const CACHE_HOURS = 6;
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
-export async function typedSearchesToday(now = new Date()) {
-  const [row] = await query('SELECT COUNT(*) AS n FROM searches WHERE searched_at >= ?', [startOfIstDay(now)]);
+// Searches that spent a SerpApi search today, per person (repeats answered from saved results
+// don't count).
+export async function typedSearchesToday(userId, now = new Date()) {
+  const [row] = await query('SELECT COUNT(*) AS n FROM searches WHERE user_id = ? AND cached = 0 AND searched_at >= ?', [userId, startOfIstDay(now)]);
   return Number(row.n);
 }
 
-export async function liveSearch({ q, location = '', exact = false, fetchImpl = fetch, now = new Date() }) {
+// Keeps a search in her history. A repeat within the cache window reuses the row she has.
+async function remember(userId, { text, place, ids, found, cached, now }) {
+  const [mine] = await query(
+    'SELECT id FROM searches WHERE user_id = ? AND query = ? AND location = ? AND searched_at >= ? ORDER BY searched_at DESC LIMIT 1',
+    [userId, text, place, new Date(now.getTime() - CACHE_HOURS * 3_600_000)],
+  );
+  if (mine && cached) {
+    await query('UPDATE searches SET hidden = 0 WHERE id = ?', [mine.id]);
+    return;
+  }
+  await query('INSERT INTO searches SET ?', [
+    { user_id: userId, query: text, location: place, searched_at: now, job_ids: JSON.stringify(ids), found, cached: cached ? 1 : 0 },
+  ]);
+}
+
+export async function liveSearch({ q, location = '', exact = false, userId = 1, fetchImpl = fetch, now = new Date() }) {
   const { serpapi } = config;
   if (cleanText(q).length < 2) throw fail(400, 'Type a role or keyword to search for.');
   let text;
@@ -41,14 +58,19 @@ export async function liveSearch({ q, location = '', exact = false, fetchImpl = 
   }
   const about = { searched: text, place, adjusted };
 
+  // Saved results are shared: the same search by anyone in the last few hours costs nothing.
   const [cached] = await query(
-    'SELECT job_ids, found, searched_at FROM searches WHERE query = ? AND location = ? AND searched_at >= ? ORDER BY searched_at DESC LIMIT 1',
+    'SELECT job_ids, found, searched_at FROM searches WHERE query = ? AND location = ? AND cached = 0 AND searched_at >= ? ORDER BY searched_at DESC LIMIT 1',
     [text, place, new Date(now.getTime() - CACHE_HOURS * 3_600_000)],
   );
-  if (cached) return { ids: parseJson(cached.job_ids, []), found: cached.found, new: 0, cached: true, searchedAt: cached.searched_at, ...about };
+  if (cached) {
+    const ids = parseJson(cached.job_ids, []);
+    await remember(userId, { text, place, ids, found: cached.found, cached: true, now });
+    return { ids, found: cached.found, new: 0, cached: true, searchedAt: cached.searched_at, ...about };
+  }
 
   if (!serpapi.apiKey) throw fail(503, 'Google search is not set up (SERPAPI_KEY is missing on the server).');
-  if ((await typedSearchesToday(now)) >= serpapi.manualDailyLimit) {
+  if ((await typedSearchesToday(userId, now)) >= serpapi.manualDailyLimit) {
     throw fail(429, `That's today's ${serpapi.manualDailyLimit} searches. New ones reset at midnight; the jobs already found are still here.`);
   }
 
@@ -64,6 +86,7 @@ export async function liveSearch({ q, location = '', exact = false, fetchImpl = 
   }
 
   const settings = await getSettings();
+  const context = await classifierContext();
   const locations = { ...settings.serp_locations };
   const loc = await locationFor(place, locations, fetchImpl);
   // A place Google does not know (or "Remote") goes into the query text instead.
@@ -80,7 +103,7 @@ export async function liveSearch({ q, location = '', exact = false, fetchImpl = 
 
   // Keyword rules label results straight away so they show in seconds; the AI re-label that runs
   // right after (retry-classify) upgrades them within the token budget.
-  const classifier = createClassifier({ groq: null, gemini: null, extraExclude: settings.extra_exclude_keywords, cities: settings.cities });
+  const classifier = createClassifier({ freellm: null, groq: null, gemini: null, ...context });
   const result = await ingestJobs(found, { classifier, linkChecker: null, now });
   const keys = prepareJobs(found).map((j) => j.key);
   const rows = keys.length ? await query('SELECT id, dedupe_key FROM jobs WHERE dedupe_key IN (?)', [keys]) : [];
@@ -88,6 +111,6 @@ export async function liveSearch({ q, location = '', exact = false, fetchImpl = 
   const ids = keys.map((k) => idByKey.get(k)).filter(Boolean);
 
   await query('INSERT INTO fetch_log SET ?', [{ source: SOURCE, run_at: now, jobs_found: found.length, jobs_new: result.new, requests_used: 1 }]);
-  await query('INSERT INTO searches SET ?', [{ query: text, location: place, searched_at: now, job_ids: JSON.stringify(ids), found: found.length }]);
+  await remember(userId, { text, place, ids, found: found.length, cached: false, now });
   return { ids, found: found.length, new: result.new, cached: false, searchesLeft: searchesLeft - 1, ...about };
 }

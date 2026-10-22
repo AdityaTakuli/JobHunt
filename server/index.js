@@ -4,13 +4,16 @@ import { createApp } from './app.js';
 import { config, ROOT_DIR } from './config.js';
 import { closePool } from './db/pool.js';
 import { migrate } from './db/migrate.js';
+import { anyAiConfigured } from './lib/classify.js';
 import { startScheduler } from './scheduler.js';
 
 function warnAboutConfig() {
   const missing = [];
-  if (!config.auth.password) missing.push(config.isProduction ? 'APP_PASSWORD (API is locked until set)' : 'APP_PASSWORD (auth off in dev)');
+  const google = Boolean(config.google.clientId && config.google.clientSecret);
+  if (!config.auth.password && !google) missing.push(config.isProduction ? 'APP_PASSWORD or GOOGLE_CLIENT_ID (API is locked until set)' : 'APP_PASSWORD (auth off in dev)');
+  if (!google) missing.push('GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET (no Google sign-in or Gmail alerts)');
   if (!config.serpapi.apiKey) missing.push('SERPAPI_KEY (no Google Jobs fetch)');
-  if (!config.groq.apiKey && !config.gemini.apiKey) missing.push('GROQ_API_KEY/GEMINI_API_KEY (rule classifier only)');
+  if (!anyAiConfigured()) missing.push('FREELLM_API_KEY/GROQ_API_KEY/GEMINI_API_KEY (rule classifier only)');
   if (!config.imap.user) missing.push('IMAP_USER/IMAP_PASSWORD (no LinkedIn alerts)');
   if (!config.smtp.user) missing.push('SMTP_USER/SMTP_PASSWORD (no digest email)');
   if (missing.length) console.warn(`Not configured: ${missing.join('; ')}`);

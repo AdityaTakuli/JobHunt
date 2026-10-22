@@ -1,4 +1,4 @@
-// Shared by the Groq and Gemini classifiers: the prompt, the strict output check, token
+// Shared by the FreeLLMAPI, Groq and Gemini classifiers: the prompt, the strict output check, token
 // estimates and the error that sends a job on to the next provider or the rule fallback.
 
 const ROLE_TYPES = new Set(['internship', 'fresher', 'experienced']);
@@ -61,7 +61,7 @@ export const estimateTokens = (text) => Math.ceil(String(text || '').length / 3.
 
 // Worst case for one call: the whole prompt plus the full output cap.
 export function requestEstimate(job, options) {
-  return estimateTokens(SYSTEM_PROMPT) + estimateTokens(userPrompt(job, options)) + MAX_OUTPUT_TOKENS;
+  return estimateTokens(SYSTEM_PROMPT) + estimateTokens(userPrompt(job, options)) + (options?.maxOutputTokens ?? MAX_OUTPUT_TOKENS);
 }
 
 // Strict validation of the model output. Returns the labels or null when the shape is wrong.

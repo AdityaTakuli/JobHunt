@@ -7,7 +7,7 @@ import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import { createClassifier } from '../lib/classify.js';
 import { ingestJobs } from '../lib/ingest.js';
-import { getSettings } from '../lib/settings.js';
+import { classifierContext } from '../lib/settings.js';
 import { countJobLinks, parseLinkedInAlert, SOURCE } from '../sources/linkedinEmail.js';
 
 const MAX_MESSAGES_PER_RUN = 50;
@@ -55,8 +55,7 @@ export async function readInbox({ linkChecker, fetchImpl = fetch } = {}) {
         for await (const msg of client.fetch(uids, { source: true }, { uid: true })) sources.push(msg.source);
 
         const { jobs, failures } = await parseMessages(sources);
-        const settings = await getSettings();
-        const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, cities: settings.cities, fetchImpl });
+        const classifier = createClassifier({ ...(await classifierContext()), fetchImpl });
         const result = await ingestJobs(jobs, { classifier, ...(linkChecker !== undefined && { linkChecker }) });
         await client.messageFlagsAdd(uids, ['\\Seen'], { uid: true });
 

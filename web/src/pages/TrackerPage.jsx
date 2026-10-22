@@ -52,6 +52,11 @@ function AppCard({ app, onMove, onEdit }) {
         </button>
       </h3>
       <div className="small muted">{[app.company, app.city].filter(Boolean).join(' · ')}</div>
+      {app.closed_at && (
+        <span className="badge badge-amber app-closed" title={app.closed_reason === 'deadline' ? 'Its last date to apply has passed.' : 'The company took it down.'}>
+          Posting closed
+        </span>
+      )}
       {(formatSalary(app) || app.applied_at) && (
         <div className="small muted">
           {[formatSalary(app), app.applied_at && `Applied ${formatDate(app.applied_at)}`].filter(Boolean).join(' · ')}
@@ -137,7 +142,12 @@ function Table({ apps, onMove, onEdit }) {
             <tr key={app.id}>
               <td>
                 <div className="title-cell">{app.title}</div>
-                <div className="small muted">{[app.company, app.city].filter(Boolean).join(' · ')}</div>
+                <div className="small muted">{[app.company, app.city, app.closed_at ? 'Posting closed' : null].filter(Boolean).join(' · ')}</div>
+      {app.closed_at && (
+        <span className="badge badge-amber app-closed" title={app.closed_reason === 'deadline' ? 'Its last date to apply has passed.' : 'The company took it down.'}>
+          Posting closed
+        </span>
+      )}
               </td>
               <td>
                 <StatusSelect app={app} onMove={onMove} />

@@ -7,10 +7,13 @@ import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDateTime, SOURCE_LABELS } from '../format.js';
 
-const TABS = [
+// Connections, Activity and People are the owner's (and other admins').
+const ALL_TABS = [
+  { id: 'account', label: 'Account' },
   { id: 'preferences', label: 'Preferences' },
-  { id: 'connections', label: 'Connections' },
-  { id: 'activity', label: 'Activity' },
+  { id: 'connections', label: 'Connections', admin: true },
+  { id: 'activity', label: 'Activity', admin: true },
+  { id: 'people', label: 'People', admin: true },
   { id: 'review', label: 'Review' },
 ];
 const TAB_KEY = 'aj-settings-tab';
@@ -18,15 +21,20 @@ const TAB_KEY = 'aj-settings-tab';
 const TASKS = [
   { name: 'fetch-jobs', label: 'Fetch jobs', hint: "Search Google Jobs now. Uses up to 3 of this month's searches." },
   { name: 'read-inbox', label: 'Check LinkedIn inbox', hint: 'Read new job-alert emails in the jobs mailbox.' },
-  { name: 'retry-classify', label: 'Re-label with AI', hint: 'Send keyword-labelled jobs to Groq or Gemini. Uses AI tokens.' },
+  { name: 'read-gmail', label: "Check everyone's Gmail", hint: 'Read new LinkedIn alerts for everyone who connected Gmail.' },
+  { name: 'archive', label: 'Clean up postings', hint: 'Close postings past their deadline or taken down, and delete old ones.' },
+  { name: 'retry-classify', label: 'Re-label with AI', hint: 'Send keyword-labelled jobs to the AI (FreeLLMAPI, Groq or Gemini). Uses AI tokens.' },
   { name: 'send-digest', label: 'Send digest', hint: "Email today's digest right away." },
 ];
 
-const LOG_LABELS = { ...SOURCE_LABELS, groq: 'AI re-label', digest: 'Digest email' };
+const LOG_LABELS = { ...SOURCE_LABELS, groq: 'AI re-label', digest: 'Digest email', gmail: 'Gmail alerts', cleanup: 'Clean-up' };
 const EASE = [0.22, 1, 0.36, 1];
 
 function summarize(result) {
   if (result.skipped) return `Skipped: ${result.skipped}`;
+  if (result.task === 'archive') {
+    return `Closed ${result.closedByDeadline + result.closedRemoved} postings, checked ${result.linksChecked} links, deleted ${result.deleted} old ones.`;
+  }
   if (result.task === 'send-digest') return result.sent ? `Digest sent (${result.jobs} roles).` : 'Digest not sent.';
   if (result.task === 'retry-classify') {
     const stopped = result.stoppedBecause ? ` Stopped: ${result.stoppedBecause}.` : '';
@@ -106,7 +114,7 @@ function StatusBadge({ ok, okLabel = 'Connected', offLabel = 'Not set' }) {
 
 function PreferencesPanel() {
   const { toast } = useToast();
-  const { refreshMeta } = useMeta();
+  const { refreshMeta, me } = useMeta();
   const [baseline, setBaseline] = useState(null);
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
@@ -158,16 +166,24 @@ function PreferencesPanel() {
     <form className="set-stack" onSubmit={save}>
       <Section id="set-profile" title="Profile" description="How the app greets you, and where the daily digest is sent.">
         <Row label="Your name" hint="Shown in the welcome message after you sign in." htmlFor="set-name">
-          <input id="set-name" className="input" value={form.display_name} onChange={setInput('display_name')} maxLength={40} placeholder="Kothu" aria-describedby="set-name-hint" />
+          <input
+            id="set-name"
+            className="input"
+            value={form.display_name}
+            onChange={setInput('display_name')}
+            maxLength={40}
+            placeholder={me?.name?.split(' ')[0] || 'Your name'}
+            aria-describedby="set-name-hint"
+          />
         </Row>
-        <Row label="Digest email" hint="Where the daily list of new roles goes." htmlFor="set-email">
+        <Row label="Digest email" hint={me?.email ? `Where the daily list of new roles goes. Empty = ${me.email}.` : 'Where the daily list of new roles goes.'} htmlFor="set-email">
           <input
             id="set-email"
             className="input"
             type="email"
             value={form.notification_email}
             onChange={setInput('notification_email')}
-            placeholder="you@gmail.com"
+            placeholder={me?.email || 'you@gmail.com'}
             aria-describedby="set-email-hint"
           />
         </Row>
@@ -189,17 +205,19 @@ function PreferencesPanel() {
             describedBy="set-queries-hint"
           />
         </Row>
-        <Row label="Exclude roles mentioning" hint="On top of the built-in list (software, cloud, data, AWS, Java…)." htmlFor="set-exclude">
-          <ChipInput
-            id="set-exclude"
-            value={form.extra_exclude_keywords}
-            onChange={set('extra_exclude_keywords')}
-            placeholder="sales, marketing…"
-            addLabel="Add a word"
-            maxLength={60}
-            describedBy="set-exclude-hint"
-          />
-        </Row>
+        {form.extra_exclude_keywords !== undefined && (
+          <Row label="Exclude roles mentioning" hint="For everyone, on top of the built-in list (software, cloud, data, AWS, Java…)." htmlFor="set-exclude">
+            <ChipInput
+              id="set-exclude"
+              value={form.extra_exclude_keywords}
+              onChange={set('extra_exclude_keywords')}
+              placeholder="sales, marketing…"
+              addLabel="Add a word"
+              maxLength={60}
+              describedBy="set-exclude-hint"
+            />
+          </Row>
+        )}
       </Section>
 
       <Section id="set-digest" title="Daily digest" description="One email a day with new roles and follow-ups that are due.">
@@ -306,9 +324,11 @@ function ConnectionsPanel({ system, onRan }) {
   const scheduler = configured.scheduler ? 'Runs inside the app' : configured.cron ? 'Hostinger cron jobs' : 'Nothing runs on its own yet';
   const connections = [
     { name: 'Google Jobs', detail: 'Job search via SerpApi', ok: configured.serpapi },
-    { name: 'Groq', detail: `Main AI · ${ai.groq.model}`, ok: configured.groq },
-    { name: 'Gemini', detail: `Backup AI · ${ai.gemini.model}`, ok: configured.gemini },
+    { name: 'FreeLLMAPI', detail: `Main AI · ${ai.freellm.model}`, ok: configured.freellm },
+    { name: 'Groq', detail: `Backup AI · ${ai.groq.model}`, ok: configured.groq },
+    { name: 'Gemini', detail: `Second backup AI · ${ai.gemini.model}`, ok: configured.gemini },
     { name: 'LinkedIn alerts', detail: 'Jobs mailbox (IMAP)', ok: configured.imap },
+    { name: 'Google sign-in', detail: 'Accounts and Gmail alerts (OAuth)', ok: configured.google },
     { name: 'Digest email', detail: 'Sending (SMTP)', ok: configured.smtp },
     { name: 'Schedule', detail: scheduler, ok: configured.scheduler || configured.cron, okLabel: 'Active' },
   ];
@@ -318,6 +338,9 @@ function ConnectionsPanel({ system, onRan }) {
       <Section id="set-usage" title="Usage" description="Free-tier budgets. Searches and AI pause on their own before a limit is reached.">
         <div className="usage-grid">
           <Usage label="Searches" period="this month" used={serpapi.searchesUsedThisMonth} limit={serpapi.monthlyLimit} note={`Pauses with ${serpapi.reserve} left`} />
+          {ai.freellm.configured && (
+            <Usage label="FreeLLMAPI tokens" period="today" used={ai.freellm.today.tokens} limit={ai.freellm.dailyTokens} note={`${ai.freellm.today.requests} of ${ai.freellm.dailyRequests} requests`} />
+          )}
           {ai.groq.configured && <Usage label="Groq tokens" period="today" used={ai.groq.today.tokens} limit={ai.groq.dailyTokens} note={`${ai.groq.today.requests} of ${ai.groq.dailyRequests} requests`} />}
           {ai.gemini.configured && (
             <Usage label="Gemini tokens" period="today" used={ai.gemini.today.tokens} limit={ai.gemini.dailyTokens} note={`${ai.gemini.today.requests} of ${ai.gemini.dailyRequests} requests`} />
@@ -471,28 +494,314 @@ function ReviewPanel() {
   );
 }
 
+/* ---------- Account ---------- */
+
+const GMAIL_ERRORS = {
+  cancelled: 'Gmail was not connected: the Google screen was closed or cancelled.',
+  no_gmail: 'Gmail was not connected: tick the box that lets ArchJobs read your email, then try again.',
+  other_account: 'Pick the same Google account you signed in with.',
+  expired: 'That took too long. Please try again.',
+  failed: "Gmail couldn't be connected. Please try again.",
+};
+
+function Avatar({ person, size = 44 }) {
+  const [broken, setBroken] = useState(false);
+  const label = person.name || person.email || '?';
+  return (
+    <span className="person-avatar" style={{ width: size, height: size, fontSize: size * 0.4 }} aria-hidden="true">
+      {person.picture && !broken ? <img src={person.picture} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} /> : label.trim()[0]?.toUpperCase()}
+    </span>
+  );
+}
+
+function AccountPanel({ onLogout }) {
+  const { toast } = useToast();
+  const { me, refreshMe, refreshMeta } = useMeta();
+  const [account, setAccount] = useState(null);
+  const [google, setGoogle] = useState(true);
+  const [busy, setBusy] = useState('');
+
+  const load = useCallback(() => {
+    api('/account')
+      .then((d) => setAccount(d.account))
+      .catch(() => {});
+    api('/me')
+      .then((d) => setGoogle(d.google))
+      .catch(() => {});
+  }, []);
+  useEffect(load, [load]);
+
+  async function act(kind) {
+    setBusy(kind);
+    try {
+      const d = await api(`/account/gmail/${kind}`, { method: 'POST' });
+      setAccount(d.account);
+      refreshMe();
+      if (kind === 'sync') {
+        const r = d.result || {};
+        toast({
+          message: r.skipped ? `Skipped: ${r.skipped}` : r.errors?.length ? r.errors[0] : `${r.messages || 0} alert emails read, ${r.new || 0} new roles.`,
+          error: Boolean(r.errors?.length),
+          duration: 7000,
+        });
+        refreshMeta();
+      } else {
+        toast({ message: 'Gmail disconnected. ArchJobs can no longer read it.' });
+      }
+    } catch (err) {
+      toast({ message: err.message, error: true });
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const person = account || me;
+  if (!person) return <RowsSkeleton rows={3} label="Loading your account" />;
+  const gmail = account?.gmail;
+
+  return (
+    <div className="set-stack">
+      <Section
+        id="set-account"
+        title="Your account"
+        description="Your tracker, firms, hidden jobs, searches and settings are yours alone. The job list is shared by everyone."
+        action={
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onLogout}>
+            Sign out
+          </button>
+        }
+      >
+        <div className="person-card">
+          <Avatar person={person} size={52} />
+          <div className="grow">
+            <div className="person-name">{person.name || 'Owner'}</div>
+            <div className="person-detail">
+              {[person.email, person.isOwner ? 'Owner' : person.isAdmin ? 'Admin' : null].filter(Boolean).join(' · ') || 'Signed in with the owner password'}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        id="set-gmail"
+        title="LinkedIn alerts from Gmail"
+        description="Bring the LinkedIn job alerts in your Gmail into ArchJobs, checked every 30 minutes."
+        action={gmail && <StatusBadge ok={gmail.connected} okLabel="Connected" offLabel="Not connected" />}
+      >
+        {!google ? (
+          <p className="set-empty">Google sign-in isn't set up on the server yet, so Gmail can't be connected.</p>
+        ) : gmail?.connected ? (
+          <>
+            <p className="set-note">
+              Connected{gmail.syncedAt ? ` · last checked ${formatDateTime(gmail.syncedAt)}` : ' · first check running'}. Read-only: ArchJobs only opens
+              LinkedIn job-alert emails and never sends, deletes or changes anything.
+            </p>
+            {gmail.error && (
+              <p className="form-error" role="alert">
+                {gmail.error}
+              </p>
+            )}
+            <div className="set-actions">
+              <button type="button" className="btn btn-sm" disabled={Boolean(busy)} onClick={() => act('sync')}>
+                {busy === 'sync' ? 'Checking…' : 'Check now'}
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={() => act('disconnect')}>
+                {busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {gmail?.error && (
+              <p className="form-error" role="alert">
+                {gmail.error}
+              </p>
+            )}
+            <ol className="set-steps">
+              <li>On LinkedIn, create job alerts (for example “Architect” or “BIM intern” in your city) and set them to arrive by email.</li>
+              <li>Connect Gmail below with {person.email ? <strong>{person.email}</strong> : 'the Google account you use'}. New alerts show up in Jobs within 30 minutes.</li>
+            </ol>
+            <p className="set-note">
+              Read-only: ArchJobs only opens LinkedIn job-alert emails and never sends, deletes or changes anything. Google may say it “hasn't verified this
+              app”: choose <em>Advanced</em>, then <em>Go to ArchJobs</em>. You can disconnect any time.
+            </p>
+            <div className="set-actions">
+              <a className="btn btn-primary btn-sm" href="/api/auth/google/start?mode=gmail">
+                Connect Gmail
+              </a>
+            </div>
+          </>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+/* ---------- People (admins) ---------- */
+
+function PeoplePanel() {
+  const { toast } = useToast();
+  const { me } = useMeta();
+  const [data, setData] = useState(null);
+  const [allowed, setAllowed] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const show = useCallback((d) => {
+    setData(d);
+    setAllowed(d.allowed);
+  }, []);
+  useEffect(() => {
+    api('/people')
+      .then(show)
+      .catch((err) => toast({ message: err.message, error: true }));
+  }, [show, toast]);
+
+  async function saveAllowed() {
+    setBusy(true);
+    try {
+      show(await api('/people/allowed', { method: 'PUT', body: { emails: allowed } }));
+      toast({ message: 'Saved. They can now sign in with Google.' });
+    } catch (err) {
+      toast({ message: err.message, error: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(person) {
+    try {
+      show(await api(`/people/${person.id}`, { method: 'DELETE' }));
+      toast({ message: `${person.name || person.email} was removed.` });
+    } catch (err) {
+      toast({ message: err.message, error: true });
+    }
+  }
+
+  if (!data) return <RowsSkeleton rows={4} label="Loading people" />;
+  const dirty = JSON.stringify(allowed) !== JSON.stringify(data.allowed);
+
+  return (
+    <div className="set-stack">
+      <Section id="set-people" title="People" description="Everyone with an account. Removing someone deletes their tracker, firms and searches; jobs stay.">
+        <ul className="conn-list">
+          {data.users.map((u) => (
+            <li key={u.id}>
+              <Avatar person={u} size={36} />
+              <div className="grow">
+                <div className="conn-name truncate">
+                  {u.name || u.email || 'Owner'}
+                  {u.isOwner ? ' · Owner' : u.isAdmin ? ' · Admin' : ''}
+                </div>
+                <div className="conn-detail truncate">
+                  {[u.email, u.gmail ? 'Gmail connected' : null, `${u.tracked} tracked`, u.lastLoginAt ? `last in ${formatDateTime(u.lastLoginAt)}` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </div>
+              </div>
+              {!u.isOwner && u.id !== me?.id && (
+                <ConfirmRemove person={u} onConfirm={() => remove(u)} />
+              )}
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section
+        id="set-allowed"
+        title="Who can join"
+        description={
+          data.openToAnyone
+            ? 'Anyone with a Google account can sign in (ALLOWED_EMAILS is * on the server).'
+            : 'Google accounts that may sign in. They get their own account the first time they do.'
+        }
+      >
+        <Row label="Emails" hint={data.fromServer.length ? `Also allowed by the server settings: ${data.fromServer.join(', ')}.` : 'Their Gmail addresses.'} htmlFor="set-allowed-emails">
+          <ChipInput id="set-allowed-emails" value={allowed} onChange={setAllowed} placeholder="friend@gmail.com" addLabel="Add an email" max={200} maxLength={254} describedBy="set-allowed-emails-hint" />
+        </Row>
+        <div className="set-actions">
+          <button type="button" className="btn btn-primary btn-sm" disabled={!dirty || busy} onClick={saveAllowed}>
+            {busy ? 'Saving…' : 'Save list'}
+          </button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+// Two taps to remove someone: no browser dialog.
+function ConfirmRemove({ person, onConfirm }) {
+  const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    if (!asking) return undefined;
+    const t = setTimeout(() => setAsking(false), 4000);
+    return () => clearTimeout(t);
+  }, [asking]);
+  return asking ? (
+    <button type="button" className="btn btn-sm btn-danger" onClick={onConfirm}>
+      Remove {person.name?.split(' ')[0] || 'them'}?
+    </button>
+  ) : (
+    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAsking(true)}>
+      Remove
+    </button>
+  );
+}
+
 /* ---------- Page ---------- */
 
-function loadTab() {
+// #/settings?tab=account opens a tab directly (the account button in the header does).
+function loadTab(tabs) {
+  const asked = new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab');
+  if (tabs.some((x) => x.id === asked)) return asked;
   try {
     const t = localStorage.getItem(TAB_KEY);
-    return TABS.some((x) => x.id === t) ? t : 'preferences';
+    return tabs.some((x) => x.id === t) ? t : 'account';
   } catch {
-    return 'preferences';
+    return 'account';
   }
 }
 
 export default function SettingsPage() {
   const { toast } = useToast();
-  const [tab, setTab] = useState(loadTab);
+  const { me } = useMeta();
+  const isAdmin = Boolean(me?.isAdmin);
+  const TABS = useMemo(() => ALL_TABS.filter((t) => !t.admin || isAdmin), [isAdmin]);
+  const [tab, setTab] = useState(() => loadTab(TABS));
   const [system, setSystem] = useState(null);
   const tabRefs = useRef({});
 
+  useEffect(() => {
+    if (!TABS.some((t) => t.id === tab)) setTab('account');
+  }, [TABS, tab]);
+
+  // The header's account button while already on this page.
+  useEffect(() => {
+    const onHash = () => {
+      const asked = new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab');
+      if (asked && TABS.some((t) => t.id === asked)) setTab(asked);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [TABS]);
+
+  // Back from Google's Gmail consent screen (?gmail=connected or ?gmail_error=...).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ok = params.get('gmail');
+    const failed = params.get('gmail_error');
+    if (!ok && !failed) return;
+    window.history.replaceState(null, '', `/${window.location.hash}`);
+    setTab('account');
+    if (ok) toast({ message: 'Gmail connected. Your LinkedIn job alerts are being read now.', duration: 7000 });
+    else toast({ message: GMAIL_ERRORS[failed] || GMAIL_ERRORS.failed, error: true, duration: 9000 });
+  }, [toast]);
+
   const loadSystem = useCallback(() => {
+    if (!isAdmin) return;
     api('/system')
       .then(setSystem)
       .catch((err) => toast({ message: err.message, error: true }));
-  }, [toast]);
+  }, [toast, isAdmin]);
   useEffect(loadSystem, [loadSystem]);
 
   useEffect(() => {
@@ -520,6 +829,8 @@ export default function SettingsPage() {
   }
 
   const panels = {
+    account: <AccountPanel onLogout={logout} />,
+    people: isAdmin ? <PeoplePanel /> : null,
     preferences: <PreferencesPanel />,
     connections: <ConnectionsPanel system={system} onRan={loadSystem} />,
     activity: <ActivityPanel system={system} onRefresh={loadSystem} />,
@@ -531,11 +842,8 @@ export default function SettingsPage() {
       <header className="settings-head">
         <div>
           <h1>Settings</h1>
-          <p>Your search, alerts and connections.</p>
+          <p>Your account, search and alerts.</p>
         </div>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>
-          Log out
-        </button>
       </header>
 
       <div className="tabs" role="tablist" aria-label="Settings sections" onKeyDown={onTabKey}>

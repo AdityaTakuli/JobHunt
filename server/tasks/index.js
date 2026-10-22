@@ -1,5 +1,6 @@
-import { archiveOldJobs } from './archive.js';
+import { tidyJobs } from './archive.js';
 import { fetchJobs } from './fetchJobs.js';
+import { readGmail } from './readGmail.js';
 import { readInbox } from './readInbox.js';
 import { retryClassify } from './retryClassify.js';
 import { sendDigest } from './sendDigest.js';
@@ -7,10 +8,12 @@ import { sendDigest } from './sendDigest.js';
 export const TASKS = {
   'fetch-jobs': () => fetchJobs(),
   'read-inbox': () => readInbox(),
+  'read-gmail': () => readGmail(),
   'retry-classify': () => retryClassify(),
   // Scheduled calls only send when due; manual runs pass force.
-  'send-digest': ({ force } = {}) => sendDigest({ force }),
-  archive: async () => ({ archived: await archiveOldJobs() }),
+  'send-digest': ({ force, userId } = {}) => sendDigest({ force, userId }),
+  // Closes postings past their deadline or taken down, archives old ones, deletes the long gone.
+  archive: () => tidyJobs(),
 };
 
 const running = new Set();

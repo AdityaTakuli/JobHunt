@@ -8,6 +8,7 @@ import JobFilters from '../components/JobFilters.jsx';
 import SearchBar from '../components/SearchBar.jsx';
 import { JobListSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
+import { IconMapPin, IconSearch, IconX } from '../icons.jsx';
 import { quoteOfTheDay } from '../quotes.js';
 import { useJobActions } from '../useJobActions.js';
 
@@ -123,6 +124,52 @@ function FirmSuggestions() {
   );
 }
 
+// "today", "yesterday", "3 days ago".
+function ago(value) {
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+}
+
+// Her earlier searches that still have open roles: one tap shows them again, for free.
+function SearchHistory({ items, onOpen, onRemove }) {
+  if (!items.length) return null;
+  return (
+    <section className="search-history" aria-label="Your searches">
+      <h2 className="search-history-title">Your searches</h2>
+      <ul>
+        <AnimatePresence initial={false}>
+          {items.map((h) => (
+            <motion.li
+              key={`${h.query}|${h.location}`}
+              layout
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
+            >
+              <button type="button" className="sh-open" onClick={() => onOpen(h)}>
+                <IconSearch size={15} />
+                <span className="sh-query">{h.query}</span>
+                {h.location && (
+                  <span className="sh-place">
+                    <IconMapPin size={13} />
+                    {h.location}
+                  </span>
+                )}
+                <span className="sh-meta">
+                  {h.open} open · {ago(h.searchedAt)}
+                </span>
+              </button>
+              <button type="button" className="sh-remove" onClick={() => onRemove(h)} aria-label={`Remove “${h.query}” from your searches`} title="Remove">
+                <IconX size={14} />
+              </button>
+            </motion.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+    </section>
+  );
+}
+
 // End of the feed: a quiet "all caught up" and the quote of the day.
 function FeedEnd() {
   const quote = quoteOfTheDay();
@@ -155,6 +202,8 @@ export default function JobsPage() {
   const [searchSort, setSearchSort] = useState('relevance');
   // The search bar's place, kept in step with the location filter below it.
   const [where, setWhere] = useState('');
+  // Her earlier searches with roles still open.
+  const [history, setHistory] = useState([]);
   // Bumped on every fresh (offset 0) load: the list remounts and its cards stagger in again.
   const [batch, setBatch] = useState(0);
   const requestRef = useRef(0);
@@ -242,6 +291,39 @@ export default function JobsPage() {
     setWhere(filters.city === 'all' ? '' : filters.city === 'mine' ? mine[0] || '' : filters.city);
   }, [filters.city, myCitiesKey]);
 
+  const loadHistory = useCallback(() => {
+    api('/search/history')
+      .then((d) => setHistory(d.searches))
+      .catch(() => {});
+  }, []);
+  useEffect(loadHistory, [loadHistory]);
+
+  // Search bar -> location filter: the feed follows the place just searched ("My cities" stays
+  // when it is her main city, which is what that filter puts in the search bar).
+  function followPlace(place) {
+    if (!place) return;
+    const main = (meta?.myCities || [])[0] || '';
+    setWhere(place);
+    setFilters((f) => ({ ...f, city: place.toLowerCase() === main.toLowerCase() ? 'mine' : place }));
+  }
+
+  function openHistory(h) {
+    setSelectedId(null);
+    setSearch({ q: h.query, searched: h.query, adjusted: false, ids: h.ids, found: h.ids.length, new: 0, cached: true, fromHistory: true, searchedAt: h.searchedAt, location: h.location });
+    followPlace(h.location);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function removeHistory(h) {
+    setHistory((list) => list.filter((x) => x !== h));
+    try {
+      await api('/search/history', { method: 'DELETE', body: { query: h.query, location: h.location } });
+    } catch (err) {
+      toast({ message: err.message, error: true });
+      loadHistory();
+    }
+  }
+
   async function runSearch({ q, location, exact = false }) {
     setSearching(true);
     try {
@@ -249,13 +331,8 @@ export default function JobsPage() {
       const place = result.place || location;
       setSelectedId(null);
       setSearch({ q, ...result, location: place });
-      // Search bar -> location filter: the feed follows the place just searched ("My cities"
-      // stays when it is her main city, which is what that filter puts in the search bar).
-      const main = (meta?.myCities || [])[0] || '';
-      if (place) {
-        setWhere(place);
-        setFilters((f) => ({ ...f, city: place.toLowerCase() === main.toLowerCase() ? 'mine' : place }));
-      }
+      followPlace(place);
+      loadHistory();
       refreshMeta();
     } catch (err) {
       toast({ message: err.message, error: true, duration: 8000 });
@@ -411,6 +488,8 @@ export default function JobsPage() {
 
       <JobFilters filters={filters} setFilters={setFilters} cityOptions={cityOptions} cityCounts={meta?.cities || []} searchMode={Boolean(search)} />
 
+      {!search && !searching && <SearchHistory items={history} onOpen={openHistory} onRemove={removeHistory} />}
+
       <AnimatePresence initial={false}>
         {search && (
           <motion.div
@@ -424,15 +503,28 @@ export default function JobsPage() {
               <div className="search-banner-text">
                 <p>
                   <strong>
-                    {search.found} result{search.found === 1 ? '' : 's'}
+                    {search.found} {search.fromHistory ? 'open role' : 'result'}
+                    {search.found === 1 ? '' : 's'}
                   </strong>{' '}
                   for “{search.adjusted ? search.searched : search.q}”{search.location && <> in {search.location}</>}
                   <span className="muted">
                     {' '}
-                    · {search.cached ? 'saved from an earlier search today' : `from Google Jobs just now${search.new ? `, ${search.new} new` : ''}`}
+                    ·{' '}
+                    {search.fromHistory
+                      ? `from your search ${ago(search.searchedAt)}`
+                      : search.cached
+                        ? 'saved from an earlier search today'
+                        : `from Google Jobs just now${search.new ? `, ${search.new} new` : ''}`}
                     {hiddenByFilters > 0 && jobs.length > 0 && ` · ${hiddenByFilters} hidden by your filters`}
                   </span>
                 </p>
+                {search.fromHistory && (
+                  <p className="search-adjusted">
+                    <button type="button" className="text-btn" disabled={searching} onClick={() => runSearch({ q: search.searched, location: search.location, exact: true })}>
+                      Search again for new roles
+                    </button>
+                  </p>
+                )}
                 {search.adjusted && (
                   <p className="search-adjusted">
                     You typed “{search.q}”.{' '}
@@ -442,7 +534,14 @@ export default function JobsPage() {
                   </p>
                 )}
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch(null)}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setSearch(null);
+                  loadHistory();
+                }}
+              >
                 Back to your feed
               </button>
             </div>

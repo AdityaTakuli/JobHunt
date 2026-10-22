@@ -1,5 +1,6 @@
-// Daily digest email (08:00 IST by default): new matching roles since the last digest,
-// follow-ups due, and cold-email suggestions when there is nothing new.
+// Daily digest email (08:00 IST by default), one per person: new matching roles in their cities
+// since their last digest, their follow-ups due, and cold-email suggestions from their firms list
+// when there is nothing new. Sent to their notification email, else the email they sign in with.
 // The scheduler calls this every few minutes; it only sends once the digest time has passed
 // and not yet today, so it works the same with node-cron or Hostinger cron.
 
@@ -7,7 +8,7 @@ import { formatSalary, ROLE_LABELS } from '../../shared/format.js';
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import { escapeHtml, mailConfigured, sendMail } from '../lib/mailer.js';
-import { getSettings, saveSettings } from '../lib/settings.js';
+import { allUserSettings, saveUserSettings } from '../lib/settings.js';
 import { DAY_MS, formatIst, istDateString, istTime } from '../lib/time.js';
 
 export function digestDue(settings, now = new Date()) {
@@ -16,7 +17,7 @@ export function digestDue(settings, now = new Date()) {
   return istTime(now) >= settings.digest_time;
 }
 
-async function digestData(settings, now) {
+async function digestData(userId, settings, now) {
   const since = settings.last_digest_at ? new Date(settings.last_digest_at) : new Date(now.getTime() - DAY_MS);
   const cities = settings.cities || [];
   const cityFilter = cities.length ? `AND (j.city IN (?) OR j.city IN ('', 'Remote'))` : '';
@@ -24,7 +25,8 @@ async function digestData(settings, now) {
     `SELECT j.id, j.title, j.company, j.city, j.apply_url, j.role_type, j.is_bim, j.match_score,
             j.salary_text, j.salary_min, j.salary_max, j.salary_period
        FROM jobs j
-      WHERE j.created_at > ? AND j.is_relevant = 1 AND j.is_hidden = 0 AND j.is_archived = 0
+      WHERE j.created_at > ? AND j.is_relevant = 1 AND j.is_archived = 0 AND j.closed_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ${Number(userId)})
         AND (j.role_type IS NULL OR j.role_type <> 'experienced')
         ${cityFilter}
       ORDER BY j.match_score DESC, j.created_at DESC
@@ -34,14 +36,15 @@ async function digestData(settings, now) {
   const followUps = await query(
     `SELECT a.id, a.follow_up_at, a.status, COALESCE(j.title, a.title) AS title, COALESCE(j.company, a.company) AS company
        FROM applications a LEFT JOIN jobs j ON j.id = a.job_id
-      WHERE a.status IN ('applied', 'interview') AND a.follow_up_at IS NOT NULL AND a.follow_up_at <= ?
+      WHERE a.user_id = ? AND a.status IN ('applied', 'interview') AND a.follow_up_at IS NOT NULL AND a.follow_up_at <= ?
       ORDER BY a.follow_up_at`,
-    [now],
+    [userId, now],
   );
   const firms = jobs.length
     ? []
     : await query(
-        `SELECT name, city, website, contact_email FROM firms WHERE status = 'not contacted' ORDER BY created_at LIMIT 5`,
+        `SELECT name, city, website, contact_email FROM firms WHERE user_id = ? AND status = 'not contacted' ORDER BY created_at LIMIT 5`,
+        [userId],
       );
   return { jobs, followUps, firms };
 }
@@ -108,24 +111,39 @@ export function renderDigest({ jobs, followUps, firms }, now = new Date()) {
   return { subject, html, text };
 }
 
-export async function sendDigest({ force = false, now = new Date() } = {}) {
-  const settings = await getSettings();
-  if (!force && !digestDue(settings, now)) return { source: 'digest', skipped: 'not due' };
-  if (!settings.notification_email) return { source: 'digest', skipped: 'No notification email in Settings' };
-  if (!mailConfigured()) return { source: 'digest', skipped: 'SMTP is not configured' };
-
-  const data = await digestData(settings, now);
+async function sendOne(user, settings, now) {
+  const to = settings.notification_email || user.email;
+  if (!to) return { user: user.id, skipped: 'No email to send to' };
+  const data = await digestData(user.id, settings, now);
   const email = renderDigest(data, now);
   let error = null;
   try {
-    await sendMail({ to: settings.notification_email, ...email });
+    await sendMail({ to, ...email });
   } catch (err) {
     error = err.message;
   }
-  if (!error) await saveSettings({ last_digest_at: now.toISOString(), last_digest_on: istDateString(now) });
+  if (!error) await saveUserSettings(user.id, { last_digest_at: now.toISOString(), last_digest_on: istDateString(now) });
   await query('INSERT INTO fetch_log SET ?', [
-    { source: 'digest', run_at: now, jobs_found: data.jobs.length, jobs_new: 0, requests_used: error ? 0 : 1, error },
+    { source: 'digest', run_at: now, jobs_found: data.jobs.length, jobs_new: 0, requests_used: error ? 0 : 1, error: error && `To user ${user.id}: ${error}` },
   ]);
-  if (error) throw new Error(`Digest email failed: ${error}`);
-  return { source: 'digest', sent: true, subject: email.subject, jobs: data.jobs.length, followUps: data.followUps.length };
+  return error ? { user: user.id, error } : { user: user.id, sent: true, subject: email.subject, jobs: data.jobs.length, followUps: data.followUps.length };
+}
+
+/**
+ * @param force send now even if not due (the "Send now" button)
+ * @param userId only this person's digest
+ */
+export async function sendDigest({ force = false, now = new Date(), userId } = {}) {
+  if (!mailConfigured()) return { source: 'digest', skipped: 'SMTP is not configured' };
+  const everyone = (await allUserSettings()).filter((e) => !userId || e.user.id === userId);
+  const due = everyone.filter((e) => force || digestDue(e.settings, now));
+  if (!due.length) return { source: 'digest', skipped: 'not due' };
+
+  const results = [];
+  for (const { user, settings } of due) results.push(await sendOne(user, settings, now));
+  const failed = results.filter((r) => r.error);
+  if (failed.length && failed.length === results.length) throw new Error(`Digest email failed: ${failed[0].error}`);
+  const sent = results.filter((r) => r.sent);
+  if (userId && results.length === 1) return { source: 'digest', ...results[0] };
+  return { source: 'digest', sent: sent.length, skipped: results.length - sent.length - failed.length, failed: failed.length };
 }

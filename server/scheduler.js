@@ -6,10 +6,11 @@ import { runTask } from './tasks/index.js';
 
 const SCHEDULE = [
   ['*/10 * * * *', 'read-inbox'],
+  ['*/30 * * * *', 'read-gmail'],
   ['0 7,18 * * *', 'fetch-jobs'],
   ['20 * * * *', 'retry-classify'],
   ['*/5 * * * *', 'send-digest'], // sends once per day, after the digest time in Settings
-  ['30 3 * * *', 'archive'],
+  ['30 3,15 * * *', 'archive'],
 ];
 
 export function startScheduler(log = console) {
@@ -20,7 +21,7 @@ export function startScheduler(log = console) {
         try {
           const result = await runTask(name);
           // Skips (not due, not configured) and empty inbox checks are routine; stay quiet.
-          const routine = result.skipped || (name === 'read-inbox' && !result.messages && !result.error);
+          const routine = result.skipped || (['read-inbox', 'read-gmail'].includes(name) && !result.messages && !result.error && !result.errors);
           if (!routine) log.info(`[cron] ${name}`, JSON.stringify(result));
         } catch (err) {
           log.error(`[cron] ${name} failed:`, err.message);

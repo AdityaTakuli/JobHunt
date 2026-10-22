@@ -5,6 +5,7 @@ import { formatRange, formatSalary } from '../shared/format.js';
 import { applyKind, dedupeKey, normalizeCity, normalizeCompany, normalizeTitle, rankApplyOptions, repairCompany } from '../server/lib/normalize.js';
 import { parseSalary } from '../server/lib/salary.js';
 import { understandSearch } from '../server/lib/searchQuery.js';
+import { parseDeadline } from '../server/lib/deadline.js';
 import { countJobLinks, parseLinkedInAlert } from '../server/sources/linkedinEmail.js';
 import { isJobBoard, normalizeSerpJob, parsePostedAt, pickApplyLink } from '../server/sources/serpapi.js';
 
@@ -103,6 +104,26 @@ describe('understandSearch', () => {
   it('leaves firm names, other professions and ordinary words alone', () => {
     for (const typed of ['Morphogenesis', 'Studio Lotus', 'site engineer', 'internal']) {
       assert.equal(understandSearch(typed).query, typed);
+    }
+  });
+});
+
+describe('parseDeadline', () => {
+  const posted = new Date('2026-10-10T05:00:00Z');
+  const cases = [
+    ['Last date to apply: 20 Oct 2026', '2026-10-20'],
+    ['Apply before 31/10/2026.', '2026-10-31'],
+    ['Deadline - October 30', '2026-10-30'],
+    ['Applications close on 5th November, 2026', '2026-11-05'],
+    ['Last date for submission is 15.11.26', '2026-11-15'],
+    ['Apply by 1 Jan', '2027-01-01'],
+  ];
+  for (const [text, day] of cases) {
+    it(text, () => assert.equal(parseDeadline(text, posted).toISOString(), `${day}T18:29:59.000Z`, 'end of that day in IST'));
+  }
+  it('ignores postings without a real date', () => {
+    for (const text of ['Stipend 15k. Send portfolio.', 'Last date to apply - ASAP', 'Deadline: 31 Nov 2026', 'Last date: 01/02/2020']) {
+      assert.equal(parseDeadline(text, posted), null, text);
     }
   });
 });

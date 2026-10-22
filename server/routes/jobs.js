@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
 import { getEstimates } from '../lib/estimate.js';
 import { normalizeCity } from '../lib/normalize.js';
-import { getSettings } from '../lib/settings.js';
+import { getUserSettings } from '../lib/settings.js';
 import { DAY_MS, startOfIstDay } from '../lib/time.js';
 import { localSearchesThisMonth } from '../tasks/fetchJobs.js';
 import { typedSearchesToday } from '../tasks/liveSearch.js';
@@ -12,8 +12,20 @@ export const jobsRouter = Router();
 
 const LIST_COLUMNS = `j.id, j.title, j.company, j.city, j.location_text, j.apply_url, j.apply_kind, j.apply_options, j.link_status, j.sources,
   j.posted_at, j.created_at, j.salary_text, j.salary_min, j.salary_max, j.salary_period, j.salary_is_estimate,
-  j.role_type, j.is_bim, j.software, j.match_score, j.exp_min, j.exp_max, j.classifier, j.classify_reason, j.is_relevant, j.is_hidden,
-  a.id AS application_id, a.status AS application_status`;
+  j.role_type, j.is_bim, j.software, j.match_score, j.exp_min, j.exp_max, j.classifier, j.classify_reason, j.is_relevant,
+  j.deadline_at, j.closed_at, j.closed_reason, a.id AS application_id, a.status AS application_status`;
+
+// Ids come from the session (integers), so they can sit in the SQL; this keeps the join and the
+// WHERE parameters in one simple order.
+const userId = (id) => {
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) throw new Error('Bad user id');
+  return n;
+};
+// Her own tracker entry for each job (each person has their own tracker).
+export const trackerJoin = (uid) => `LEFT JOIN applications a ON a.job_id = j.id AND a.user_id = ${userId(uid)}`;
+// Jobs she hid stay hidden for her only.
+const notHiddenBy = (uid) => `NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ${userId(uid)})`;
 
 export function serializeJob(row, estimates = {}) {
   const job = {
@@ -21,6 +33,7 @@ export function serializeJob(row, estimates = {}) {
     is_bim: Boolean(row.is_bim),
     is_relevant: Boolean(row.is_relevant),
     is_hidden: Boolean(row.is_hidden),
+    is_closed: Boolean(row.closed_at),
     salary_is_estimate: Boolean(row.salary_is_estimate),
     sources: parseJson(row.sources, []),
     apply_options: parseJson(row.apply_options, []),
@@ -44,12 +57,13 @@ const idList = (v) =>
     .filter((n) => Number.isInteger(n) && n > 0)
     .slice(0, 200);
 
-// Builds the feed WHERE clause from query-string filters. city=mine means her chosen cities
-// (Settings), plus remote jobs and jobs with no city. ids=1,2,3 limits the list to the results of
-// a live search: those are shown even if archived or judged not relevant, since she asked for them.
-export function feedFilters(q, now = new Date(), myCities = []) {
+// Builds the feed WHERE clause from query-string filters for one person. city=mine means their
+// chosen cities (Settings), plus remote jobs and jobs with no city. ids=1,2,3 limits the list to
+// the results of a live search: those are shown even if archived or judged not relevant, since
+// she asked for them. Closed postings and jobs she hid never show.
+export function feedFilters(q, now = new Date(), myCities = [], uid = 1) {
   const ids = idList(q.ids);
-  const where = ids.length ? ['j.is_hidden = 0', 'j.id IN (?)'] : ['j.is_archived = 0', 'j.is_hidden = 0', 'j.is_relevant = 1'];
+  const where = ['j.closed_at IS NULL', notHiddenBy(uid), ...(ids.length ? ['j.id IN (?)'] : ['j.is_archived = 0', 'j.is_relevant = 1'])];
   const params = ids.length ? [ids] : [];
 
   if (ids.length) {
@@ -131,19 +145,19 @@ const SORTS = { match: 'j.match_score DESC,', direct: 'j.apply_url_rank DESC,' }
 const orderBy = (sort, ids) => (sort === 'relevance' && ids.length ? `j.is_relevant DESC, FIELD(j.id, ${ids.join(',')}),` : SORTS[sort] || '');
 
 jobsRouter.get('/', async (req, res) => {
-  const myCities = req.query.city === 'mine' ? (await getSettings()).cities : [];
-  const { where, params, ids } = feedFilters(req.query, new Date(), myCities);
+  const myCities = req.query.city === 'mine' ? (await getUserSettings(req.user.id)).cities : [];
+  const { where, params, ids } = feedFilters(req.query, new Date(), myCities, req.user.id);
   const limit = intParam(req.query.limit, 50, { min: 1, max: 200 });
   const offset = intParam(req.query.offset, 0, { min: 0 });
   const [rows, [{ total }], estimates] = await Promise.all([
     query(
-      `SELECT ${LIST_COLUMNS} FROM jobs j LEFT JOIN applications a ON a.job_id = j.id
+      `SELECT ${LIST_COLUMNS} FROM jobs j ${trackerJoin(req.user.id)}
         WHERE ${where}
         ORDER BY ${orderBy(req.query.sort, ids)} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
         LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     ),
-    query(`SELECT COUNT(*) AS total FROM jobs j LEFT JOIN applications a ON a.job_id = j.id WHERE ${where}`, params),
+    query(`SELECT COUNT(*) AS total FROM jobs j ${trackerJoin(req.user.id)} WHERE ${where}`, params),
     getEstimates(),
   ]);
   res.json({ jobs: rows.map((r) => serializeJob(r, estimates)), total: Number(total), limit, offset });
@@ -152,26 +166,23 @@ jobsRouter.get('/', async (req, res) => {
 // Filter options and the top-of-page counter.
 jobsRouter.get('/meta', async (req, res) => {
   const now = new Date();
+  const uid = req.user.id;
+  const open = `j.is_archived = 0 AND j.closed_at IS NULL AND j.is_relevant = 1 AND ${notHiddenBy(uid)}`;
   const [cities, [counts], [followUps], settings, searchesUsed, typedToday] = await Promise.all([
+    query(`SELECT j.city, COUNT(*) AS n FROM jobs j WHERE ${open} AND j.city <> '' GROUP BY j.city ORDER BY n DESC LIMIT 30`),
     query(
-      `SELECT city, COUNT(*) AS n FROM jobs
-        WHERE is_archived = 0 AND is_hidden = 0 AND is_relevant = 1 AND city <> ''
-        GROUP BY city ORDER BY n DESC LIMIT 30`,
-    ),
-    query(
-      `SELECT SUM(created_at >= ?) AS new_today, COUNT(*) AS active FROM jobs
-        WHERE is_archived = 0 AND is_hidden = 0 AND is_relevant = 1
-          AND (role_type IS NULL OR role_type <> 'experienced')`,
+      `SELECT SUM(j.created_at >= ?) AS new_today, COUNT(*) AS active FROM jobs j
+        WHERE ${open} AND (j.role_type IS NULL OR j.role_type <> 'experienced')`,
       [startOfIstDay(now)],
     ),
     query(
       `SELECT COUNT(*) AS due FROM applications
-        WHERE status IN ('applied', 'interview') AND follow_up_at IS NOT NULL AND follow_up_at <= ?`,
-      [now],
+        WHERE user_id = ? AND status IN ('applied', 'interview') AND follow_up_at IS NOT NULL AND follow_up_at <= ?`,
+      [uid, now],
     ),
-    getSettings(),
+    getUserSettings(uid),
     localSearchesThisMonth(now),
-    typedSearchesToday(now),
+    typedSearchesToday(uid, now),
   ]);
   res.json({
     search: {
@@ -181,7 +192,7 @@ jobsRouter.get('/meta', async (req, res) => {
     },
     cities: cities.map((c) => ({ city: c.city, count: Number(c.n) })),
     myCities: settings.cities,
-    displayName: settings.display_name,
+    displayName: settings.display_name || String(req.user.name || '').split(' ')[0] || '',
     newToday: Number(counts.new_today || 0),
     activeJobs: Number(counts.active || 0),
     followUpsDue: Number(followUps.due || 0),
@@ -193,60 +204,63 @@ jobsRouter.get('/review', async (req, res) => {
   const since = new Date(Date.now() - 30 * DAY_MS);
   const [hidden, filtered] = await Promise.all([
     query(
-      `SELECT id, title, company, city, apply_url, hide_reason, hidden_at FROM jobs
-        WHERE is_hidden = 1 ORDER BY hidden_at DESC LIMIT 50`,
+      `SELECT j.id, j.title, j.company, j.city, j.apply_url, h.reason AS hide_reason, h.hidden_at FROM job_hides h
+         JOIN jobs j ON j.id = h.job_id
+        WHERE h.user_id = ? ORDER BY h.hidden_at DESC LIMIT 50`,
+      [req.user.id],
     ),
     query(
-      `SELECT id, title, company, city, apply_url, classifier, classify_reason, created_at FROM jobs
-        WHERE is_relevant = 0 AND is_hidden = 0 AND created_at >= ? ORDER BY created_at DESC LIMIT 50`,
+      `SELECT j.id, j.title, j.company, j.city, j.apply_url, j.classifier, j.classify_reason, j.created_at FROM jobs j
+        WHERE j.is_relevant = 0 AND j.closed_at IS NULL AND ${notHiddenBy(req.user.id)} AND j.created_at >= ?
+        ORDER BY j.created_at DESC LIMIT 50`,
       [since],
     ),
   ]);
   res.json({ hidden, filtered });
 });
 
-async function findJob(id) {
+async function findJob(id, uid) {
   const [row] = await query(
-    `SELECT ${LIST_COLUMNS}, j.description, j.hide_reason FROM jobs j
-       LEFT JOIN applications a ON a.job_id = j.id WHERE j.id = ?`,
+    `SELECT ${LIST_COLUMNS}, j.description, h.reason AS hide_reason, h.job_id IS NOT NULL AS is_hidden FROM jobs j
+       ${trackerJoin(uid)}
+       LEFT JOIN job_hides h ON h.job_id = j.id AND h.user_id = ${userId(uid)}
+      WHERE j.id = ?`,
     [id],
   );
   return row;
 }
 
 jobsRouter.get('/:id', async (req, res) => {
-  const row = await findJob(req.params.id);
+  const row = await findJob(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'Job not found.' });
   res.json({ job: serializeJob(row, await getEstimates()) });
 });
 
-// F10: hide + log the reason, so false positives can be turned into exclude keywords.
+// F10: hide + log the reason, so false positives can be turned into exclude keywords. Hidden for
+// her only.
 jobsRouter.post('/:id/hide', async (req, res) => {
   const reason = String(req.body?.reason || 'Not relevant').trim().slice(0, 200);
-  const result = await query('UPDATE jobs SET is_hidden = 1, hidden_at = ?, hide_reason = ?, updated_at = ? WHERE id = ?', [
-    new Date(),
-    reason,
-    new Date(),
-    req.params.id,
-  ]);
-  if (!result.affectedRows) return res.status(404).json({ error: 'Job not found.' });
+  const [job] = await query('SELECT id FROM jobs WHERE id = ?', [req.params.id]);
+  if (!job) return res.status(404).json({ error: 'Job not found.' });
+  await query(
+    'INSERT INTO job_hides (user_id, job_id, reason, hidden_at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE reason = VALUES(reason), hidden_at = VALUES(hidden_at)',
+    [req.user.id, job.id, reason, new Date()],
+  );
   res.json({ ok: true });
 });
 
 jobsRouter.post('/:id/unhide', async (req, res) => {
-  await query('UPDATE jobs SET is_hidden = 0, hidden_at = NULL, hide_reason = NULL, updated_at = ? WHERE id = ?', [
-    new Date(),
-    req.params.id,
-  ]);
+  await query('DELETE FROM job_hides WHERE user_id = ? AND job_id = ?', [req.user.id, req.params.id]);
   res.json({ ok: true });
 });
 
-// A job the classifier wrongly filtered out: show it and stop re-classifying it.
+// A job the classifier wrongly filtered out: show it (to everyone) and stop re-classifying it.
 jobsRouter.post('/:id/restore', async (req, res) => {
   await query(
-    `UPDATE jobs SET is_relevant = 1, is_hidden = 0, classifier = 'manual',
+    `UPDATE jobs SET is_relevant = 1, classifier = 'manual',
             match_score = GREATEST(match_score, 50), updated_at = ? WHERE id = ?`,
     [new Date(), req.params.id],
   );
+  await query('DELETE FROM job_hides WHERE user_id = ? AND job_id = ?', [req.user.id, req.params.id]);
   res.json({ ok: true });
 });

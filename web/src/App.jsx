@@ -21,7 +21,7 @@ const ROUTES = [
   { path: 'settings', label: 'Settings', Icon: IconSettings, Page: SettingsPage },
 ];
 
-const MetaContext = createContext({ meta: null, refreshMeta: () => {} });
+const MetaContext = createContext({ meta: null, refreshMeta: () => {}, me: null, refreshMe: () => {} });
 export const useMeta = () => useContext(MetaContext);
 
 function currentRoute() {
@@ -110,8 +110,26 @@ export default function App() {
   );
 }
 
+// Their photo from Google, else their initial. Opens their account in Settings.
+function AccountButton({ me }) {
+  const [broken, setBroken] = useState(false);
+  if (!me) return null;
+  const label = me.name || me.email || 'Your account';
+  return (
+    <a className="account-btn" href="#/settings?tab=account" title={`${label} · Account`} aria-label={`${label}: account`}>
+      {me.picture && !broken ? (
+        <img src={me.picture} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+      ) : (
+        <span aria-hidden="true">{label.trim()[0]?.toUpperCase()}</span>
+      )}
+    </a>
+  );
+}
+
 function Shell() {
   const [auth, setAuth] = useState('checking'); // checking | in | out
+  const [login, setLogin] = useState({ google: false, passwordLogin: true });
+  const [me, setMe] = useState(null);
   const [meta, setMeta] = useState(null);
   const [welcome, setWelcome] = useState(false);
   const route = useRoute();
@@ -120,11 +138,19 @@ function Shell() {
   useEffect(() => {
     setUnauthorizedHandler(() => setAuth('out'));
     api('/me')
-      .then((me) => {
-        setAuth(me.authenticated ? 'in' : 'out');
-        if (me.authenticated && !welcomedToday()) setWelcome(true);
+      .then((res) => {
+        setLogin({ google: res.google, passwordLogin: res.passwordLogin });
+        setMe(res.user);
+        setAuth(res.authenticated ? 'in' : 'out');
+        if (res.authenticated && !welcomedToday()) setWelcome(true);
       })
       .catch(() => setAuth('out'));
+  }, []);
+
+  const refreshMe = useCallback(() => {
+    api('/me')
+      .then((res) => setMe(res.user))
+      .catch(() => {});
   }, []);
 
   const closeWelcome = useCallback(() => {
@@ -163,9 +189,12 @@ function Shell() {
     return (
       <Suspense fallback={boot}>
         <LoginPage
+          google={login.google}
+          passwordLogin={login.passwordLogin}
           onLogin={() => {
             setAuth('in');
             setWelcome(true);
+            refreshMe();
           }}
         />
       </Suspense>
@@ -176,7 +205,7 @@ function Shell() {
   const { Page } = route;
 
   return (
-    <MetaContext.Provider value={{ meta, refreshMeta }}>
+    <MetaContext.Provider value={{ meta, refreshMeta, me, refreshMe }}>
       <a
         className="skip-link"
         href="#main"
@@ -205,6 +234,7 @@ function Shell() {
             ))}
           </nav>
           <Counter meta={meta} />
+          <AccountButton me={me} />
           <button type="button" className="icon-btn" onClick={cycleTheme} aria-label={`Theme: ${theme}. Change theme`} title={`Theme: ${theme}`}>
             <ThemeIcon />
           </button>

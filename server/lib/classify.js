@@ -1,22 +1,28 @@
-// AI first (Groq, then Gemini), rule-based fallback. One classifier instance is one session: it
+// AI first (FreeLLMAPI, then Groq, then Gemini), rule-based fallback. One classifier instance is one session: it
 // labels one batch, carries that run's token budget (lib/aiBudget.js), and stops calling a
 // provider for the rest of the batch once it is down, rate-limited (429) or out of budget.
 
 import { config } from '../config.js';
 import { createBudget, dbUsageStore } from './aiBudget.js';
+import { classifyWithFreeLlm } from './freellm.js';
 import { classifyWithGemini } from './gemini.js';
 import { classifyWithGroq } from './groq.js';
 import { LlmError, requestEstimate } from './llm.js';
 import { classifyWithRules, parseExperience, SOFTWARE } from './rules.js';
 import { parseSalary } from './salary.js';
 
-const CALLERS = { groq: classifyWithGroq, gemini: classifyWithGemini };
+const CALLERS = { freellm: classifyWithFreeLlm, groq: classifyWithGroq, gemini: classifyWithGemini };
+
+// FreeLLMAPI also needs its URL; Groq and Gemini only a key.
+export const providerConfigured = (cfg) => Boolean(cfg?.apiKey && (!('url' in cfg) || cfg.url));
+export const anyAiConfigured = () => [config.freellm, config.groq, config.gemini].some(providerConfigured);
 
 /**
- * @param options.groq / options.gemini provider config (see config.js); null leaves it out
+ * @param options.freellm / options.groq / options.gemini provider config (see config.js); null leaves it out
  * @param options.usageStore where daily usage is kept (MySQL by default)
  */
 export function createClassifier({
+  freellm = config.freellm,
   groq = config.groq,
   gemini = config.gemini,
   ai = config.ai,
@@ -27,7 +33,7 @@ export function createClassifier({
   usageStore = dbUsageStore,
   sleep,
 } = {}) {
-  const providers = Object.entries({ groq, gemini })
+  const providers = Object.entries({ freellm, groq, gemini })
     .filter(([, cfg]) => cfg)
     .map(([name, cfg]) => ({
       name,
@@ -35,8 +41,8 @@ export function createClassifier({
       budget: createBudget(name, cfg.limits, { store: usageStore, maxWaitMs: ai?.maxWaitMs, ...(sleep && { sleep }) }),
       lastCall: 0,
     }));
-  const downReasons = Object.fromEntries(providers.map((p) => [p.name, p.cfg.apiKey ? null : 'not_configured']));
-  const stats = { groq: 0, gemini: 0, rules: 0, requests: 0, tokens: 0, failures: {} };
+  const downReasons = Object.fromEntries(providers.map((p) => [p.name, providerConfigured(p.cfg) ? null : 'not_configured']));
+  const stats = { freellm: 0, groq: 0, gemini: 0, rules: 0, requests: 0, tokens: 0, failures: {} };
   // What happened to the last job: 'ai', 'rules', 'invalid_json' (an AI answered but not in the
   // expected shape) or 'skipped' (no AI call was possible).
   let lastOutcome = null;

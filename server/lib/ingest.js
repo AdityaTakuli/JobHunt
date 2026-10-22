@@ -5,6 +5,8 @@
 
 import { parseJson, query } from '../db/pool.js';
 import { labelsToColumns } from './classify.js';
+import { parseDeadline } from './deadline.js';
+import { classifyWithRules } from './rules.js';
 import { checkLink, mapLimit } from './linkCheck.js';
 import { cleanText, dedupeKey, isHttpUrl, normalizeCity, rankApplyOptions } from './normalize.js';
 
@@ -75,6 +77,8 @@ function salaryColumns(salary) {
 }
 
 async function mergeIntoExisting(row, job, now) {
+  // A closed posting stays closed, whoever still lists it.
+  if (row.closed_at) return false;
   const oldSources = parseJson(row.sources, []);
   const sources = mergeSources(oldSources, job.sources);
   const updates = {};
@@ -92,6 +96,10 @@ async function mergeIntoExisting(row, job, now) {
   if (!row.salary_text && job.salary?.text) Object.assign(updates, salaryColumns(job.salary));
   if (job.postedAt && (!row.posted_at || job.postedAt < row.posted_at)) updates.posted_at = job.postedAt;
   if (!row.location_text && job.locationText) updates.location_text = job.locationText;
+  if (!row.deadline_at && updates.description) {
+    const deadline = parseDeadline(updates.description, row.posted_at || now);
+    if (deadline) updates.deadline_at = deadline;
+  }
   if (!Object.keys(updates).length) return false;
   updates.updated_at = now;
   await query('UPDATE jobs SET ? WHERE id = ?', [updates, row.id]);
@@ -109,16 +117,23 @@ export async function ingestJobs(rawJobs, { classifier, linkChecker = checkLink,
   if (!prepared.length) return result;
 
   const rows = await query(
-    `SELECT id, dedupe_key, sources, apply_url, apply_url_rank, apply_options, description, salary_text, posted_at, location_text
+    `SELECT id, dedupe_key, sources, apply_url, apply_url_rank, apply_options, description, salary_text, posted_at, location_text,
+            deadline_at, closed_at
        FROM jobs WHERE dedupe_key IN (?)`,
     [prepared.map((j) => j.key)],
   );
   const existing = new Map(rows.map((r) => [r.dedupe_key, r]));
+  // Postings that closed and were deleted: a source still listing them doesn't bring them back.
+  const deleted = new Set(
+    (await query('SELECT dedupe_key FROM closed_jobs WHERE dedupe_key IN (?)', [prepared.map((j) => j.key)])).map((r) => r.dedupe_key),
+  );
 
   const fresh = [];
   for (const job of prepared) {
     const row = existing.get(job.key);
-    if (row) {
+    if (deleted.has(job.key) && !row) {
+      result.skippedClosed = (result.skippedClosed || 0) + 1;
+    } else if (row) {
       if (await mergeIntoExisting(row, job, now)) result.updated += 1;
     } else {
       fresh.push(job);
@@ -130,6 +145,9 @@ export async function ingestJobs(rawJobs, { classifier, linkChecker = checkLink,
     : fresh.map(() => 'unknown');
 
   for (const [i, job] of fresh.entries()) {
+    // Deadline already passed, or the link says the posting is gone: stored closed, never shown.
+    const deadline = parseDeadline(job.description, job.postedAt || now);
+    const closed = linkStatuses[i] === 'broken' ? 'removed' : deadline && deadline < now ? 'deadline' : null;
     const base = {
       title: job.title,
       company: job.company,
@@ -138,7 +156,8 @@ export async function ingestJobs(rawJobs, { classifier, linkChecker = checkLink,
       description: job.description || null,
       salary_text: job.salary?.text || null,
     };
-    const { labels, classifier: by } = await classifier.classify(base);
+    // No AI tokens on a posting that is already closed.
+    const { labels, classifier: by } = closed ? { labels: classifyWithRules(base), classifier: 'rules' } : await classifier.classify(base);
     const row = {
       dedupe_key: job.key,
       ...base,
@@ -147,6 +166,10 @@ export async function ingestJobs(rawJobs, { classifier, linkChecker = checkLink,
       apply_kind: job.applyKind,
       apply_options: JSON.stringify(job.applyOptions),
       link_status: linkStatuses[i],
+      link_checked_at: linkChecker ? now : null,
+      deadline_at: deadline,
+      closed_at: closed ? now : null,
+      closed_reason: closed,
       sources: JSON.stringify(job.sources),
       posted_at: job.postedAt || null,
       ...salaryColumns(job.salary),

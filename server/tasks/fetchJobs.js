@@ -6,7 +6,7 @@ import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import { createClassifier } from '../lib/classify.js';
 import { ingestJobs } from '../lib/ingest.js';
-import { getSettings, saveSettings } from '../lib/settings.js';
+import { allUserSettings, classifierContext, getSettings, saveSettings } from '../lib/settings.js';
 import { daysLeftInIstMonth, startOfIstMonth } from '../lib/time.js';
 import { getAccount, resolveLocation, searchGoogleJobs, SOURCE } from '../sources/serpapi.js';
 import { archiveOldJobs } from './archive.js';
@@ -97,7 +97,10 @@ export async function fetchJobs({ fetchImpl = fetch, linkChecker, now = new Date
       runsPerDay: serpapi.runsPerDay,
       daysLeft: daysLeftInIstMonth(now),
     });
-    const pairs = searchPairs(settings.search_queries, settings.cities);
+    // Everyone's searches and cities, owner first, each once: they share one SerpApi quota.
+    const everyone = await allUserSettings();
+    const unique = (lists) => [...new Map(lists.flat().map((v) => [v.toLowerCase(), v])).values()];
+    const pairs = searchPairs(unique(everyone.map((e) => e.settings.search_queries)), unique(everyone.map((e) => e.settings.cities)));
     const { picked, nextIndex } = pickQueries(pairs, settings.query_rotation_index, count);
 
     if (!picked.length) {
@@ -120,7 +123,7 @@ export async function fetchJobs({ fetchImpl = fetch, linkChecker, now = new Date
       }
       await saveSettings({ query_rotation_index: nextIndex, serp_locations: locations });
 
-      const classifier = createClassifier({ extraExclude: settings.extra_exclude_keywords, cities: settings.cities, fetchImpl });
+      const classifier = createClassifier({ ...(await classifierContext()), fetchImpl });
       const result = await ingestJobs(jobs, { classifier, ...(linkChecker !== undefined && { linkChecker }), now });
       Object.assign(summary, { queries: picked.map(searchText), requestsUsed: used, ...result, classifiedBy: classifier.stats });
       if (errors.length) summary.errors = errors;

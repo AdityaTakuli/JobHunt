@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { config } from '../config.js';
+import { parseDeadline } from '../lib/deadline.js';
 import { rankApplyOptions } from '../lib/normalize.js';
 import { parseExperience } from '../lib/rules.js';
 import { closePool, parseJson, query } from './pool.js';
@@ -15,7 +17,78 @@ const ADDED_COLUMNS = [
   ['jobs', 'exp_parsed', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER exp_max'],
   ['jobs', 'apply_options', 'JSON NULL AFTER apply_url_rank'],
   ['jobs', 'apply_kind', 'VARCHAR(12) NULL AFTER apply_options'],
+  ['jobs', 'deadline_at', 'DATETIME NULL AFTER is_archived'],
+  ['jobs', 'closed_at', 'DATETIME NULL AFTER deadline_at'],
+  ['jobs', 'closed_reason', 'VARCHAR(12) NULL AFTER closed_at'],
+  ['jobs', 'link_checked_at', 'DATETIME NULL AFTER closed_reason'],
+  ['applications', 'user_id', 'INT UNSIGNED NOT NULL DEFAULT 1 AFTER id'],
+  ['firms', 'user_id', 'INT UNSIGNED NOT NULL DEFAULT 1 AFTER id'],
+  ['searches', 'user_id', 'INT UNSIGNED NOT NULL DEFAULT 1 AFTER id'],
+  ['searches', 'cached', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER found'],
+  ['searches', 'hidden', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER cached'],
 ];
+
+async function hasIndex(table, name) {
+  const [row] = await query(
+    'SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?',
+    [table, name],
+  );
+  return Number(row.n) > 0;
+}
+
+// Indexes for separate accounts. A tracker entry is unique per person and job (it was per job).
+// The job_id index goes in before the old unique key is dropped: the foreign key needs one.
+async function addMissingIndexes() {
+  if (!(await hasIndex('applications', 'idx_app_job'))) await query('ALTER TABLE applications ADD KEY idx_app_job (job_id)');
+  if (!(await hasIndex('applications', 'uq_app_user_job'))) await query('ALTER TABLE applications ADD UNIQUE KEY uq_app_user_job (user_id, job_id)');
+  if (await hasIndex('applications', 'uq_app_job')) await query('ALTER TABLE applications DROP INDEX uq_app_job');
+  if (!(await hasIndex('firms', 'idx_firms_user'))) await query('ALTER TABLE firms ADD KEY idx_firms_user (user_id)');
+  if (!(await hasIndex('searches', 'idx_searches_user'))) await query('ALTER TABLE searches ADD KEY idx_searches_user (user_id, searched_at)');
+}
+
+// Settings that became per person when accounts arrived. The owner keeps the values set before.
+const PER_PERSON_KEYS = ['search_queries', 'cities', 'digest_enabled', 'digest_time', 'notification_email', 'display_name', 'last_digest_at', 'last_digest_on'];
+
+// The owner account (user 1) holds everything saved before accounts existed.
+async function ensureOwner() {
+  const now = new Date();
+  const [owner] = await query('SELECT id, email FROM users WHERE id = 1');
+  if (!owner) {
+    const [name] = await query("SELECT v FROM settings WHERE k = 'display_name'");
+    await query('INSERT INTO users SET ?', [
+      { id: 1, email: null, name: (name && parseJson(name.v, null)) || 'Kothu', is_admin: 1, created_at: now },
+    ]);
+    // Her settings so far become the owner's own. The welcome kept greeting her as Kothu by default.
+    const rows = await query('SELECT k, v FROM settings WHERE k IN (?)', [PER_PERSON_KEYS]);
+    if (!rows.some((r) => r.k === 'display_name')) rows.push({ k: 'display_name', v: JSON.stringify('Kothu') });
+    if (rows.length) {
+      await query('INSERT IGNORE INTO user_settings (user_id, k, v, updated_at) VALUES ?', [rows.map((r) => [1, r.k, r.v, now])]);
+    }
+    // So were the jobs she hid.
+    await query(
+      `INSERT IGNORE INTO job_hides (user_id, job_id, reason, hidden_at)
+       SELECT 1, id, hide_reason, COALESCE(hidden_at, updated_at) FROM jobs WHERE is_hidden = 1`,
+    );
+  }
+  const email = config.auth.ownerEmail;
+  if (email && (!owner || owner.email !== email)) {
+    const [taken] = await query('SELECT id FROM users WHERE email = ? AND id <> 1', [email]);
+    if (taken) console.warn(`OWNER_EMAIL ${email} already belongs to another account; the owner account keeps its email.`);
+    else await query('UPDATE users SET email = ?, is_admin = 1 WHERE id = 1', [email]);
+  }
+}
+
+// "Apply by" dates for jobs stored before deadlines were read.
+async function backfillDeadlines() {
+  const [done] = await query("SELECT v FROM settings WHERE k = 'deadlines_backfilled'");
+  if (done) return;
+  const rows = await query('SELECT id, description, posted_at, created_at FROM jobs WHERE closed_at IS NULL AND description IS NOT NULL');
+  for (const r of rows) {
+    const deadline = parseDeadline(r.description, r.posted_at || r.created_at);
+    if (deadline) await query('UPDATE jobs SET deadline_at = ? WHERE id = ?', [deadline, r.id]);
+  }
+  await query("INSERT INTO settings (k, v, updated_at) VALUES ('deadlines_backfilled', 'true', ?)", [new Date()]);
+}
 
 async function addMissingColumns() {
   for (const [table, column, definition] of ADDED_COLUMNS) {
@@ -75,8 +148,11 @@ export async function migrate() {
     await query(statement);
   }
   await addMissingColumns();
+  await addMissingIndexes();
+  await ensureOwner();
   await backfillExperience();
   await backfillApplyOptions();
+  await backfillDeadlines();
   return statements.length;
 }
 

@@ -2,8 +2,8 @@ import { motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api.js';
-import { APP_STATUSES, formatDateTime, ROLE_LABELS, STATUS_LABELS } from '../format.js';
-import { IconBookmark, IconBookmarkFilled, IconExternal, IconX } from '../icons.jsx';
+import { APP_STATUSES, formatDate, formatDateTime, ROLE_LABELS, STATUS_LABELS } from '../format.js';
+import { IconAlert, IconBookmark, IconBookmarkFilled, IconExternal, IconX } from '../icons.jsx';
 import { APPLY_KIND_LABELS, CompanyAvatar, experience, JobBadges, postedLabel, Salary } from './JobBits.jsx';
 import { extractKeywords, highlightParts } from '../keywords.js';
 import { DetailSkeleton } from './Skeleton.jsx';
@@ -143,7 +143,7 @@ function Facts({ job }) {
     ['Experience', exp ? exp.label : 'Not stated'],
     ['Job type', job.role_type ? ROLE_LABELS[job.role_type] : 'Not stated'],
     ['Posted', postedLabel(job).replace(/^(Posted|Found) /, '')],
-    ['Match', `${job.match_score}%`],
+    job.deadline_at ? ['Apply by', formatDate(job.deadline_at)] : ['Match', `${job.match_score}%`],
   ];
   return (
     <dl className="facts">
@@ -181,6 +181,14 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
         </div>
       </header>
 
+      {job.is_closed && (
+        <p className="closed-note" role="status">
+          <IconAlert size={16} />
+          {job.closed_reason === 'deadline'
+            ? 'This posting has closed: its last date to apply has passed.'
+            : 'This posting has closed: the company took it down or stopped taking applications.'}
+        </p>
+      )}
       {actionsSlot}
       <Facts job={job} />
       {job.salary_estimate && !job.salary_text && (
@@ -197,7 +205,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
           <h3>Why it's here</h3>
           <p className="small" style={{ margin: 0 }}>
             {job.classify_reason}{' '}
-            <span className="muted">({job.classifier === 'groq' || job.classifier === 'gemini' ? 'AI' : job.classifier === 'manual' ? 'you' : 'keyword rules'})</span>
+            <span className="muted">({['freellm', 'groq', 'gemini'].includes(job.classifier) ? 'AI' : job.classifier === 'manual' ? 'you' : 'keyword rules'})</span>
           </p>
         </section>
       )}

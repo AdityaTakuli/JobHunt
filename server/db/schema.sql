@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   exp_min TINYINT UNSIGNED NULL,             -- years of experience asked for (NULL = not stated)
   exp_max TINYINT UNSIGNED NULL,             -- upper end of a range ("0-1 years"), NULL = open-ended
   exp_parsed TINYINT(1) NOT NULL DEFAULT 0,  -- 1 once exp_* were worked out (see migrate.js backfill)
-  classifier VARCHAR(8) NULL,                -- groq / gemini / rules / manual
+  classifier VARCHAR(8) NULL,                -- freellm / groq / gemini / rules / manual
   classify_reason VARCHAR(300) NULL,
   classify_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
   classified_at DATETIME NULL,
@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS jobs (
   hidden_at DATETIME NULL,
   hide_reason VARCHAR(200) NULL,
   is_archived TINYINT(1) NOT NULL DEFAULT 0,
+  deadline_at DATETIME NULL,                 -- "apply by" date found in the posting
+  closed_at DATETIME NULL,                   -- set when the posting closed: gone from every list
+  closed_reason VARCHAR(12) NULL,            -- deadline / removed
+  link_checked_at DATETIME NULL,             -- last time the apply link was checked
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   UNIQUE KEY uq_jobs_dedupe (dedupe_key),
@@ -46,6 +50,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE TABLE IF NOT EXISTS applications (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL DEFAULT 1,
   job_id INT UNSIGNED NULL,                  -- NULL for roles found outside the feed
   title VARCHAR(300) NULL,                   -- used when job_id is NULL
   company VARCHAR(200) NULL,
@@ -58,13 +63,15 @@ CREATE TABLE IF NOT EXISTS applications (
   notes TEXT NULL,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
-  UNIQUE KEY uq_app_job (job_id),
+  UNIQUE KEY uq_app_user_job (user_id, job_id),
+  KEY idx_app_job (job_id),
   KEY idx_app_status (status),
   CONSTRAINT fk_app_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS firms (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL DEFAULT 1,
   name VARCHAR(200) NOT NULL,
   city VARCHAR(120) NULL,
   type VARCHAR(40) NULL,                     -- design studio / BIM consultancy / developer / other
@@ -75,7 +82,8 @@ CREATE TABLE IF NOT EXISTS firms (
   notes TEXT NULL,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
-  KEY idx_firms_status (status)
+  KEY idx_firms_status (status),
+  KEY idx_firms_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS fetch_log (
@@ -100,20 +108,68 @@ CREATE TABLE IF NOT EXISTS settings (
 -- of spending another SerpApi search.
 CREATE TABLE IF NOT EXISTS searches (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL DEFAULT 1,
   query VARCHAR(120) NOT NULL,
   location VARCHAR(80) NOT NULL DEFAULT '',
   searched_at DATETIME NOT NULL,
   job_ids JSON NULL,
   found INT UNSIGNED NOT NULL DEFAULT 0,
-  KEY idx_searches_lookup (query, location, searched_at)
+  cached TINYINT(1) NOT NULL DEFAULT 0,      -- 1 = answered from saved results (no SerpApi search spent)
+  hidden TINYINT(1) NOT NULL DEFAULT 0,      -- 1 = removed from her search history
+  KEY idx_searches_lookup (query, location, searched_at),
+  KEY idx_searches_user (user_id, searched_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- AI tokens and requests spent per provider per IST day, for the guardrails in lib/aiBudget.js.
 CREATE TABLE IF NOT EXISTS ai_usage (
-  provider VARCHAR(12) NOT NULL,             -- groq / gemini
+  provider VARCHAR(12) NOT NULL,             -- freellm / groq / gemini
   day DATE NOT NULL,
   requests INT UNSIGNED NOT NULL DEFAULT 0,
   tokens INT UNSIGNED NOT NULL DEFAULT 0,
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (provider, day)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- People who can sign in. Row 1 is the owner (the original password login), created by migrate.js.
+CREATE TABLE IF NOT EXISTS users (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(254) NULL,
+  google_sub VARCHAR(64) NULL,               -- Google account id
+  name VARCHAR(120) NULL,
+  picture VARCHAR(500) NULL,
+  is_admin TINYINT(1) NOT NULL DEFAULT 0,
+  gmail_token TEXT NULL,                     -- Gmail refresh token, encrypted (lib/secretBox.js)
+  gmail_connected_at DATETIME NULL,
+  gmail_synced_at DATETIME NULL,
+  gmail_error VARCHAR(300) NULL,
+  created_at DATETIME NOT NULL,
+  last_login_at DATETIME NULL,
+  UNIQUE KEY uq_users_email (email),
+  UNIQUE KEY uq_users_google (google_sub)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Each person's own settings (name, cities, searches, digest). Shared ones stay in `settings`.
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id INT UNSIGNED NOT NULL,
+  k VARCHAR(64) NOT NULL,
+  v TEXT NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (user_id, k)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Jobs someone hid from their own feed (others still see them).
+CREATE TABLE IF NOT EXISTS job_hides (
+  user_id INT UNSIGNED NOT NULL,
+  job_id INT UNSIGNED NOT NULL,
+  reason VARCHAR(200) NULL,
+  hidden_at DATETIME NOT NULL,
+  PRIMARY KEY (user_id, job_id),
+  KEY idx_hides_job (job_id),
+  CONSTRAINT fk_hide_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Postings that closed and were deleted, so a source still listing them cannot bring them back.
+CREATE TABLE IF NOT EXISTS closed_jobs (
+  dedupe_key CHAR(40) NOT NULL PRIMARY KEY,
+  closed_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

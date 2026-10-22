@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createBudget, memoryUsageStore, SERVER_REQUEST_RESERVE } from '../server/lib/aiBudget.js';
 import { canonicalSoftware, createClassifier, experienceColumns, labelsToColumns } from '../server/lib/classify.js';
+import { classifyWithFreeLlm, freellmChatUrl } from '../server/lib/freellm.js';
 import { classifyWithGemini } from '../server/lib/gemini.js';
 import { classifyWithGroq, validateLabels } from '../server/lib/groq.js';
 import { requestEstimate, userPrompt } from '../server/lib/llm.js';
@@ -30,10 +31,11 @@ const geminiResponse = (content, tokens) =>
 const JOB = { title: 'BIM Intern', company: 'Studio', city: 'Bengaluru', description: 'Revit modelling intern' };
 const groqConfig = { apiKey: 'test', model: 'test-model', timeoutMs: 200 };
 const geminiConfig = { apiKey: 'test', model: 'test-gemini', timeoutMs: 200 };
+const freellmConfig = { url: 'https://llm.example.com', apiKey: 'unified', model: 'openai/gpt-oss-120b', reasoningEffort: 'low', maxOutputTokens: 1000, timeoutMs: 200 };
 const TODAY = istDateString();
 
 // A classifier session that never touches MySQL or the real .env keys.
-const session = (options) => createClassifier({ gemini: null, usageStore: memoryUsageStore(), ...options });
+const session = (options) => createClassifier({ freellm: null, gemini: null, usageStore: memoryUsageStore(), ...options });
 
 describe('rule-based classifier', () => {
   it('keeps architecture/BIM roles and scores them per the PRD', () => {
@@ -208,6 +210,62 @@ describe('Gemini classifier', () => {
     assert.equal(out.classifier, 'gemini');
     assert.equal(classifier.downReasons.groq, 'rate_limit');
     assert.equal(classifier.aiAvailable, true);
+  });
+});
+
+describe('FreeLLMAPI classifier', () => {
+  it('posts an OpenAI-style JSON request to <url>/v1/chat/completions', async () => {
+    let sent;
+    const fetchImpl = async (url, init) => {
+      sent = { url, headers: init.headers, body: JSON.parse(init.body) };
+      return groqResponse(GOOD, { tokens: 700 });
+    };
+    const usage = [];
+    const labels = await classifyWithFreeLlm(JOB, { ...freellmConfig, fetchImpl, onUsage: (u) => usage.push(u) });
+    assert.equal(labels.match_score, 92);
+    assert.equal(sent.url, 'https://llm.example.com/v1/chat/completions');
+    assert.equal(sent.headers.Authorization, 'Bearer unified');
+    assert.equal(sent.body.model, 'openai/gpt-oss-120b');
+    assert.equal(sent.body.reasoning_effort, 'low');
+    assert.equal(sent.body.max_tokens, 1000);
+    assert.deepEqual(sent.body.response_format, { type: 'json_object' });
+    assert.equal(usage[0].tokens, 700);
+  });
+
+  it('accepts the base URL with or without /v1', () => {
+    assert.equal(freellmChatUrl('https://llm.example.com/'), 'https://llm.example.com/v1/chat/completions');
+    assert.equal(freellmChatUrl('https://llm.example.com/v1/'), 'https://llm.example.com/v1/chat/completions');
+  });
+
+  it('is tried first, and Groq takes over when it is down', async () => {
+    const calls = [];
+    const fetchImpl = async (url) => {
+      calls.push(url.includes('llm.example.com') ? 'freellm' : 'groq');
+      return url.includes('llm.example.com') ? new Response('bad gateway', { status: 502 }) : groqResponse(GOOD, { tokens: 300 });
+    };
+    const classifier = session({ freellm: freellmConfig, groq: groqConfig, fetchImpl });
+    assert.equal((await classifier.classify(JOB)).classifier, 'groq');
+    assert.equal(classifier.downReasons.freellm, 'http');
+    assert.equal((await classifier.classify(JOB)).classifier, 'groq');
+    assert.deepEqual(calls, ['freellm', 'groq', 'groq']);
+  });
+
+  it('labels with FreeLLMAPI when it answers, without calling Groq', async () => {
+    const fetchImpl = async (url) => (url.includes('llm.example.com') ? groqResponse(GOOD, { tokens: 650 }) : assert.fail('should not call Groq'));
+    const classifier = session({ freellm: freellmConfig, groq: groqConfig, fetchImpl });
+    assert.equal((await classifier.classify(JOB)).classifier, 'freellm');
+    assert.equal(classifier.stats.freellm, 1);
+  });
+
+  it('is skipped when the URL or key is missing', async () => {
+    const fetchImpl = async (url) => (url.includes('groq.com') ? groqResponse(GOOD) : assert.fail('should not call FreeLLMAPI'));
+    const classifier = session({ freellm: { ...freellmConfig, url: '' }, groq: groqConfig, fetchImpl });
+    assert.equal((await classifier.classify(JOB)).classifier, 'groq');
+    assert.equal(classifier.downReasons.freellm, 'not_configured');
+  });
+
+  it('counts its bigger output cap in the token estimate', () => {
+    assert.equal(requestEstimate(JOB, { maxOutputTokens: 1000 }) - requestEstimate(JOB, {}), 700);
   });
 });
 

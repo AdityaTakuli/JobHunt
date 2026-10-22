@@ -18,6 +18,8 @@ Object.assign(process.env, {
   CRON_SECRET: 'cron-secret',
   // Never touch real services from tests, whatever .env says.
   SERPAPI_KEY: '',
+  FREELLM_URL: '',
+  FREELLM_API_KEY: '',
   GROQ_API_KEY: '',
   GEMINI_API_KEY: '',
   IMAP_USER: '',
@@ -39,6 +41,11 @@ const { liveSearch, CACHE_HOURS } = await import('../server/tasks/liveSearch.js'
 const { parseMessages } = await import('../server/tasks/readInbox.js');
 const { archiveOldJobs } = await import('../server/tasks/archive.js');
 const { digestDue, renderDigest } = await import('../server/tasks/sendDigest.js');
+const { createSessionToken } = await import('../server/auth.js');
+const { signInWithGoogle } = await import('../server/lib/users.js');
+const google = await import('../server/lib/google.js');
+const { open: unseal } = await import('../server/lib/secretBox.js');
+const { tidyJobs, deleteOldJobs } = await import('../server/tasks/archive.js');
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 const NOW = new Date();
@@ -79,8 +86,11 @@ describe('integration', { skip: !dbReady }, () => {
   before(async () => {
     await migrate();
     await query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches']) await query(`TRUNCATE TABLE ${table}`);
+    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches', 'users', 'user_settings', 'job_hides', 'closed_jobs']) {
+      await query(`TRUNCATE TABLE ${table}`);
+    }
     await query('SET FOREIGN_KEY_CHECKS = 1');
+    await migrate(); // recreates the owner account
     server = createApp().listen(0);
     await new Promise((resolve) => server.once('listening', resolve));
     base = `http://127.0.0.1:${server.address().port}`;
@@ -94,7 +104,7 @@ describe('integration', { skip: !dbReady }, () => {
   it('ingests Google Jobs + LinkedIn alerts, dedupes and classifies', async () => {
     const serp = JSON.parse(fixture('serpapi-google-jobs.json')).jobs_results.map((j) => normalizeSerpJob(j, NOW));
     const email = parseLinkedInAlert({ html: fixture('linkedin-alert.html'), receivedAt: NOW });
-    const linkChecker = async (url) => (url.includes('glassdoor') ? 'broken' : 'ok');
+    const linkChecker = async (url) => (url.includes('software-architect') ? 'broken' : 'ok');
 
     const first = await ingestJobs(serp, { classifier: createClassifier(), linkChecker });
     assert.equal(first.new, 4);
@@ -117,7 +127,10 @@ describe('integration', { skip: !dbReady }, () => {
       ['Cloud Solution Architect', 'Software Architect - Cloud Platform'],
     );
     const [senior] = await query("SELECT link_status, role_type, city FROM jobs WHERE title = 'Senior Architect'");
-    assert.deepEqual({ ...senior }, { link_status: 'broken', role_type: 'experienced', city: 'Remote' });
+    assert.deepEqual({ ...senior }, { link_status: 'ok', role_type: 'experienced', city: 'Remote' });
+    // A posting whose link says it is gone is stored closed, so it never shows.
+    const [gone] = await query("SELECT link_status, closed_reason, closed_at IS NOT NULL AS closed FROM jobs WHERE title LIKE 'Software Architect%'");
+    assert.deepEqual({ ...gone }, { link_status: 'broken', closed_reason: 'removed', closed: 1 });
 
     // Re-ingesting the same batch changes nothing.
     const again = await ingestJobs(serp, { classifier: createClassifier(), linkChecker });
@@ -220,7 +233,7 @@ describe('integration', { skip: !dbReady }, () => {
 
     const review = await request('/api/jobs/review');
     assert.equal(review.data.hidden[0].hide_reason, 'Wrong city');
-    assert.equal(review.data.filtered.length, 2);
+    assert.equal(review.data.filtered.length, 1, 'the closed Software Architect posting is not listed');
 
     await request(`/api/jobs/${jobId}/unhide`, { method: 'POST' });
     const cloud = review.data.filtered.find((j) => j.title === 'Cloud Solution Architect');
@@ -311,7 +324,7 @@ describe('integration', { skip: !dbReady }, () => {
     assert.equal(ok.data.task, 'archive');
     assert.equal((await request('/api/cron/nope?key=cron-secret', { auth: false })).status, 404);
     const viaHeader = await request('/api/cron/retry-classify', { auth: false, headers: { 'X-Cron-Key': 'cron-secret' } });
-    assert.equal(viaHeader.data.skipped, 'No AI key set (GROQ_API_KEY or GEMINI_API_KEY)');
+    assert.equal(viaHeader.data.skipped, 'No AI key set (FREELLM_API_KEY, GROQ_API_KEY or GEMINI_API_KEY)');
   });
 
   it('archives jobs older than 30 days unless tracked', async () => {
@@ -426,7 +439,7 @@ describe('integration', { skip: !dbReady }, () => {
       applyUrl: applyOptions[0].url,
       postedAt: now,
     });
-    const classifier = createClassifier({ groq: null, gemini: null });
+    const classifier = createClassifier({ freellm: null, groq: null, gemini: null });
     await ingestJobs([job([{ url: 'https://in.bebee.com/job/9', publisher: 'BeBee' }])], { classifier, linkChecker: null, now });
     let [row] = await query("SELECT apply_url, apply_kind, apply_url_rank, apply_options FROM jobs WHERE title = 'Architecture Apply Intern'");
     assert.equal(row.apply_kind, 'aggregator');
@@ -499,9 +512,11 @@ describe('integration', { skip: !dbReady }, () => {
       const relevantIds = ranked.data.jobs.filter((j) => j.is_relevant).map((j) => j.id);
       assert.deepEqual(relevantIds, first.ids.filter((id) => relevantIds.includes(id)), 'relevant ones keep Google order');
 
-      // The feed shows exactly those jobs, whatever the city filter says.
+      // The feed shows exactly those jobs that are still open, whatever the city filter says.
       const feed = await request(`/api/jobs?ids=${first.ids.join(',')}&city=Nowhere&exp=any`);
-      assert.deepEqual(feed.data.jobs.map((j) => j.id).sort(), [...first.ids].sort());
+      const open = (await query('SELECT id FROM jobs WHERE id IN (?) AND closed_at IS NULL', [first.ids])).map((r) => r.id);
+      assert.deepEqual(feed.data.jobs.map((j) => j.id).sort(), open.sort());
+      assert.ok(open.length < first.ids.length, 'the closed posting is left out');
 
       calls.length = 0;
       const again = await liveSearch({ q: 'BIM intern', location: 'mumbai', fetchImpl });
@@ -561,5 +576,222 @@ describe('integration', { skip: !dbReady }, () => {
     const empty = renderDigest({ jobs: [], followUps: [], firms: [{ name: 'Studio Alpha', city: 'Bengaluru' }] });
     assert.equal(empty.subject, 'ArchJobs · No new roles today');
     assert.match(empty.html, /firms to cold-email/);
+  });
+  // --- Accounts -------------------------------------------------------------------------------
+
+  const cookieFor = (userId) => `aj_session=${createSessionToken(userId)}`;
+  const as = (userId) => ({ auth: false, headers: { Cookie: cookieFor(userId) } });
+  // An unsigned ID token is fine here: it only ever comes straight from Google's token endpoint.
+  const idToken = (claims) =>
+    ['e30', Buffer.from(JSON.stringify({ iss: 'https://accounts.google.com', aud: 'cid', exp: Math.floor(Date.now() / 1000) + 600, email_verified: true, ...claims })).toString('base64url'), 'sig'].join('.');
+
+  it("keeps each person's tracker, hidden jobs, firms, settings and searches to themselves", async () => {
+    config.auth.allowedEmails = ['friend@example.com'];
+    try {
+      await assert.rejects(signInWithGoogle({ sub: 'g-x', email: 'stranger@example.com', name: 'Stranger' }), (err) => err.code === 'not_allowed');
+      const friend = await signInWithGoogle({ sub: 'g-2', email: 'Friend@Example.com', name: 'Asha Rao' });
+      assert.equal(friend.email, 'friend@example.com');
+
+      const me = await request('/api/me', as(friend.id));
+      assert.deepEqual([me.data.user.email, me.data.user.isAdmin, me.data.user.gmail.connected], ['friend@example.com', false, false]);
+      assert.equal((await request('/api/jobs/meta', as(friend.id))).data.displayName, 'Asha');
+
+      // The owner's tracker and firms are not hers.
+      assert.ok((await request('/api/applications')).data.applications.length > 0);
+      assert.deepEqual((await request('/api/applications', as(friend.id))).data.applications, []);
+      assert.deepEqual((await request('/api/firms', as(friend.id))).data.firms, []);
+
+      // Hiding a job hides it for her only.
+      const jobId = await jobIdByTitle('Junior Architect', 'Morphogenesis');
+      await request(`/api/jobs/${jobId}/hide`, { method: 'POST', body: { reason: 'Not for me' }, ...as(friend.id) });
+      assert.ok(!(await request('/api/jobs?city=all', as(friend.id))).data.jobs.some((j) => j.id === jobId));
+      assert.ok((await request('/api/jobs?city=all')).data.jobs.some((j) => j.id === jobId));
+
+      // Saving the same job: one tracker entry each.
+      const mine = await request('/api/applications', { method: 'POST', body: { job_id: jobId, status: 'saved' }, ...as(friend.id) });
+      assert.equal(mine.status, 201);
+      const ownerView = await request(`/api/jobs/${jobId}`);
+      assert.notEqual(ownerView.data.job.application_id, mine.data.application.id);
+
+      // Her settings are her own; shared ones are for admins.
+      const saved = await request('/api/settings', { method: 'PUT', body: { cities: ['Pune'], extra_exclude_keywords: ['x'] }, ...as(friend.id) });
+      assert.deepEqual(saved.data.settings.cities, ['Pune']);
+      assert.equal(saved.data.settings.extra_exclude_keywords, undefined);
+      assert.notDeepEqual((await request('/api/settings')).data.settings.cities, ['Pune']);
+
+      // Admin-only screens.
+      assert.equal((await request('/api/system', as(friend.id))).status, 403);
+      assert.equal((await request('/api/people', as(friend.id))).status, 403);
+      const people = await request('/api/people');
+      assert.deepEqual(people.data.users.map((u) => [u.isOwner, u.email]), [[true, null], [false, 'friend@example.com']]);
+
+      // Admins keep the list of who may join.
+      const listed = await request('/api/people/allowed', { method: 'PUT', body: { emails: ['New@Example.com'] } });
+      assert.deepEqual(listed.data.allowed, ['new@example.com']);
+      assert.equal((await request('/api/people/allowed', { method: 'PUT', body: { emails: ['nope'] } })).status, 400);
+      const joined = await signInWithGoogle({ sub: 'g-3', email: 'new@example.com', name: 'New Person' });
+
+      // Removing someone removes their own things, not the shared jobs.
+      const removed = await request(`/api/people/${friend.id}`, { method: 'DELETE' });
+      assert.deepEqual(removed.data.users.map((u) => u.id), [1, joined.id]);
+      assert.equal((await query('SELECT COUNT(*) AS n FROM applications WHERE user_id = ?', [friend.id]))[0].n, 0);
+      assert.equal((await query('SELECT COUNT(*) AS n FROM job_hides WHERE user_id = ?', [friend.id]))[0].n, 0);
+      assert.equal((await request('/api/me', as(friend.id))).data.authenticated, false);
+      assert.equal((await request('/api/people/1', { method: 'DELETE' })).status, 400);
+    } finally {
+      config.auth.allowedEmails = [];
+    }
+  });
+
+  it('signs in with Google, then reads LinkedIn alerts from Gmail', async () => {
+    Object.assign(config.google, { clientId: 'cid', clientSecret: 'secret' });
+    config.auth.allowedEmails = ['gmail.user@example.com'];
+    const realFetch = google.deps.fetch;
+    const calls = [];
+    const raw = Buffer.from(
+      ['From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>', 'To: gmail.user@example.com', 'Subject: New jobs', 'Content-Type: text/html; charset=utf-8', '', fixture('linkedin-alert.html')].join('\r\n'),
+    ).toString('base64url');
+    let grant = {};
+    google.deps.fetch = async (url, init = {}) => {
+      const u = new URL(url);
+      calls.push(`${init.method || 'GET'} ${u.host}${u.pathname}`);
+      if (u.pathname === '/token') {
+        const form = new URLSearchParams(init.body);
+        if (form.get('grant_type') === 'refresh_token') {
+          assert.equal(form.get('refresh_token'), 'refresh-1');
+          return Response.json({ access_token: 'access-1' });
+        }
+        assert.equal(form.get('code'), 'the-code');
+        return Response.json({ access_token: 'a', id_token: idToken({ sub: 'g-gmail', email: 'gmail.user@example.com', name: 'Gmail User' }), ...grant });
+      }
+      if (u.pathname === '/revoke') return Response.json({});
+      if (u.pathname.endsWith('/messages')) {
+        assert.match(u.searchParams.get('q'), /from:\(jobalerts-noreply@linkedin\.com/);
+        return Response.json({ messages: [{ id: 'm1' }] });
+      }
+      if (u.pathname.endsWith('/messages/m1')) return Response.json({ id: 'm1', raw });
+      throw new Error(`unexpected ${url}`);
+    };
+    const go = (path, cookies = '') => fetch(`${base}${path}`, { redirect: 'manual', headers: cookies ? { Cookie: cookies } : {} });
+    const cookiesFrom = (res) => res.headers.getSetCookie().map((c) => c.split(';')[0]).filter((c) => !c.endsWith('='));
+    try {
+      // 1. Sign in.
+      const start = await go('/api/auth/google/start');
+      assert.equal(start.status, 302);
+      const to = new URL(start.headers.get('location'));
+      assert.equal(to.host, 'accounts.google.com');
+      assert.equal(to.searchParams.get('scope'), 'openid email profile');
+      const state = to.searchParams.get('state');
+      const oauthCookie = cookiesFrom(start).join('; ');
+
+      const forged = await go(`/api/auth/google/callback?state=wrong&code=the-code`, oauthCookie);
+      assert.equal(forged.headers.get('location'), '/?auth_error=expired');
+
+      const back = await go(`/api/auth/google/callback?state=${state}&code=the-code`, oauthCookie);
+      assert.equal(back.headers.get('location'), '/#/jobs');
+      const session = cookiesFrom(back).find((c) => c.startsWith('aj_session='));
+      const me = await (await fetch(`${base}/api/me`, { headers: { Cookie: session } })).json();
+      assert.equal(me.user.email, 'gmail.user@example.com');
+
+      // 2. Connect Gmail (read-only, offline).
+      const gstart = await go('/api/auth/google/start?mode=gmail', session);
+      const gto = new URL(gstart.headers.get('location'));
+      assert.match(gto.searchParams.get('scope'), /gmail\.readonly/);
+      assert.equal(gto.searchParams.get('access_type'), 'offline');
+      grant = { refresh_token: 'refresh-1', scope: `openid email profile ${google.GMAIL_SCOPE}` };
+      const gback = await go(`/api/auth/google/callback?state=${gto.searchParams.get('state')}&code=the-code`, `${session}; ${cookiesFrom(gstart).join('; ')}`);
+      assert.equal(gback.headers.get('location'), '/?gmail=connected#/settings');
+      const [row] = await query('SELECT gmail_token FROM users WHERE email = ?', ['gmail.user@example.com']);
+      assert.equal(unseal(row.gmail_token), 'refresh-1', 'stored encrypted');
+      assert.ok(!row.gmail_token.includes('refresh-1'));
+
+      // 3. Read the alerts.
+      const synced = await (await fetch(`${base}/api/account/gmail/sync`, { method: 'POST', headers: { Cookie: session } })).json();
+      assert.equal(synced.result.messages, 1);
+      assert.ok(synced.account.gmail.connected);
+      assert.ok(synced.account.gmail.syncedAt);
+      assert.ok(calls.includes('GET gmail.googleapis.com/gmail/v1/users/me/messages/m1'));
+
+      // 4. Disconnect: the permission is withdrawn at Google too.
+      const off = await (await fetch(`${base}/api/account/gmail/disconnect`, { method: 'POST', headers: { Cookie: session } })).json();
+      assert.equal(off.account.gmail.connected, false);
+      assert.ok(calls.includes('POST oauth2.googleapis.com/revoke'));
+    } finally {
+      google.deps.fetch = realFetch;
+      Object.assign(config.google, { clientId: '', clientSecret: '' });
+      config.auth.allowedEmails = [];
+    }
+  });
+
+  it('keeps her search history, with only the results still open', async () => {
+    const [a, b] = (await query('SELECT id FROM jobs WHERE closed_at IS NULL AND is_archived = 0 ORDER BY id LIMIT 2')).map((r) => r.id);
+    const [closed] = (await query('SELECT id FROM jobs WHERE closed_at IS NOT NULL LIMIT 1')).map((r) => r.id);
+    const at = (h) => new Date(Date.now() - h * 3_600_000);
+    await query('INSERT INTO searches (user_id, query, location, searched_at, job_ids, found) VALUES ?', [
+      [
+        [1, 'Revit architect', 'Pune', at(30), JSON.stringify([a, closed]), 2],
+        [1, 'revit architect', 'pune', at(2), JSON.stringify([b]), 1],
+        [1, 'Old search', '', at(50), JSON.stringify([closed]), 1],
+        [2, 'Not hers', '', at(1), JSON.stringify([a]), 1],
+      ],
+    ]);
+    const history = await request('/api/search/history');
+    const revit = history.data.searches.find((h) => h.query.toLowerCase() === 'revit architect' && h.location.toLowerCase() === 'pune');
+    assert.deepEqual(revit.ids, [b, a], 'both runs merged, newest first, closed one left out');
+    assert.equal(revit.runs, 2);
+    assert.ok(!history.data.searches.some((h) => h.query === 'Old search'), 'nothing open left');
+    assert.ok(!history.data.searches.some((h) => h.query === 'Not hers'));
+
+    await request('/api/search/history', { method: 'DELETE', body: { query: 'Revit architect', location: 'Pune' } });
+    await request('/api/search/history', { method: 'DELETE', body: { query: 'revit architect', location: 'pune' } });
+    assert.ok(!(await request('/api/search/history')).data.searches.some((h) => h.location.toLowerCase() === 'pune'));
+  });
+
+  it('closes postings past their deadline or taken down, then deletes them', async () => {
+    const now = new Date();
+    const day = 86_400_000;
+    const fmt = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+    const job = (title, extra) => ({
+      source: 'google_jobs', title, company: 'Close Studio', locationText: 'Pune, Maharashtra', description: 'Architecture intern. Revit.',
+      applyUrl: `https://close.example.com/${encodeURIComponent(title)}`, publisher: 'Close Studio', postedAt: new Date(now.getTime() - 2 * day), ...extra,
+    });
+    const ok = async (url) => (url.includes('dead') ? 'broken' : 'ok');
+    await ingestJobs(
+      [
+        job('Past Deadline Intern', { description: `Architecture intern. Last date to apply: ${fmt(new Date(now.getTime() - 1 * day))}.` }),
+        job('Future Deadline Intern', { description: `Architecture intern. Apply before ${fmt(new Date(now.getTime() + 3 * day))}.` }),
+        job('Moved Link Intern', { applyOptions: [{ url: 'https://close.example.com/dead-1', publisher: 'Close Studio' }, { url: 'https://in.linkedin.com/jobs/view/77', publisher: 'LinkedIn' }] }),
+        job('Gone Intern', { applyOptions: [{ url: 'https://close.example.com/ok-now', publisher: 'Close Studio' }] }),
+      ],
+      { classifier: createClassifier({ freellm: null, groq: null, gemini: null }), linkChecker: async () => 'ok', now },
+    );
+    const state = async (title) => (await query('SELECT id, closed_reason, deadline_at, apply_url FROM jobs WHERE title = ?', [title]))[0];
+    assert.equal((await state('Past Deadline Intern')).closed_reason, 'deadline', 'closed as it came in');
+    assert.ok((await state('Future Deadline Intern')).deadline_at);
+    assert.equal((await state('Future Deadline Intern')).closed_reason, null);
+
+    // Later: the deadline passes, one link moved, one posting was taken down.
+    await query(
+      "UPDATE jobs SET apply_url = 'https://close.example.com/dead-2', apply_options = JSON_ARRAY(JSON_OBJECT('url', 'https://close.example.com/dead-2')), link_checked_at = NULL WHERE title = 'Gone Intern'",
+    );
+    await query("UPDATE jobs SET link_checked_at = NULL WHERE title = 'Moved Link Intern'");
+    const tracked = await state('Future Deadline Intern');
+    await request('/api/applications', { method: 'POST', body: { job_id: tracked.id, status: 'applied' } });
+    const later = new Date(now.getTime() + 4 * day);
+    const summary = await tidyJobs({ now: later, linkChecker: ok });
+    assert.ok(summary.closedByDeadline >= 1 && summary.closedRemoved >= 1 && summary.relinked >= 1, JSON.stringify(summary));
+    assert.equal((await state('Future Deadline Intern')).closed_reason, 'deadline');
+    assert.equal((await state('Gone Intern')).closed_reason, 'removed');
+    assert.deepEqual([(await state('Moved Link Intern')).closed_reason, (await state('Moved Link Intern')).apply_url], [null, 'https://in.linkedin.com/jobs/view/77']);
+    assert.ok(!(await request('/api/jobs?city=all&exp=any')).data.jobs.some((j) => j.company === 'Close Studio' && j.title !== 'Moved Link Intern'));
+    const app = (await request('/api/applications')).data.applications.find((x) => x.job_id === tracked.id);
+    assert.equal(app.closed_reason, 'deadline', 'her tracker says it closed');
+
+    // Two weeks on they are deleted, except the one in her tracker, and stay gone.
+    await deleteOldJobs(new Date(later.getTime() + 15 * day));
+    assert.equal(await state('Gone Intern'), undefined);
+    assert.ok(await state('Future Deadline Intern'), 'kept: it is in her tracker');
+    const again = await ingestJobs([job('Gone Intern')], { classifier: createClassifier({ freellm: null, groq: null, gemini: null }), linkChecker: null, now: later });
+    assert.deepEqual([again.new, again.skippedClosed], [0, 1]);
   });
 });

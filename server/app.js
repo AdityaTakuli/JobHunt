@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
-import { login, logout, me, requireAuth, requireCronKey } from './auth.js';
+import { googleCallback, googleStart, login, logout, me, requireAuth, requireCronKey } from './auth.js';
 import { config, ROOT_DIR } from './config.js';
+import { accountRouter } from './routes/account.js';
 import { applicationsRouter } from './routes/applications.js';
 import { firmsRouter } from './routes/firms.js';
 import { jobsRouter } from './routes/jobs.js';
@@ -30,6 +31,8 @@ export function createApp() {
   app.post('/api/login', login);
   app.post('/api/logout', logout);
   app.get('/api/me', me);
+  app.get('/api/auth/google/start', googleStart);
+  app.get('/api/auth/google/callback', googleCallback);
 
   // Called by Hostinger cron with ?key=CRON_SECRET. GET so a plain `curl URL` works.
   app.all('/api/cron/:task', requireCronKey, async (req, res) => {
@@ -42,6 +45,7 @@ export function createApp() {
   app.use('/api/search', searchRouter);
   app.use('/api/applications', applicationsRouter);
   app.use('/api/firms', firmsRouter);
+  app.use('/api', accountRouter);
   app.use('/api', settingsRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 

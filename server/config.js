@@ -8,6 +8,12 @@ dotenv.config({ path: path.join(ROOT_DIR, '.env'), quiet: true });
 
 const env = process.env;
 
+const emailList = (value) =>
+  String(value || '')
+    .split(/[,\s]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
 const num = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) && value !== '' && value != null ? n : fallback;
@@ -27,10 +33,28 @@ export const config = {
   },
 
   auth: {
-    // Single shared password for the MVP. Empty = auth disabled (local dev only).
+    // The owner's password (signs in as the owner account). Empty = auth disabled (local dev only).
     password: env.APP_PASSWORD || '',
     sessionSecret: env.SESSION_SECRET || '',
     sessionDays: 30,
+    // The owner's Google account: signing in with it opens the owner account (user 1).
+    ownerEmail: emailList(env.OWNER_EMAIL)[0] || '',
+    // Extra people who can manage access and see the Activity tab.
+    adminEmails: emailList(env.ADMIN_EMAILS),
+    // Who may sign in with Google besides the owner and admins: a list of emails, or * for anyone.
+    // Admins can also add people in Settings > People.
+    allowedEmails: emailList(env.ALLOWED_EMAILS),
+    // Encrypts stored Gmail tokens. Falls back to SESSION_SECRET.
+    tokenSecret: env.TOKEN_SECRET || '',
+  },
+
+  // "Sign in with Google" and Gmail job alerts. OAuth client from Google Cloud console, with
+  // redirect URI <PUBLIC_URL>/api/auth/google/callback.
+  google: {
+    clientId: env.GOOGLE_CLIENT_ID || '',
+    clientSecret: env.GOOGLE_CLIENT_SECRET || '',
+    // Gmail messages read per person per sync.
+    gmailMaxMessages: num(env.GMAIL_MAX_MESSAGES, 30),
   },
 
   // Protects /api/cron/* endpoints called by Hostinger cron.
@@ -55,6 +79,29 @@ export const config = {
     maxDescriptionChars: num(env.AI_MAX_DESCRIPTION_CHARS, 2500),
     // Longest a call waits for the per-minute token window before the job falls back.
     maxWaitMs: num(env.AI_MAX_WAIT_MS, 30_000),
+  },
+
+  // First provider: the user's FreeLLMAPI gateway (OpenAI-style), which rotates over the free AI
+  // keys added to it. Any failure falls through to Groq, then Gemini.
+  freellm: {
+    url: env.FREELLM_URL || '',
+    apiKey: env.FREELLM_API_KEY || '',
+    // A model id, or "auto" / "auto:smart" to let FreeLLMAPI pick (auto:smart once picked a
+    // weak 7B model, so a strong model is pinned by default).
+    model: env.FREELLM_MODEL || 'openai/gpt-oss-120b',
+    // gpt-oss always reasons a little; "low" keeps it short. Empty = omit.
+    reasoningEffort: env.FREELLM_REASONING_EFFORT ?? 'low',
+    // Room for the reasoning plus the ~100-token JSON answer.
+    maxOutputTokens: num(env.FREELLM_MAX_OUTPUT_TOKENS, 1_000),
+    // FreeLLMAPI may try several of its keys before answering.
+    timeoutMs: num(env.FREELLM_TIMEOUT_MS, 30_000),
+    minIntervalMs: num(env.FREELLM_MIN_INTERVAL_MS, 2_100),
+    limits: {
+      dailyTokens: num(env.FREELLM_DAILY_TOKEN_LIMIT, 300_000),
+      dailyRequests: num(env.FREELLM_DAILY_REQUEST_LIMIT, 1_000),
+      minuteTokens: num(env.FREELLM_MINUTE_TOKEN_LIMIT, 15_000),
+      runTokens: num(env.FREELLM_RUN_TOKEN_LIMIT, 80_000),
+    },
   },
 
   groq: {

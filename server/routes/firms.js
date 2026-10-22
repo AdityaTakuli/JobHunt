@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { FIRM_STATUSES } from '../../shared/format.js';
 import { query } from '../db/pool.js';
-import { getSettings } from '../lib/settings.js';
+import { getUserSettings } from '../lib/settings.js';
 
 export const firmsRouter = Router();
 
@@ -42,11 +42,12 @@ function readFirm(body, { partial }) {
 
 firmsRouter.get('/', async (req, res) => {
   const q = String(req.query.q || '').trim();
-  const params = [];
-  let where = '1 = 1';
+  // Each person keeps their own firms list.
+  const params = [req.user.id];
+  let where = 'user_id = ?';
   if (q) {
     const like = `%${q.slice(0, 100).replace(/[\\%_]/g, '\\$&')}%`;
-    where = '(name LIKE ? OR city LIKE ? OR type LIKE ? OR contact_email LIKE ? OR notes LIKE ?)';
+    where += ' AND (name LIKE ? OR city LIKE ? OR type LIKE ? OR contact_email LIKE ? OR notes LIKE ?)';
     params.push(like, like, like, like, like);
   }
   if (req.query.status && FIRM_STATUSES.includes(req.query.status)) {
@@ -59,11 +60,11 @@ firmsRouter.get('/', async (req, res) => {
 
 // Cold-email ideas for empty states: firms not contacted yet, preferring her cities.
 firmsRouter.get('/suggestions', async (req, res) => {
-  const { cities } = await getSettings();
+  const { cities } = await getUserSettings(req.user.id);
   const rows = await query(
-    `SELECT * FROM firms WHERE status = 'not contacted'
+    `SELECT * FROM firms WHERE user_id = ? AND status = 'not contacted'
       ORDER BY ${cities.length ? '(city IN (?)) DESC,' : ''} created_at ASC LIMIT 5`,
-    cities.length ? [cities] : [],
+    cities.length ? [req.user.id, cities] : [req.user.id],
   );
   res.json({ firms: rows });
 });
@@ -71,7 +72,7 @@ firmsRouter.get('/suggestions', async (req, res) => {
 firmsRouter.post('/', async (req, res) => {
   const now = new Date();
   const firm = readFirm(req.body || {}, { partial: false });
-  const result = await query('INSERT INTO firms SET ?', [{ status: 'not contacted', ...firm, created_at: now, updated_at: now }]);
+  const result = await query('INSERT INTO firms SET ?', [{ status: 'not contacted', ...firm, user_id: req.user.id, created_at: now, updated_at: now }]);
   const [row] = await query('SELECT * FROM firms WHERE id = ?', [result.insertId]);
   res.status(201).json({ firm: row });
 });
@@ -80,7 +81,7 @@ firmsRouter.post('/', async (req, res) => {
 firmsRouter.post('/import', async (req, res) => {
   const rows = Array.isArray(req.body?.firms) ? req.body.firms.slice(0, 1000) : [];
   if (!rows.length) return res.status(400).json({ error: 'Nothing to import.' });
-  const existing = new Set((await query('SELECT LOWER(name) AS n FROM firms')).map((r) => r.n));
+  const existing = new Set((await query('SELECT LOWER(name) AS n FROM firms WHERE user_id = ?', [req.user.id])).map((r) => r.n));
   const now = new Date();
   const values = [];
   const errors = [];
@@ -89,13 +90,13 @@ firmsRouter.post('/import', async (req, res) => {
       const firm = readFirm(raw, { partial: false });
       if (existing.has(firm.name.toLowerCase())) return;
       existing.add(firm.name.toLowerCase());
-      values.push([firm.name, firm.city ?? null, firm.type ?? null, firm.website ?? null, firm.contact_email ?? null, firm.notes ?? null, 'not contacted', now, now]);
+      values.push([req.user.id, firm.name, firm.city ?? null, firm.type ?? null, firm.website ?? null, firm.contact_email ?? null, firm.notes ?? null, 'not contacted', now, now]);
     } catch (err) {
       errors.push(`Row ${i + 1}: ${err.message}`);
     }
   });
   if (values.length) {
-    await query('INSERT INTO firms (name, city, type, website, contact_email, notes, status, created_at, updated_at) VALUES ?', [values]);
+    await query('INSERT INTO firms (user_id, name, city, type, website, contact_email, notes, status, created_at, updated_at) VALUES ?', [values]);
   }
   res.json({ imported: values.length, skipped: rows.length - values.length - errors.length, errors });
 });
@@ -103,10 +104,10 @@ firmsRouter.post('/import', async (req, res) => {
 firmsRouter.patch('/:id', async (req, res) => {
   const firm = readFirm(req.body || {}, { partial: true });
   if (Object.keys(firm).length) {
-    const result = await query('UPDATE firms SET ?, updated_at = ? WHERE id = ?', [firm, new Date(), req.params.id]);
+    const result = await query('UPDATE firms SET ?, updated_at = ? WHERE id = ? AND user_id = ?', [firm, new Date(), req.params.id, req.user.id]);
     if (!result.affectedRows) return res.status(404).json({ error: 'Firm not found.' });
   }
-  const [row] = await query('SELECT * FROM firms WHERE id = ?', [req.params.id]);
+  const [row] = await query('SELECT * FROM firms WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   if (!row) return res.status(404).json({ error: 'Firm not found.' });
   res.json({ firm: row });
 });
@@ -114,10 +115,11 @@ firmsRouter.patch('/:id', async (req, res) => {
 // One tap after sending a cold email.
 firmsRouter.post('/:id/emailed', async (req, res) => {
   const now = new Date();
-  const result = await query("UPDATE firms SET last_emailed_at = ?, status = 'emailed', updated_at = ? WHERE id = ?", [
+  const result = await query("UPDATE firms SET last_emailed_at = ?, status = 'emailed', updated_at = ? WHERE id = ? AND user_id = ?", [
     now,
     now,
     req.params.id,
+    req.user.id,
   ]);
   if (!result.affectedRows) return res.status(404).json({ error: 'Firm not found.' });
   const [row] = await query('SELECT * FROM firms WHERE id = ?', [req.params.id]);
@@ -125,6 +127,6 @@ firmsRouter.post('/:id/emailed', async (req, res) => {
 });
 
 firmsRouter.delete('/:id', async (req, res) => {
-  await query('DELETE FROM firms WHERE id = ?', [req.params.id]);
+  await query('DELETE FROM firms WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
   res.json({ ok: true });
 });
