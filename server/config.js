@@ -81,14 +81,14 @@ export const config = {
     maxWaitMs: num(env.AI_MAX_WAIT_MS, 30_000),
   },
 
-  // First provider: the user's FreeLLMAPI gateway (OpenAI-style), which rotates over the free AI
-  // keys added to it. Any failure falls through to Groq, then Gemini.
+  // Main AI: the user's FreeLLMAPI gateway (OpenAI-style), which holds the Groq and Gemini keys.
+  // Groq and Gemini below are only called directly when their own keys are set here too.
   freellm: {
     url: env.FREELLM_URL || '',
     apiKey: env.FREELLM_API_KEY || '',
-    // A model id, or "auto" / "auto:smart" to let FreeLLMAPI pick (auto:smart once picked a
-    // weak 7B model, so a strong model is pinned by default).
-    model: env.FREELLM_MODEL || 'openai/gpt-oss-120b',
+    // Models tried in order, comma-separated: gpt-oss-120b runs on Groq, gemini-3.5-flash on
+    // Gemini. "auto" lets FreeLLMAPI pick (auto:smart once picked a weak 7B model).
+    model: env.FREELLM_MODEL || 'openai/gpt-oss-120b,gemini-3.5-flash',
     // gpt-oss always reasons a little; "low" keeps it short. Empty = omit.
     reasoningEffort: env.FREELLM_REASONING_EFFORT ?? 'low',
     // Room for the reasoning plus the ~100-token JSON answer.

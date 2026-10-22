@@ -40,6 +40,7 @@ export function createClassifier({
       cfg,
       budget: createBudget(name, cfg.limits, { store: usageStore, maxWaitMs: ai?.maxWaitMs, ...(sleep && { sleep }) }),
       lastCall: 0,
+      state: {}, // per-batch notes kept by the caller (FreeLLMAPI: models that are down)
     }));
   const downReasons = Object.fromEntries(providers.map((p) => [p.name, providerConfigured(p.cfg) ? null : 'not_configured']));
   const stats = { freellm: 0, groq: 0, gemini: 0, rules: 0, requests: 0, tokens: 0, failures: {} };
@@ -60,7 +61,7 @@ export function createClassifier({
   }
 
   async function tryProvider(p, job) {
-    const options = { ...p.cfg, extraExclude, cities, maxDescriptionChars: ai?.maxDescriptionChars, fetchImpl };
+    const options = { ...p.cfg, extraExclude, cities, maxDescriptionChars: ai?.maxDescriptionChars, fetchImpl, state: p.state };
     const estimate = requestEstimate(job, options);
     let blocked;
     try {

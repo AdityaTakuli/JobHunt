@@ -2,7 +2,7 @@
 
 One dashboard for architecture and BIM internships and fresher jobs in whichever cities she picks: a filtered job feed with direct apply links, an application tracker, a cold-email firms list and a daily digest email. Friends can join with their Google account and get their own tracker, searches and Gmail job alerts on the same job list. Spec: [docs/PRD.md](docs/PRD.md).
 
-**Stack:** Node.js (Express 5) + MySQL, React (Vite), node-cron. Jobs come from the [SerpApi Google Jobs API](https://serpapi.com/google-jobs-api) and from LinkedIn job-alert emails forwarded to a mailbox. AI labels each job (the FreeLLMAPI gateway first, then Groq, then Gemini) inside a daily token budget, with a rule-based fallback.
+**Stack:** Node.js (Express 5) + MySQL, React (Vite), node-cron. Jobs come from the [SerpApi Google Jobs API](https://serpapi.com/google-jobs-api) and from LinkedIn job-alert emails forwarded to a mailbox. AI labels each job through the FreeLLMAPI gateway (which holds the Groq and Gemini keys) inside a daily token budget, with a rule-based fallback.
 
 ```
 server/
@@ -42,9 +42,9 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 | What | Where | `.env` |
 | --- | --- | --- |
 | SerpApi (Google Jobs) | [serpapi.com](https://serpapi.com/manage-api-key), free plan: 250 searches/month | `SERPAPI_KEY` |
-| FreeLLMAPI (main AI) | Your own gateway at `llm.velocitytechnologies.in`, unified key from its Keys page | `FREELLM_URL`, `FREELLM_API_KEY`, `FREELLM_MODEL` |
-| Groq (backup AI) | [console.groq.com/keys](https://console.groq.com/keys), free tier: 1,000 requests/day, 8,000 tokens/minute | `GROQ_API_KEY`, `GROQ_MODEL` |
-| Gemini (second backup AI) | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | `GEMINI_API_KEY`, `GEMINI_MODEL` |
+| FreeLLMAPI (main AI) | Your own gateway at `llm.velocitytechnologies.in` (holds the Groq and Gemini keys), unified key from its Keys page | `FREELLM_URL`, `FREELLM_API_KEY`, `FREELLM_MODEL` |
+| Groq (optional direct backup) | [console.groq.com/keys](https://console.groq.com/keys), free tier: 1,000 requests/day, 8,000 tokens/minute | `GROQ_API_KEY`, `GROQ_MODEL` |
+| Gemini (optional direct backup) | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | `GEMINI_API_KEY`, `GEMINI_MODEL` |
 | Jobs mailbox (IMAP) | Hostinger email, e.g. `jobs@yourdomain` | `IMAP_USER`, `IMAP_PASSWORD` |
 | Digest email (SMTP) | Same Hostinger mailbox, or Brevo | `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` |
 | Owner password | Anything strong | `APP_PASSWORD`, `SESSION_SECRET` |
@@ -119,7 +119,7 @@ The plan needs Node.js hosting (hPanel → Websites → *Node.js* / "Node.js Web
 ## How it works
 
 - **Ingest:** every source produces the same job shape → normalized (city, company suffixes, title noise) → deduped on `company + title + city` → new jobs get an apply-link check and a classification → stored. A duplicate from another source merges into the existing row (source badges combined; the firm's own apply link beats LinkedIn, which beats job boards).
-- **Classification:** FreeLLMAPI (an OpenAI-style gateway that rotates over free AI keys; `openai/gpt-oss-120b` pinned because `auto:smart` once picked a weak 7B model) is asked first, then Groq. Each returns strict JSON (`is_relevant`, `role_type`, `is_bim`, `software`, `stipend_or_salary`, `match_score`, `reason`). On error, timeout (30 s FreeLLMAPI, 10 s Groq), 429, invalid JSON twice or a spent budget, the next provider gets the job; if Gemini also fails, the rule classifier labels it (`classifier = rules`) and the hourly `retry-classify` sends it to the AI again. A 429, outage or spent budget switches that provider off for the rest of the batch at once.
+- **Classification:** FreeLLMAPI (an OpenAI-style gateway holding the Groq and Gemini keys) is asked for each model in `FREELLM_MODEL` in turn: `openai/gpt-oss-120b` (Groq), then `gemini-3.5-flash` (Gemini). Models are pinned because a pinned model never falls over to another model, and `auto:smart` once picked a weak 7B one; a model that is down is skipped for the rest of the batch. Groq and Gemini are only called directly when `GROQ_API_KEY` / `GEMINI_API_KEY` are also set. Each returns strict JSON (`is_relevant`, `role_type`, `is_bim`, `software`, `stipend_or_salary`, `match_score`, `reason`). On error, timeout (30 s FreeLLMAPI, 10 s Groq), 429, invalid JSON twice or a spent budget, the next provider gets the job; if Gemini also fails, the rule classifier labels it (`classifier = rules`) and the hourly `retry-classify` sends it to the AI again. A 429, outage or spent budget switches that provider off for the rest of the batch at once.
 - **Feed rules:** experienced roles are hidden by default; closed postings never show; jobs older than 30 days are archived unless someone tracks them; times are shown in IST.
 - **Search history:** Jobs → *Your searches* lists each person's earlier searches that still have open roles, merged across repeats. Opening one is free; *Search again* runs it on Google Jobs.
 - **Tuning:** Settings → *Tune the filter* lists jobs the classifier dropped (restore with one tap) and jobs you hid with their reason. Add recurring false positives to *Also exclude roles mentioning*.

@@ -264,6 +264,26 @@ describe('FreeLLMAPI classifier', () => {
     assert.equal(classifier.downReasons.freellm, 'not_configured');
   });
 
+  it('tries the next model in its list when one is down, and skips it for the rest of the batch', async () => {
+    const asked = [];
+    const fetchImpl = async (url, init) => {
+      const { model } = JSON.parse(init.body);
+      asked.push(model);
+      return model === 'groq-model' ? new Response('{}', { status: 429 }) : groqResponse(GOOD, { tokens: 500 });
+    };
+    const classifier = session({ freellm: { ...freellmConfig, model: 'groq-model, gemini-model' }, groq: null, fetchImpl });
+    assert.equal((await classifier.classify(JOB)).classifier, 'freellm');
+    assert.equal((await classifier.classify(JOB)).classifier, 'freellm');
+    assert.deepEqual(asked, ['groq-model', 'gemini-model', 'gemini-model']);
+  });
+
+  it('falls back to rules when every model in its list is down', async () => {
+    const fetchImpl = async () => new Response('busy', { status: 503 });
+    const classifier = session({ freellm: { ...freellmConfig, model: 'a,b' }, groq: null, fetchImpl });
+    assert.equal((await classifier.classify(JOB)).classifier, 'rules');
+    assert.equal(classifier.downReasons.freellm, 'http');
+  });
+
   it('counts its bigger output cap in the token estimate', () => {
     assert.equal(requestEstimate(JOB, { maxOutputTokens: 1000 }) - requestEstimate(JOB, {}), 700);
   });

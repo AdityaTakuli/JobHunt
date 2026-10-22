@@ -324,9 +324,10 @@ function ConnectionsPanel({ system, onRan }) {
   const scheduler = configured.scheduler ? 'Runs inside the app' : configured.cron ? 'Hostinger cron jobs' : 'Nothing runs on its own yet';
   const connections = [
     { name: 'Google Jobs', detail: 'Job search via SerpApi', ok: configured.serpapi },
-    { name: 'FreeLLMAPI', detail: `Main AI · ${ai.freellm.model}`, ok: configured.freellm },
-    { name: 'Groq', detail: `Backup AI · ${ai.groq.model}`, ok: configured.groq },
-    { name: 'Gemini', detail: `Second backup AI · ${ai.gemini.model}`, ok: configured.gemini },
+    { name: 'FreeLLMAPI', detail: `Main AI · ${ai.freellm.model.split(',').join(' → ')}`, ok: configured.freellm },
+    // Groq and Gemini normally run inside FreeLLMAPI; list them only when called directly too.
+    ...(configured.groq || !configured.freellm ? [{ name: 'Groq', detail: `Direct backup AI · ${ai.groq.model}`, ok: configured.groq }] : []),
+    ...(configured.gemini || !configured.freellm ? [{ name: 'Gemini', detail: `Direct backup AI · ${ai.gemini.model}`, ok: configured.gemini }] : []),
     { name: 'LinkedIn alerts', detail: 'Jobs mailbox (IMAP)', ok: configured.imap },
     { name: 'Google sign-in', detail: 'Accounts and Gmail alerts (OAuth)', ok: configured.google },
     { name: 'Digest email', detail: 'Sending (SMTP)', ok: configured.smtp },
