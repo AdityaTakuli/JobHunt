@@ -3728,26 +3728,94 @@ dialog.dialog::backdrop {
   margin: -6px 0 18px;
 }
 
+/* Columns, not a grid: firms have anything from no roles to four, and grid cells all stretched to
+   the tallest card in their row, which left half the page empty. Three wider columns at most, so
+   a role like "Senior Associate/Lead, Pitch Architect" still fits on one line. */
 .co-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  gap: 14px;
+  columns: 380px 3;
+  column-gap: 14px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Each card wears its firm's colour (--brand, set per card in CompaniesPage). Mixing it into the
+   text colour is what keeps it readable in both themes: dark brands lift in the dark theme and
+   bright ones deepen in the light one. */
 .co-card {
+  --brand: var(--accent);
+  --brand-ink: color-mix(in srgb, var(--brand) 78%, var(--text));
+  /* Anything that has to be read (the monogram, the open count) leans further into the text
+     colour than the slab does, so even a pale or very dark brand stays legible. */
+  --brand-text: color-mix(in srgb, var(--brand) 50%, var(--text));
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px;
+  padding: 19px 16px 16px;
+  background: color-mix(in srgb, var(--brand-ink) 4%, var(--surface));
+  transition:
+    border-color 0.2s,
+    box-shadow 0.25s;
+}
+
+/* A floor slab in the firm's colour across the top of the card. */
+.co-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(90deg, var(--brand-ink), color-mix(in srgb, var(--brand-ink) 22%, transparent));
+}
+
+.co-card:hover {
+  border-color: color-mix(in srgb, var(--brand-ink) 42%, var(--border));
+  box-shadow: var(--shadow-hover);
 }
 
 .co-head {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+}
+
+.co-logo {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-ink) 13%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 30%, transparent);
+  color: var(--brand-text);
+  font-family: var(--font-brand);
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+/* Real logos are drawn for white stationery, so they keep a light tile in both themes. */
+.co-logo.has-logo {
+  background: #fff;
+}
+
+.co-logo img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.co-open {
+  background: color-mix(in srgb, var(--brand-ink) 15%, var(--surface));
+  color: var(--brand-text);
+}
+
+.co-card .co-roles a:hover {
+  color: var(--brand-text);
 }
 
 .co-head h2 {
