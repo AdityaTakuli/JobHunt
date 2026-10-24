@@ -89,9 +89,9 @@ export const config = {
     url: env.FREELLM_URL || '',
     apiKey: env.FREELLM_API_KEY || '',
     // Models tried in order, comma-separated: gpt-oss-120b and qwen3.8-27b run on Groq (each with
-    // its own daily quota), gemini-3.5-flash on Gemini. "auto" lets FreeLLMAPI pick (auto:smart
-    // once picked a weak 7B model).
-    model: env.FREELLM_MODEL || 'openai/gpt-oss-120b,qwen3.8-27b,gemini-3.5-flash',
+    // its own daily quota), gemini-3.5-flash-lite on Gemini (steadier than flash on the free
+    // tier). "auto" lets FreeLLMAPI pick (auto:smart once picked a weak 7B model).
+    model: env.FREELLM_MODEL || 'openai/gpt-oss-120b,qwen3.8-27b,gemini-3.5-flash-lite',
     // Models for reading application emails (lib/mailTriage.js). Groq first: it does not train on
     // what it is sent, which matters for people's mail. Empty = the same as FREELLM_MODEL.
     mailModel: env.FREELLM_MAIL_MODEL ?? 'openai/gpt-oss-120b,qwen3.8-27b',
