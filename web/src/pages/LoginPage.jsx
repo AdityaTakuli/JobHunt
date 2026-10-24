@@ -155,6 +155,9 @@ export default function LoginPage({ onLogin, google = false, passwordLogin = tru
               </>
             )}
           </form>
+          <a className="text-btn login-about" href="#/">
+            What is ArchJobs?
+          </a>
         </div>
       </div>
     </div>

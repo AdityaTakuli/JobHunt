@@ -10,8 +10,9 @@ import JobsPage from './pages/JobsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import TrackerPage from './pages/TrackerPage.jsx';
 
-// GSAP and the drawings are only needed on these two screens, so they load on demand and the
+// GSAP and the drawings are only needed on these screens, so they load on demand and the
 // everyday job list stays light.
+const HomePage = lazy(() => import('./pages/HomePage.jsx'));
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
 const Welcome = lazy(() => import('./components/Welcome.jsx'));
 
@@ -26,22 +27,22 @@ const ROUTES = [
 const MetaContext = createContext({ meta: null, refreshMeta: () => {}, me: null, refreshMe: () => {} });
 export const useMeta = () => useContext(MetaContext);
 
-function currentRoute() {
-  const path = window.location.hash.replace(/^#\/?/, '').split('?')[0];
-  return ROUTES.find((r) => r.path === path) || ROUTES[0];
-}
+const APP_PATHS = new Set(ROUTES.map((r) => r.path));
 
-function useRoute() {
-  const [route, setRoute] = useState(currentRoute);
+// The hash without its leading "#/" and query: 'jobs', 'signin', or '' for the front page.
+const hashPath = () => window.location.hash.replace(/^#\/?/, '').split('?')[0];
+
+function useHashPath() {
+  const [path, setPath] = useState(hashPath);
   useEffect(() => {
     const onHash = () => {
-      setRoute(currentRoute());
+      setPath(hashPath());
       window.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  return route;
+  return path;
 }
 
 // The welcome plays after every sign-in and on the first visit of each (IST) day.
@@ -134,8 +135,12 @@ function Shell() {
   const [me, setMe] = useState(null);
   const [meta, setMeta] = useState(null);
   const [welcome, setWelcome] = useState(false);
-  const route = useRoute();
+  const path = useHashPath();
+  const route = ROUTES.find((r) => r.path === path) || ROUTES[0];
   const [theme, cycleTheme] = useTheme();
+  // Google sent her back without signing in: read once, so clearing the address bar later cannot
+  // swap the sign-in card (which shows the reason) for the front page.
+  const [authError] = useState(() => new URLSearchParams(window.location.search).has('auth_error'));
 
   useEffect(() => {
     setUnauthorizedHandler(() => setAuth('out'));
@@ -174,8 +179,8 @@ function Shell() {
   }, [auth, refreshMeta]);
 
   useEffect(() => {
-    document.title = `${route.label} · ArchJobs`;
-  }, [route]);
+    document.title = auth === 'in' ? `${route.label} · ArchJobs` : 'ArchJobs · Architecture & BIM jobs and application tracker';
+  }, [route, auth]);
 
   const boot = (
     <div className="boot" aria-busy="true" aria-label="Loading">
@@ -188,17 +193,26 @@ function Shell() {
 
   if (auth === 'checking') return boot;
   if (auth === 'out') {
+    // The front page is public: it is all anyone (including Google's app review) sees at "/", and
+    // it explains the app and its Gmail access without a sign-in wall. Asking for the sign-in card,
+    // following a bookmarked app link, or coming back from Google with an error goes to the form.
+    const wantsSignIn = path === 'signin' || APP_PATHS.has(path) || authError;
     return (
       <Suspense fallback={boot}>
-        <LoginPage
-          google={login.google}
-          passwordLogin={login.passwordLogin}
-          onLogin={() => {
-            setAuth('in');
-            setWelcome(true);
-            refreshMe();
-          }}
-        />
+        {wantsSignIn ? (
+          <LoginPage
+            google={login.google}
+            passwordLogin={login.passwordLogin}
+            onLogin={() => {
+              window.location.hash = '#/jobs';
+              setAuth('in');
+              setWelcome(true);
+              refreshMe();
+            }}
+          />
+        ) : (
+          <HomePage google={login.google} theme={theme} onCycleTheme={cycleTheme} />
+        )}
       </Suspense>
     );
   }

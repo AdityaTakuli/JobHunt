@@ -1549,6 +1549,470 @@ dialog.dialog::backdrop {
   }
 }
 
+/* ---------- Home (the public front page) ---------- */
+
+.home {
+  --home-max: 1100px;
+}
+
+.home-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.home-header-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(var(--home-max), 100%);
+  height: var(--header-h);
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.home-nav {
+  display: none;
+}
+
+.home-nav a {
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.home-nav a:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 899px) {
+  .home-header-inner .brand {
+    margin-right: auto;
+  }
+}
+
+@media (min-width: 900px) {
+  .home-header-inner {
+    padding: 0 28px;
+  }
+
+  .home-nav {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin: 0 auto 0 32px;
+  }
+}
+
+.home-main {
+  max-width: none;
+  padding: 0;
+}
+
+/* ---------- Hero ---------- */
+
+.home-hero {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: 28px;
+  align-items: center;
+  width: min(var(--home-max), 100%);
+  margin: 0 auto;
+  padding: 40px 16px 48px;
+}
+
+/* The same drafting-paper grid as the sign-in screen, fading out toward the edges. */
+.home-hero::before {
+  content: '';
+  position: absolute;
+  inset: -40px 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at 60% 45%, #000 25%, transparent 72%);
+  pointer-events: none;
+}
+
+.home-eyebrow {
+  margin: 0 0 14px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.home-title {
+  font-family: var(--font-display);
+  font-size: clamp(38px, 7vw, 64px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.home-title em {
+  color: var(--accent-text);
+}
+
+.home-lede {
+  max-width: 50ch;
+  margin: 18px 0 0;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.home-lede .logo-word {
+  font-size: 1.05em;
+  color: var(--text);
+}
+
+.home-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.home-cta-google {
+  width: auto;
+  min-width: 232px;
+}
+
+.home-note {
+  max-width: 54ch;
+  margin: 26px 0 0;
+  padding-left: 14px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.home-art {
+  justify-self: center;
+  width: 100%;
+}
+
+.home-drawing {
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+@media (min-width: 900px) {
+  .home-hero {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 48px;
+    padding: 72px 28px 80px;
+  }
+
+  .home-drawing {
+    max-width: none;
+  }
+}
+
+/* ---------- Sections ---------- */
+
+.home-section {
+  width: min(var(--home-max), 100%);
+  margin: 0 auto;
+  padding: 52px 16px;
+  border-top: 1px solid var(--border);
+  scroll-margin-top: calc(var(--header-h) + 8px);
+}
+
+@media (min-width: 900px) {
+  .home-section {
+    padding: 64px 28px;
+  }
+}
+
+.home-h2 {
+  font-family: var(--font-display);
+  font-size: clamp(27px, 4vw, 38px);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.home-sub {
+  max-width: 64ch;
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(256px, 1fr));
+  gap: 14px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-feature {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 20px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.25s;
+}
+
+.home-feature:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-hover);
+}
+
+.home-feature-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.home-feature h3 {
+  font-size: 16px;
+}
+
+.home-feature p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Floor slabs: each step sits under an accent line, as in the mark. */
+.home-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 20px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-steps li {
+  padding-top: 14px;
+  border-top: 2.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.home-step-no {
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.home-steps h3 {
+  margin: 6px 0 5px;
+  font-size: 16px;
+}
+
+.home-steps p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ---------- What Google data is used for ---------- */
+
+.home-data {
+  display: grid;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+@media (min-width: 760px) {
+  .home-data {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+.home-scope {
+  padding: 22px;
+}
+
+.home-scope h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 17px;
+}
+
+.home-tag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.home-scope-perm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+
+.home-scope-perm code {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.home-scope p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.home-bullets {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.home-bullets strong {
+  color: var(--text);
+}
+
+.home-limits {
+  display: grid;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-limits li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.home-limits svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}
+
+.home-policy {
+  max-width: 72ch;
+  margin: 20px 0 0;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* ---------- Closing panel and footer ---------- */
+
+.home-end {
+  display: grid;
+  justify-items: center;
+  padding-bottom: 68px;
+  text-align: center;
+}
+
+.home-end .home-h2 {
+  margin-top: 16px;
+}
+
+.home-end .home-sub {
+  max-width: 44ch;
+}
+
+.home-cta-center {
+  justify-content: center;
+}
+
+.home-footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.home-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(var(--home-max), 100%);
+  margin: 0 auto;
+  padding: 22px 16px calc(22px + env(safe-area-inset-bottom));
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.home-footer p {
+  margin: 0;
+}
+
+.home-footer .logo-word {
+  font-size: 15px;
+  color: var(--text-2);
+}
+
+.home-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+@media (min-width: 900px) {
+  .home-footer-inner {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+}
+
+/* A way back to the front page from the sign-in card. */
+.login-about {
+  display: block;
+  margin-top: 18px;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+}
+
+.login-about:hover {
+  color: var(--text-2);
+  text-decoration: underline;
+}
+
 /* ---------- Blueprint drawing ---------- */
 
 .blueprint {
