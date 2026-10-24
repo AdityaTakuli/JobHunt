@@ -1551,8 +1551,9 @@ dialog.dialog::backdrop {
 
 /* ---------- Home (the public front page) ---------- */
 
+/* Same width as the app: the bar and the footer run edge to edge, the content stops at main's max. */
 .home {
-  --home-max: 1100px;
+  --home-max: 1480px;
 }
 
 .home-header {
@@ -1568,9 +1569,7 @@ dialog.dialog::backdrop {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: min(var(--home-max), 100%);
   height: var(--header-h);
-  margin: 0 auto;
   padding: 0 16px;
 }
 
@@ -1968,8 +1967,6 @@ dialog.dialog::backdrop {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: min(var(--home-max), 100%);
-  margin: 0 auto;
   padding: 22px 16px calc(22px + env(safe-area-inset-bottom));
   color: var(--text-3);
   font-size: 13px;
