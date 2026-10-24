@@ -1,59 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { brandOf } from '../brands.js';
 import { RowsSkeleton } from '../components/Skeleton.jsx';
-import { formatDate, formatDateTime, ROLE_LABELS } from '../format.js';
+import { formatDateTime } from '../format.js';
 import { IconExternal } from '../icons.jsx';
 
 // Global firms with India offices that take architecture interns and freshers. The ones marked
 // "Checked daily" are read from their own careers feed every morning; for the rest, the button
-// opens their careers site. Campus hiring at these firms mostly runs September to December.
-
-// Three is enough to show what a firm is hiring for, and keeps the cards in a row the same
-// height; the rest are a tap away in Jobs.
-const ROLES_SHOWN = 3;
-
-function RoleMeta({ role }) {
-  const chips = [role.city, ROLE_LABELS[role.role_type], role.posted_at && formatDate(role.posted_at)].filter(Boolean);
-  if (!chips.length) return null;
-  return (
-    <span className="co-role-meta">
-      {chips.map((chip) => (
-        <span className="co-chip" key={`${role.id}-${chip}`}>
-          {chip}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function RoleList({ company }) {
-  if (!company.roles.length) {
-    return <p className="small muted co-none">{company.tracked ? 'No open architecture roles in India right now.' : 'No roles seen yet. Check their careers site.'}</p>;
-  }
-  const roles = company.roles.slice(0, ROLES_SHOWN);
-  const more = company.openRoles - roles.length;
-  return (
-    <div className="co-open-roles">
-      <p className="co-roles-label">Open roles</p>
-      <ul className="co-roles">
-        {roles.map((r) => (
-          <li className="co-role" key={r.id}>
-            <a href={r.apply_url} target="_blank" rel="noopener noreferrer">
-              {r.title}
-            </a>
-            <RoleMeta role={r} />
-          </li>
-        ))}
-        {more > 0 && (
-          <li className="small muted co-more">
-            and {more} more in <a href="#/jobs">Jobs</a>
-          </li>
-        )}
-      </ul>
-    </div>
-  );
-}
+// opens their careers site. Stored openings live on Jobs — this page only says how many each
+// firm has, and puts those firms first.
 
 // The firm's logo on a tile of its own colour; its monogram while the logo is missing or blocked.
 function CompanyLogo({ brand }) {
@@ -80,12 +35,13 @@ function CompanyCard({ company }) {
           <h2>{company.name}</h2>
           <div className="small muted">{[company.kind, company.cities].filter(Boolean).join(' · ')}</div>
         </div>
-        {company.openRoles > 0 && <span className="badge co-open">{company.openRoles} open</span>}
+        {company.openRoles > 0 && (
+          <a className="badge co-open" href="#/jobs" title="See these roles on Jobs">
+            {company.openRoles} open
+          </a>
+        )}
       </div>
       {company.note && <p className="co-note">{company.note}</p>}
-      <RoleList company={company} />
-      {/* Only the firms read from a feed say anything here: "not checked automatically" was a line
-          of grey noise on every other card, and the Careers site button says it well enough. */}
       <div className="co-foot">
         {company.tracked && (
           <span className="small muted" title={company.lastError || undefined}>
@@ -115,6 +71,12 @@ export default function CompaniesPage() {
   }, []);
   useEffect(load, [load]);
 
+  // Hiring first, then the rest in the same order the server sent.
+  const listed = useMemo(() => {
+    if (!companies) return null;
+    return [...companies].sort((a, b) => b.openRoles - a.openRoles);
+  }, [companies]);
+
   const tracked = companies?.filter((c) => c.tracked).length || 0;
   return (
     <div>
@@ -130,10 +92,10 @@ export default function CompaniesPage() {
           {error}
         </p>
       )}
-      {!companies && !error && <RowsSkeleton rows={6} label="Loading companies" />}
-      {companies && (
+      {!listed && !error && <RowsSkeleton rows={6} label="Loading companies" />}
+      {listed && (
         <ul className="co-grid">
-          {companies.map((c) => (
+          {listed.map((c) => (
             <CompanyCard key={c.slug} company={c} />
           ))}
         </ul>
