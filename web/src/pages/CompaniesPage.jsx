@@ -9,8 +9,9 @@ import { IconExternal } from '../icons.jsx';
 // "Checked daily" are read from their own careers feed every morning; for the rest, the button
 // opens their careers site. Campus hiring at these firms mostly runs September to December.
 
-// Four is enough to show what a firm is hiring for; the rest are a tap away in Jobs.
-const ROLES_SHOWN = 4;
+// Three is enough to show what a firm is hiring for, and keeps the cards in a row the same
+// height; the rest are a tap away in Jobs.
+const ROLES_SHOWN = 3;
 
 function RoleList({ company }) {
   if (!company.roles.length) {
@@ -31,7 +32,7 @@ function RoleList({ company }) {
         </li>
       ))}
       {more > 0 && (
-        <li className="small muted">
+        <li className="small muted co-more">
           and {more} more in <a href="#/jobs">Jobs</a>
         </li>
       )}
@@ -40,7 +41,7 @@ function RoleList({ company }) {
 }
 
 // The firm's logo on a tile of its own colour; its monogram while the logo is missing or blocked.
-function CompanyLogo({ brand, name }) {
+function CompanyLogo({ brand }) {
   const [failed, setFailed] = useState(false);
   const showLogo = brand.logo && !failed;
   return (
@@ -59,7 +60,7 @@ function CompanyCard({ company }) {
   return (
     <li className="card co-card" style={{ '--brand': brand.color }}>
       <div className="co-head">
-        <CompanyLogo brand={brand} name={company.name} />
+        <CompanyLogo brand={brand} />
         <div className="grow">
           <h2>{company.name}</h2>
           <div className="small muted">{[company.kind, company.cities].filter(Boolean).join(' · ')}</div>
@@ -68,8 +69,8 @@ function CompanyCard({ company }) {
       </div>
       {company.note && <p className="co-note">{company.note}</p>}
       <RoleList company={company} />
-      {/* Only the firms read from a feed say anything here: "not checked automatically" on the
-          other thirteen cards was a line of grey noise on every one of them. */}
+      {/* Only the firms read from a feed say anything here: "not checked automatically" was a line
+          of grey noise on every other card, and the Careers site button says it well enough. */}
       <div className="co-foot">
         {company.tracked && (
           <span className="small muted" title={company.lastError || undefined}>

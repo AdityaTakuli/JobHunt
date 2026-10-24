@@ -3728,12 +3728,16 @@ dialog.dialog::backdrop {
   margin: -6px 0 18px;
 }
 
-/* Columns, not a grid: firms have anything from no roles to four, and grid cells all stretched to
-   the tallest card in their row, which left half the page empty. Three wider columns at most, so
-   a role like "Senior Associate/Lead, Pitch Architect" still fits on one line. */
+/* Three wide columns rather than four narrow ones, so a role like "Senior Associate/Lead, Pitch
+   Architect-South" fits on one line instead of wrapping into a knot. align-items: start lets each
+   card end where its content ends: stretched to the tallest card in the row, a firm with no open
+   roles was left with a hole in the middle of it. The note and role list are capped as well, so
+   one firm's long note cannot drag a whole row taller than it needs to be. */
 .co-grid {
-  columns: 380px 3;
-  column-gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+  align-items: start;
+  gap: 14px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -3752,7 +3756,7 @@ dialog.dialog::backdrop {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 19px 16px 16px;
+  padding: 19px 18px 16px;
   background: color-mix(in srgb, var(--brand-ink) 4%, var(--surface));
   transition:
     border-color 0.2s,
@@ -3824,9 +3828,13 @@ dialog.dialog::backdrop {
 }
 
 .co-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   margin: 0;
-  font-size: 14px;
+  overflow: hidden;
   color: var(--text-2);
+  font-size: 14px;
 }
 
 .co-roles {
@@ -3841,6 +3849,11 @@ dialog.dialog::backdrop {
 .co-roles li {
   display: grid;
   gap: 1px;
+}
+
+/* One line of running text, not a title above a subtitle like the roles above it. */
+.co-roles .co-more {
+  display: block;
 }
 
 .co-roles a {
@@ -3864,10 +3877,13 @@ dialog.dialog::backdrop {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   margin-top: auto;
   padding-top: 4px;
+}
+
+.co-careers {
+  margin-left: auto;
 }
 
 /* Gmail bar on the Jobs page, and the emails-read dialog */
