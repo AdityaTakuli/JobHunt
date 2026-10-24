@@ -5,7 +5,7 @@ node_modules/
 # Secrets: set these in hPanel's environment settings, never commit them
 .env
 .env.*
-hostinger.env
+hostinger*.env
 !.env.example
 
 # Logs, editors, OS
