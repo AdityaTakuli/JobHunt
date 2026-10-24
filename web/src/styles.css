@@ -3837,23 +3837,81 @@ dialog.dialog::backdrop {
   font-size: 14px;
 }
 
+.co-open-roles {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.co-roles-label {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
 .co-roles {
   display: grid;
   gap: 8px;
   margin: 0;
-  padding: 10px 0 0;
-  border-top: 1px solid var(--border);
+  padding: 0;
   list-style: none;
 }
 
-.co-roles li {
+/* Each opening is its own swatch: a left slab in the firm's colour, a tinted tile, and chips
+   for city / kind / date, so three vacancies read as three things you can apply to. */
+.co-role {
+  position: relative;
   display: grid;
-  gap: 1px;
+  gap: 7px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--brand-ink) 18%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--brand-ink) 8%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--brand-ink);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
 }
 
-/* One line of running text, not a title above a subtitle like the roles above it. */
-.co-roles .co-more {
+.co-role:hover {
+  border-color: color-mix(in srgb, var(--brand-ink) 40%, var(--border));
+  background: color-mix(in srgb, var(--brand-ink) 14%, var(--surface));
+}
+
+/* The whole swatch is the link, not just the words in it. */
+.co-role a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.co-role-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.co-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-ink) 12%, var(--surface));
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* One line of running text, not a swatch like the roles above it. */
+.co-more {
   display: block;
+  padding: 2px 2px 0;
 }
 
 .co-roles a {
@@ -3863,8 +3921,7 @@ dialog.dialog::backdrop {
 }
 
 .co-roles a:hover {
-  color: var(--accent-text);
-  text-decoration: underline;
+  color: var(--brand-text);
 }
 
 .co-none {

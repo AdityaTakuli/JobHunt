@@ -13,6 +13,20 @@ import { IconExternal } from '../icons.jsx';
 // height; the rest are a tap away in Jobs.
 const ROLES_SHOWN = 3;
 
+function RoleMeta({ role }) {
+  const chips = [role.city, ROLE_LABELS[role.role_type], role.posted_at && formatDate(role.posted_at)].filter(Boolean);
+  if (!chips.length) return null;
+  return (
+    <span className="co-role-meta">
+      {chips.map((chip) => (
+        <span className="co-chip" key={`${role.id}-${chip}`}>
+          {chip}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function RoleList({ company }) {
   if (!company.roles.length) {
     return <p className="small muted co-none">{company.tracked ? 'No open architecture roles in India right now.' : 'No roles seen yet. Check their careers site.'}</p>;
@@ -20,23 +34,24 @@ function RoleList({ company }) {
   const roles = company.roles.slice(0, ROLES_SHOWN);
   const more = company.openRoles - roles.length;
   return (
-    <ul className="co-roles">
-      {roles.map((r) => (
-        <li key={r.id}>
-          <a href={r.apply_url} target="_blank" rel="noopener noreferrer">
-            {r.title}
-          </a>
-          <span className="small muted">
-            {[r.city, ROLE_LABELS[r.role_type], r.posted_at && formatDate(r.posted_at)].filter(Boolean).join(' · ')}
-          </span>
-        </li>
-      ))}
-      {more > 0 && (
-        <li className="small muted co-more">
-          and {more} more in <a href="#/jobs">Jobs</a>
-        </li>
-      )}
-    </ul>
+    <div className="co-open-roles">
+      <p className="co-roles-label">Open roles</p>
+      <ul className="co-roles">
+        {roles.map((r) => (
+          <li className="co-role" key={r.id}>
+            <a href={r.apply_url} target="_blank" rel="noopener noreferrer">
+              {r.title}
+            </a>
+            <RoleMeta role={r} />
+          </li>
+        ))}
+        {more > 0 && (
+          <li className="small muted co-more">
+            and {more} more in <a href="#/jobs">Jobs</a>
+          </li>
+        )}
+      </ul>
+    </div>
   );
 }
 
