@@ -2,13 +2,52 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { brandOf } from '../brands.js';
 import { RowsSkeleton } from '../components/Skeleton.jsx';
-import { formatDateTime } from '../format.js';
+import { formatDate, formatDateTime, ROLE_LABELS } from '../format.js';
 import { IconExternal } from '../icons.jsx';
 
 // Global firms with India offices that take architecture interns and freshers. The ones marked
 // "Checked daily" are read from their own careers feed every morning; for the rest, the button
-// opens their careers site. Stored openings live on Jobs — this page only says how many each
-// firm has, and puts those firms first.
+// opens their careers site. Firms that already have openings in the feed sit at the top, with
+// those roles listed under the name.
+
+function RoleMeta({ role }) {
+  const chips = [role.city, ROLE_LABELS[role.role_type], role.posted_at && formatDate(role.posted_at)].filter(Boolean);
+  if (!chips.length) return null;
+  return (
+    <span className="co-role-meta">
+      {chips.map((chip) => (
+        <span className="co-chip" key={`${role.id}-${chip}`}>
+          {chip}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function RoleList({ company }) {
+  if (!company.roles?.length) return null;
+  const more = company.openRoles - company.roles.length;
+  return (
+    <div className="co-open-roles">
+      <p className="co-roles-label">Open roles</p>
+      <ul className="co-roles">
+        {company.roles.map((r) => (
+          <li className="co-role" key={r.id}>
+            <a href={r.apply_url} target="_blank" rel="noopener noreferrer">
+              {r.title}
+            </a>
+            <RoleMeta role={r} />
+          </li>
+        ))}
+        {more > 0 && (
+          <li className="small muted co-more">
+            and {more} more in <a href="#/jobs">Jobs</a>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
 
 // The firm's logo on a tile of its own colour; its monogram while the logo is missing or blocked.
 function CompanyLogo({ brand }) {
@@ -42,6 +81,7 @@ function CompanyCard({ company }) {
         )}
       </div>
       {company.note && <p className="co-note">{company.note}</p>}
+      <RoleList company={company} />
       <div className="co-foot">
         {company.tracked && (
           <span className="small muted" title={company.lastError || undefined}>

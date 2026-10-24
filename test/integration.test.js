@@ -905,7 +905,7 @@ describe('integration', { skip: !dbReady }, () => {
     assert.equal(status, 200);
     assert.equal(data.companies.length, COMPANIES.length);
     const sjRow = data.companies.find((c) => c.slug === 'surbana-jurong');
-    assert.deepEqual([sjRow.tracked, sjRow.openRoles, sjRow.lastError], [true, 1, null]);
+    assert.deepEqual([sjRow.tracked, sjRow.openRoles, sjRow.roles[0].title, sjRow.lastError], [true, 1, 'Graduate Architect', null]);
     assert.ok(data.companies[0].openRoles >= data.companies[data.companies.length - 1].openRoles, 'firms with openings come first');
     assert.ok(sjRow.lastCheckedAt);
     const rRow = data.companies.find((c) => c.slug === 'ramboll');
