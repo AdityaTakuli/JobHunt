@@ -1,6 +1,7 @@
 // Labels a job through any OpenAI-style /chat/completions endpoint (Groq, FreeLLMAPI). Throws
 // LlmError on anything that should trigger the next provider or the rule-based fallback, and
-// reports each call's token use through onUsage.
+// reports each call's token use through onUsage. chatJson is the same call for any JSON task
+// (lib/mailTriage.js uses it for job emails).
 
 import { LlmError, MAX_OUTPUT_TOKENS, parseLabels, requestError, retryInvalidJsonOnce, SYSTEM_PROMPT, userPrompt } from './llm.js';
 
@@ -9,7 +10,8 @@ const header = (res, name) => {
   return value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 };
 
-async function callChat(job, { url, label, apiKey, model, reasoningEffort, maxOutputTokens, timeoutMs, extraExclude, cities, maxDescriptionChars, fetchImpl, onUsage }) {
+// One call in JSON mode. Returns the reply text (JSON, not yet checked).
+export async function chatJson({ url, label, apiKey, model, system, user, reasoningEffort, maxOutputTokens = MAX_OUTPUT_TOKENS, timeoutMs = 10_000, fetchImpl = fetch, onUsage }) {
   let res;
   try {
     res = await fetchImpl(url, {
@@ -23,8 +25,8 @@ async function callChat(job, { url, label, apiKey, model, reasoningEffort, maxOu
         ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt(job, { extraExclude, cities, maxDescriptionChars }) },
+          { role: 'system', content: system },
+          { role: 'user', content: user },
         ],
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -54,25 +56,13 @@ async function callChat(job, { url, label, apiKey, model, reasoningEffort, maxOu
     throw new LlmError(`${label} response was not JSON`, 'invalid_json');
   }
   await onUsage?.({ tokens: data?.usage?.total_tokens ?? null, remainingRequests });
-  return parseLabels(data?.choices?.[0]?.message?.content, label);
+  return data?.choices?.[0]?.message?.content;
 }
 
 // Labels one job. Invalid JSON is retried once; any other failure throws immediately.
 export async function classifyWithOpenAiChat(job, options) {
-  const {
-    url,
-    label,
-    apiKey,
-    model,
-    reasoningEffort = '',
-    maxOutputTokens = MAX_OUTPUT_TOKENS,
-    timeoutMs = 10_000,
-    extraExclude = [],
-    cities = [],
-    maxDescriptionChars,
-    fetchImpl = fetch,
-    onUsage,
-  } = options;
-  const args = { url, label, apiKey, model, reasoningEffort, maxOutputTokens, timeoutMs, extraExclude, cities, maxDescriptionChars, fetchImpl, onUsage };
-  return retryInvalidJsonOnce(() => callChat(job, args));
+  const { extraExclude = [], cities = [], maxDescriptionChars, label } = options;
+  const call = async () =>
+    parseLabels(await chatJson({ ...options, system: SYSTEM_PROMPT, user: userPrompt(job, { extraExclude, cities, maxDescriptionChars }) }), label);
+  return retryInvalidJsonOnce(call);
 }

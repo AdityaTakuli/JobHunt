@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS applications (
   contact_name VARCHAR(150) NULL,
   contact_email VARCHAR(200) NULL,
   notes TEXT NULL,
+  source VARCHAR(12) NULL,                   -- gmail = created from her email, NULL = added by her
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   UNIQUE KEY uq_app_user_job (user_id, job_id),
@@ -141,6 +142,7 @@ CREATE TABLE IF NOT EXISTS users (
   gmail_token TEXT NULL,                     -- Gmail refresh token, encrypted (lib/secretBox.js)
   gmail_connected_at DATETIME NULL,
   gmail_synced_at DATETIME NULL,
+  gmail_apps_synced_at DATETIME NULL,        -- last read of her application emails
   gmail_error VARCHAR(300) NULL,
   created_at DATETIME NOT NULL,
   last_login_at DATETIME NULL,
@@ -172,4 +174,22 @@ CREATE TABLE IF NOT EXISTS job_hides (
 CREATE TABLE IF NOT EXISTS closed_jobs (
   dedupe_key CHAR(40) NOT NULL PRIMARY KEY,
   closed_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Application emails read from someone's Gmail (applied / interview / offer / rejected ...), one
+-- row per message so none is read twice, and the tracker entry each one moved.
+CREATE TABLE IF NOT EXISTS mail_events (
+  user_id INT UNSIGNED NOT NULL,
+  gmail_id VARCHAR(32) NOT NULL,
+  received_at DATETIME NOT NULL,
+  from_addr VARCHAR(254) NULL,
+  subject VARCHAR(300) NULL,
+  kind VARCHAR(12) NOT NULL,                 -- applied / interview / assessment / offer / rejected / other
+  company VARCHAR(200) NULL,
+  role VARCHAR(300) NULL,
+  classifier VARCHAR(8) NOT NULL,            -- freellm / rules
+  application_id INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (user_id, gmail_id),
+  KEY idx_mail_app (application_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

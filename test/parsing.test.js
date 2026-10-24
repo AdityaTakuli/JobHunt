@@ -217,3 +217,12 @@ describe('SerpApi Google Jobs', () => {
     assert.equal(parsePostedAt('', now), null);
   });
 });
+
+describe('schema.sql', () => {
+  it('splits into whole CREATE TABLE statements (no ";" inside a comment)', async () => {
+    const { schemaStatements } = await import('../server/db/migrate.js');
+    const statements = schemaStatements(fs.readFileSync(new URL('../server/db/schema.sql', import.meta.url), 'utf8'));
+    assert.ok(statements.length >= 12);
+    for (const s of statements) assert.match(s, /^CREATE TABLE IF NOT EXISTS \w+ \([\s\S]+\) ENGINE=InnoDB/, s.slice(0, 80));
+  });
+});

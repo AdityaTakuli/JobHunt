@@ -52,6 +52,11 @@ function AppCard({ app, onMove, onEdit }) {
         </button>
       </h3>
       <div className="small muted">{[app.company, app.city].filter(Boolean).join(' · ')}</div>
+      {app.source === 'gmail' && (
+        <span className="badge badge-outline app-tag" title="Added from an email about this application. Its notes say which.">
+          From Gmail
+        </span>
+      )}
       {app.closed_at && (
         <span className="badge badge-amber app-closed" title={app.closed_reason === 'deadline' ? 'Its last date to apply has passed.' : 'The company took it down.'}>
           Posting closed
@@ -142,7 +147,9 @@ function Table({ apps, onMove, onEdit }) {
             <tr key={app.id}>
               <td>
                 <div className="title-cell">{app.title}</div>
-                <div className="small muted">{[app.company, app.city, app.closed_at ? 'Posting closed' : null].filter(Boolean).join(' · ')}</div>
+                <div className="small muted">
+                  {[app.company, app.city, app.source === 'gmail' ? 'From Gmail' : null, app.closed_at ? 'Posting closed' : null].filter(Boolean).join(' · ')}
+                </div>
       {app.closed_at && (
         <span className="badge badge-amber app-closed" title={app.closed_reason === 'deadline' ? 'Its last date to apply has passed.' : 'The company took it down.'}>
           Posting closed

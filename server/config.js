@@ -55,6 +55,8 @@ export const config = {
     clientSecret: env.GOOGLE_CLIENT_SECRET || '',
     // Gmail messages read per person per sync.
     gmailMaxMessages: num(env.GMAIL_MAX_MESSAGES, 30),
+    // Application emails (applied / interview / offer / rejected) read per person per sync.
+    gmailApplicationMessages: num(env.GMAIL_APPLICATION_MESSAGES, 40),
   },
 
   // Protects /api/cron/* endpoints called by Hostinger cron.
@@ -86,9 +88,13 @@ export const config = {
   freellm: {
     url: env.FREELLM_URL || '',
     apiKey: env.FREELLM_API_KEY || '',
-    // Models tried in order, comma-separated: gpt-oss-120b runs on Groq, gemini-3.5-flash on
-    // Gemini. "auto" lets FreeLLMAPI pick (auto:smart once picked a weak 7B model).
-    model: env.FREELLM_MODEL || 'openai/gpt-oss-120b,gemini-3.5-flash',
+    // Models tried in order, comma-separated: gpt-oss-120b and qwen3.8-27b run on Groq (each with
+    // its own daily quota), gemini-3.5-flash on Gemini. "auto" lets FreeLLMAPI pick (auto:smart
+    // once picked a weak 7B model).
+    model: env.FREELLM_MODEL || 'openai/gpt-oss-120b,qwen3.8-27b,gemini-3.5-flash',
+    // Models for reading application emails (lib/mailTriage.js). Groq first: it does not train on
+    // what it is sent, which matters for people's mail. Empty = the same as FREELLM_MODEL.
+    mailModel: env.FREELLM_MAIL_MODEL ?? 'openai/gpt-oss-120b,qwen3.8-27b',
     // gpt-oss always reasons a little; "low" keeps it short. Empty = omit.
     reasoningEffort: env.FREELLM_REASONING_EFFORT ?? 'low',
     // Room for the reasoning plus the ~100-token JSON answer.

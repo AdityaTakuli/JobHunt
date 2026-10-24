@@ -73,7 +73,7 @@ export async function signInWithGoogle(profile, now = new Date()) {
 // Removes someone and everything that is theirs alone. The owner cannot be removed.
 export async function deleteUser(id) {
   if (Number(id) === OWNER_ID) throw Object.assign(new Error("The owner's account can't be removed."), { status: 400 });
-  for (const table of ['applications', 'firms', 'searches', 'user_settings', 'job_hides']) {
+  for (const table of ['applications', 'firms', 'searches', 'user_settings', 'job_hides', 'mail_events']) {
     await query(`DELETE FROM ${table} WHERE user_id = ?`, [id]);
   }
   const res = await query('DELETE FROM users WHERE id = ?', [id]);

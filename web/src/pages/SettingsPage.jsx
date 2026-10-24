@@ -21,13 +21,13 @@ const TAB_KEY = 'aj-settings-tab';
 const TASKS = [
   { name: 'fetch-jobs', label: 'Fetch jobs', hint: "Search Google Jobs now. Uses up to 3 of this month's searches." },
   { name: 'read-inbox', label: 'Check LinkedIn inbox', hint: 'Read new job-alert emails in the jobs mailbox.' },
-  { name: 'read-gmail', label: "Check everyone's Gmail", hint: 'Read new LinkedIn alerts for everyone who connected Gmail.' },
+  { name: 'read-gmail', label: "Check everyone's Gmail", hint: 'Read new LinkedIn alerts and application emails for everyone who connected Gmail.' },
   { name: 'archive', label: 'Clean up postings', hint: 'Close postings past their deadline or taken down, and delete old ones.' },
   { name: 'retry-classify', label: 'Re-label with AI', hint: 'Send keyword-labelled jobs to the AI (FreeLLMAPI, Groq or Gemini). Uses AI tokens.' },
   { name: 'send-digest', label: 'Send digest', hint: "Email today's digest right away." },
 ];
 
-const LOG_LABELS = { ...SOURCE_LABELS, groq: 'AI re-label', digest: 'Digest email', gmail: 'Gmail alerts', cleanup: 'Clean-up' };
+const LOG_LABELS = { ...SOURCE_LABELS, groq: 'AI re-label', digest: 'Digest email', gmail: 'Gmail', cleanup: 'Clean-up' };
 const EASE = [0.22, 1, 0.36, 1];
 
 function summarize(result) {
@@ -541,7 +541,11 @@ function AccountPanel({ onLogout }) {
       if (kind === 'sync') {
         const r = d.result || {};
         toast({
-          message: r.skipped ? `Skipped: ${r.skipped}` : r.errors?.length ? r.errors[0] : `${r.messages || 0} alert emails read, ${r.new || 0} new roles.`,
+          message: r.skipped
+            ? `Skipped: ${r.skipped}`
+            : r.errors?.length
+              ? r.errors[0]
+              : `${r.messages || 0} alert emails read, ${r.new || 0} new roles. ${r.emails || 0} application emails read, ${r.tracked || 0} tracker updates.`,
           error: Boolean(r.errors?.length),
           duration: 7000,
         });
@@ -585,8 +589,8 @@ function AccountPanel({ onLogout }) {
 
       <Section
         id="set-gmail"
-        title="LinkedIn alerts from Gmail"
-        description="Bring the LinkedIn job alerts in your Gmail into ArchJobs, checked every 30 minutes."
+        title="Gmail"
+        description="Bring your LinkedIn job alerts into Jobs, and keep your Tracker up to date from the emails about your applications. Checked every 30 minutes."
         action={gmail && <StatusBadge ok={gmail.connected} okLabel="Connected" offLabel="Not connected" />}
       >
         {!google ? (
@@ -594,8 +598,9 @@ function AccountPanel({ onLogout }) {
         ) : gmail?.connected ? (
           <>
             <p className="set-note">
-              Connected{gmail.syncedAt ? ` · last checked ${formatDateTime(gmail.syncedAt)}` : ' · first check running'}. Read-only: ArchJobs only opens
-              LinkedIn job-alert emails and never sends, deletes or changes anything.
+              Connected{gmail.syncedAt ? ` · last checked ${formatDateTime(gmail.syncedAt)}` : ' · first check running'}. Read-only: ArchJobs opens
+              LinkedIn job alerts and emails about your applications (sent, interview, test, offer, rejection), and never sends, deletes or changes
+              anything. Application emails are read by AI to update your Tracker.
             </p>
             {gmail.error && (
               <p className="form-error" role="alert">
@@ -621,9 +626,11 @@ function AccountPanel({ onLogout }) {
             <ol className="set-steps">
               <li>On LinkedIn, create job alerts (for example “Architect” or “BIM intern” in your city) and set them to arrive by email.</li>
               <li>Connect Gmail below with {person.email ? <strong>{person.email}</strong> : 'the Google account you use'}. New alerts show up in Jobs within 30 minutes.</li>
+              <li>Emails about your applications from the last 60 days fill your Tracker: roles you applied to, interviews, tests, offers and rejections.</li>
             </ol>
             <p className="set-note">
-              Read-only: ArchJobs only opens LinkedIn job-alert emails and never sends, deletes or changes anything. Google may say it “hasn't verified this
+              Read-only: ArchJobs opens LinkedIn job alerts and emails about your applications, and never sends, deletes or changes anything. Application
+              emails are read by AI (subject, sender and the start of the message) to update your Tracker. Google may say it “hasn't verified this
               app”: choose <em>Advanced</em>, then <em>Go to ArchJobs</em>. You can disconnect any time.
             </p>
             <div className="set-actions">
@@ -793,7 +800,7 @@ export default function SettingsPage() {
     if (!ok && !failed) return;
     window.history.replaceState(null, '', `/${window.location.hash}`);
     setTab('account');
-    if (ok) toast({ message: 'Gmail connected. Your LinkedIn job alerts are being read now.', duration: 7000 });
+    if (ok) toast({ message: 'Gmail connected. Your job alerts and application emails are being read now.', duration: 7000 });
     else toast({ message: GMAIL_ERRORS[failed] || GMAIL_ERRORS.failed, error: true, duration: 9000 });
   }, [toast]);
 

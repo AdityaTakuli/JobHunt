@@ -84,7 +84,11 @@ Daily totals are stored in the `ai_usage` table, so every task and restart share
 
 **Who may join:** the owner, `ADMIN_EMAILS`, the emails in `ALLOWED_EMAILS` (or `*` for anyone), and the list the owner keeps in Settings → People. Removing someone there deletes their own data and takes them off the list.
 
-**Gmail job alerts.** In Settings → Account, *Connect Gmail* asks Google for read-only Gmail access (`gmail.readonly`, offline). Every 30 minutes `read-gmail` searches each connected inbox for LinkedIn job-alert emails only (`from:jobalerts-noreply@linkedin.com …`), parses them like the forwarded alerts and adds the jobs to the shared list. Nothing in the mailbox is changed. Refresh tokens are stored encrypted with AES-256-GCM (`TOKEN_SECRET`); *Disconnect* deletes the token and revokes it at Google. Forwarding to the jobs mailbox (below) still works alongside.
+**Gmail job alerts.** In Settings → Account, *Connect Gmail* asks Google for read-only Gmail access (`gmail.readonly`, offline). Every 30 minutes `read-gmail` searches each connected inbox for LinkedIn job-alert emails only (`from:jobalerts-noreply@linkedin.com …`), parses them like the forwarded alerts and adds the jobs to the shared list.
+
+**Tracker from Gmail.** The same run searches for emails about that person's own applications (subjects with *application*, *interview*, *offer*, *assessment* …, LinkedIn's "your application was sent to …"; promotions and job alerts left out), 60 days back on the first run. FreeLLMAPI reads each one (`FREELLM_MAIL_MODEL`, Groq models by default; sender, subject and the first ~1,800 characters, quoted replies dropped) and labels it applied / interview / assessment / offer / rejected / other with the company and role. `lib/tracker.js` then moves the matching tracker entry forward (never backwards; rejected unless there is an offer), notes the email on it and keeps a recruiter's address as the contact, or adds the role as a new entry marked *From Gmail*. Each email is recorded once in `mail_events`. While the AI is down, keyword rules stand in and anything they can't place is read again on the next run.
+
+Nothing in the mailbox is changed. Refresh tokens are stored encrypted with AES-256-GCM (`TOKEN_SECRET`); *Disconnect* deletes the token and revokes it at Google. Forwarding to the jobs mailbox (below) still works alongside.
 
 **Setting up Google (once, free):**
 1. [console.cloud.google.com](https://console.cloud.google.com) → create a project → *APIs & Services* → *Library* → enable **Gmail API**.

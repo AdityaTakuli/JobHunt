@@ -110,14 +110,33 @@ async function gmailGet(token, path) {
   return data;
 }
 
-// LinkedIn job alert emails since `after` (newest first), as raw RFC 822 Buffers.
-export async function fetchAlertEmails(token, { after, max = config.google.gmailMaxMessages }) {
-  const q = `from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com) after:${Math.floor(after.getTime() / 1000)}`;
+// Raw RFC 822 messages matching a Gmail search, newest first: [{ id, raw: Buffer }].
+async function searchMessages(token, q, max) {
   const list = await gmailGet(token, `/messages?${new URLSearchParams({ q, maxResults: String(max) })}`);
   const out = [];
   for (const { id } of list.messages || []) {
     const msg = await gmailGet(token, `/messages/${encodeURIComponent(id)}?format=raw`);
-    if (msg.raw) out.push(Buffer.from(msg.raw, 'base64url'));
+    if (msg.raw) out.push({ id, raw: Buffer.from(msg.raw, 'base64url') });
   }
   return out;
+}
+
+const afterSeconds = (date) => Math.floor(date.getTime() / 1000);
+
+// LinkedIn job alert emails since `after` (newest first), as raw RFC 822 Buffers.
+export async function fetchAlertEmails(token, { after, max = config.google.gmailMaxMessages }) {
+  const q = `from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com) after:${afterSeconds(after)}`;
+  return (await searchMessages(token, q, max)).map((m) => m.raw);
+}
+
+// Emails about her own applications since `after`: confirmations, interviews, tests, offers,
+// rejections. Wide on purpose; lib/mailTriage.js sorts out what each one means. Job alerts,
+// promotions and social mail are left out.
+export const APPLICATION_QUERY =
+  '-from:jobalerts-noreply@linkedin.com -category:promotions -category:social ' +
+  '(subject:(application OR applied OR applying OR interview OR offer OR shortlisted OR assessment OR assignment OR candidature OR "next steps" OR "design task") ' +
+  'OR "your application was sent to" OR "thank you for applying")';
+
+export async function fetchApplicationEmails(token, { after, max = config.google.gmailApplicationMessages }) {
+  return searchMessages(token, `${APPLICATION_QUERY} after:${afterSeconds(after)}`, max);
 }

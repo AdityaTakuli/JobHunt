@@ -1,14 +1,13 @@
 import { Router } from 'express';
 import { APP_STATUSES } from '../../shared/format.js';
 import { query } from '../db/pool.js';
-import { DAY_MS } from '../lib/time.js';
+import { applyStatusSideEffects } from '../lib/tracker.js';
 
 export const applicationsRouter = Router();
 
-const FOLLOW_UP_DAYS = 7;
 const EDITABLE = ['status', 'applied_at', 'follow_up_at', 'contact_name', 'contact_email', 'notes', 'title', 'company', 'apply_url'];
 
-const SELECT = `SELECT a.id, a.job_id, a.status, a.applied_at, a.follow_up_at, a.contact_name, a.contact_email, a.notes,
+const SELECT = `SELECT a.id, a.job_id, a.status, a.applied_at, a.follow_up_at, a.contact_name, a.contact_email, a.notes, a.source,
     a.created_at, a.updated_at,
     COALESCE(j.title, a.title) AS title, COALESCE(j.company, a.company) AS company,
     COALESCE(j.apply_url, a.apply_url) AS apply_url, j.city, j.role_type, j.is_bim,
@@ -47,18 +46,6 @@ function readFields(body, { partial }) {
     }
   }
   if (!partial && !fields.status) fields.status = 'saved';
-  return fields;
-}
-
-// Moving to "applied" stamps the date and auto-sets a follow-up 7 days later.
-function applyStatusSideEffects(fields, current = {}, now = new Date()) {
-  if (fields.status === 'applied' && current.status !== 'applied') {
-    const appliedAt = fields.applied_at ?? current.applied_at ?? now;
-    fields.applied_at = appliedAt;
-    if (!('follow_up_at' in fields) && !current.follow_up_at) {
-      fields.follow_up_at = new Date(new Date(appliedAt).getTime() + FOLLOW_UP_DAYS * DAY_MS);
-    }
-  }
   return fields;
 }
 

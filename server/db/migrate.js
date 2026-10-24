@@ -26,6 +26,8 @@ const ADDED_COLUMNS = [
   ['searches', 'user_id', 'INT UNSIGNED NOT NULL DEFAULT 1 AFTER id'],
   ['searches', 'cached', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER found'],
   ['searches', 'hidden', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER cached'],
+  ['applications', 'source', 'VARCHAR(12) NULL AFTER notes'],
+  ['users', 'gmail_apps_synced_at', 'DATETIME NULL AFTER gmail_synced_at'],
 ];
 
 async function hasIndex(table, name) {
@@ -135,15 +137,19 @@ async function backfillExperience() {
   }
 }
 
-export async function migrate() {
-  const sql = await fs.readFile(schemaPath, 'utf8');
-  const statements = sql
+// schema.sql split into statements. Splits on ";", so comments must not contain one.
+export function schemaStatements(sql) {
+  return sql
     .split('\n')
     .filter((line) => !line.trim().startsWith('--'))
     .join('\n')
     .split(';')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+export async function migrate() {
+  const statements = schemaStatements(await fs.readFile(schemaPath, 'utf8'));
   for (const statement of statements) {
     await query(statement);
   }

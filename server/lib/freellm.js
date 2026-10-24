@@ -20,9 +20,10 @@ export const freellmModels = (model) =>
     .filter(Boolean);
 
 /**
- * @param options.state per-batch object; remembers models that are down (set by createClassifier)
+ * Runs `call(options)` on each listed model in turn until one answers.
+ * @param options.state per-batch object; remembers models that are down
  */
-export async function classifyWithFreeLlm(job, options) {
+export async function withFreeLlmModels(options, call) {
   if (!options.url || !options.apiKey) throw new LlmError('FREELLM_URL / FREELLM_API_KEY is not set', 'not_configured');
   const state = options.state || {};
   state.downModels ??= new Set();
@@ -32,9 +33,9 @@ export async function classifyWithFreeLlm(job, options) {
   let lastError;
   for (const model of models) {
     try {
-      return await classifyWithOpenAiChat(job, { timeoutMs: 30_000, ...options, model, url: freellmChatUrl(options.url), label: `FreeLLMAPI ${model}` });
+      return await call({ timeoutMs: 30_000, ...options, model, url: freellmChatUrl(options.url), label: `FreeLLMAPI ${model}` });
     } catch (err) {
-      // Invalid JSON (already retried) is about this job, not the model: try the next model
+      // Invalid JSON (already retried) is about this item, not the model: try the next model
       // without writing this one off.
       if (err.kind !== 'invalid_json') state.downModels.add(model);
       lastError = err;
@@ -42,3 +43,5 @@ export async function classifyWithFreeLlm(job, options) {
   }
   throw lastError;
 }
+
+export const classifyWithFreeLlm = (job, options) => withFreeLlmModels(options, (o) => classifyWithOpenAiChat(job, o));

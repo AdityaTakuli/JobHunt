@@ -3255,7 +3255,8 @@ dialog.dialog::backdrop {
   margin-top: 2px;
 }
 
-.app-closed {
+.app-closed,
+.app-tag {
   justify-self: start;
   width: fit-content;
 }

@@ -46,6 +46,7 @@ const { signInWithGoogle } = await import('../server/lib/users.js');
 const google = await import('../server/lib/google.js');
 const { open: unseal } = await import('../server/lib/secretBox.js');
 const { tidyJobs, deleteOldJobs } = await import('../server/tasks/archive.js');
+const { syncApplications } = await import('../server/tasks/readGmail.js');
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 const NOW = new Date();
@@ -86,7 +87,7 @@ describe('integration', { skip: !dbReady }, () => {
   before(async () => {
     await migrate();
     await query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches', 'users', 'user_settings', 'job_hides', 'closed_jobs']) {
+    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches', 'users', 'user_settings', 'job_hides', 'closed_jobs', 'mail_events']) {
       await query(`TRUNCATE TABLE ${table}`);
     }
     await query('SET FOREIGN_KEY_CHECKS = 1');
@@ -651,6 +652,17 @@ describe('integration', { skip: !dbReady }, () => {
     const raw = Buffer.from(
       ['From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>', 'To: gmail.user@example.com', 'Subject: New jobs', 'Content-Type: text/html; charset=utf-8', '', fixture('linkedin-alert.html')].join('\r\n'),
     ).toString('base64url');
+    const mail = (headers, body) => Buffer.from([...headers, 'Content-Type: text/plain; charset=utf-8', '', body].join('\r\n')).toString('base64url');
+    const appMail = {
+      applied: mail(
+        ['From: LinkedIn <jobs-noreply@linkedin.com>', 'Date: Mon, 20 Oct 2026 10:00:00 +0530', 'Subject: Gmail User, your application was sent to Morphogenesis'],
+        'Your application was sent to Morphogenesis.',
+      ),
+      interview: mail(
+        ['From: Priya Rao <priya@morphogenesis.org>', 'Date: Thu, 23 Oct 2026 10:00:00 +0530', 'Subject: Interview next week'],
+        'Hello, we would like to invite you to an interview for the position of Architectural Intern at Morphogenesis.\n> On Mon you wrote:\n> thanks',
+      ),
+    };
     let grant = {};
     google.deps.fetch = async (url, init = {}) => {
       const u = new URL(url);
@@ -666,10 +678,14 @@ describe('integration', { skip: !dbReady }, () => {
       }
       if (u.pathname === '/revoke') return Response.json({});
       if (u.pathname.endsWith('/messages')) {
-        assert.match(u.searchParams.get('q'), /from:\(jobalerts-noreply@linkedin\.com/);
+        const q = u.searchParams.get('q');
+        if (q.includes('your application was sent to')) return Response.json({ messages: [{ id: 'a2' }, { id: 'a1' }] });
+        assert.match(q, /from:\(jobalerts-noreply@linkedin\.com/);
         return Response.json({ messages: [{ id: 'm1' }] });
       }
       if (u.pathname.endsWith('/messages/m1')) return Response.json({ id: 'm1', raw });
+      if (u.pathname.endsWith('/messages/a1')) return Response.json({ id: 'a1', raw: appMail.applied });
+      if (u.pathname.endsWith('/messages/a2')) return Response.json({ id: 'a2', raw: appMail.interview });
       throw new Error(`unexpected ${url}`);
     };
     const go = (path, cookies = '') => fetch(`${base}${path}`, { redirect: 'manual', headers: cookies ? { Cookie: cookies } : {} });
@@ -705,12 +721,33 @@ describe('integration', { skip: !dbReady }, () => {
       assert.equal(unseal(row.gmail_token), 'refresh-1', 'stored encrypted');
       assert.ok(!row.gmail_token.includes('refresh-1'));
 
+      // Connecting started the first read in the background; let it finish.
+      for (let i = 0; i < 100 && !(await query('SELECT gmail_apps_synced_at AS at FROM users WHERE email = ?', ['gmail.user@example.com']))[0].at; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
       // 3. Read the alerts.
       const synced = await (await fetch(`${base}/api/account/gmail/sync`, { method: 'POST', headers: { Cookie: session } })).json();
       assert.equal(synced.result.messages, 1);
       assert.ok(synced.account.gmail.connected);
       assert.ok(synced.account.gmail.syncedAt);
       assert.ok(calls.includes('GET gmail.googleapis.com/gmail/v1/users/me/messages/m1'));
+
+      // ...and the emails about her applications (read by the first run), oldest first: sent, then
+      // an interview. The role named in the second fills in the first entry instead of adding one.
+      assert.deepEqual([synced.result.emails, synced.result.tracked], [0, 0]);
+      const tracker = (await (await fetch(`${base}/api/applications`, { headers: { Cookie: session } })).json()).applications;
+      assert.equal(tracker.length, 1);
+      const [entry] = tracker;
+      assert.deepEqual(
+        [entry.title, entry.company, entry.status, entry.source, entry.contact_email],
+        ['Architectural Intern', 'Morphogenesis', 'interview', 'gmail', 'priya@morphogenesis.org'],
+      );
+      assert.ok(entry.applied_at, 'the application date came from the first email');
+      assert.match(entry.notes, /application sent[\s\S]*interview — "Interview next week"/);
+      const events = await query("SELECT gmail_id, kind, classifier FROM mail_events WHERE application_id = ? ORDER BY received_at", [entry.id]);
+      assert.deepEqual(events.map((e) => [e.gmail_id, e.kind, e.classifier]), [['a1', 'applied', 'rules'], ['a2', 'interview', 'rules']]);
+
 
       // 4. Disconnect: the permission is withdrawn at Google too.
       const off = await (await fetch(`${base}/api/account/gmail/disconnect`, { method: 'POST', headers: { Cookie: session } })).json();
@@ -720,6 +757,74 @@ describe('integration', { skip: !dbReady }, () => {
       google.deps.fetch = realFetch;
       Object.assign(config.google, { clientId: '', clientSecret: '' });
       config.auth.allowedEmails = [];
+    }
+  });
+
+  it('keeps the tracker up to date from application emails, retrying them while the AI is out', async () => {
+    const now = new Date();
+    const { insertId: uid } = await query('INSERT INTO users SET ?', [{ email: 'mailer@example.com', name: 'Mailer', created_at: now }]);
+    const { insertId: jobId } = await query('INSERT INTO jobs SET ?', [
+      { dedupe_key: 'mail-test-hok', title: 'Architectural Designer Intern', company: 'HOK India Pvt Ltd', city: 'Mumbai', apply_url: 'https://hok.example/jobs/1', created_at: now, updated_at: now },
+    ]);
+    // Saved by hand earlier.
+    await query('INSERT INTO applications SET ?', [{ user_id: uid, title: 'Junior Architect', company: 'Studio Lotus', status: 'applied', created_at: now, updated_at: now }]);
+
+    const mail = (id, from, subject, body, date) => ({
+      id,
+      raw: Buffer.from([`From: ${from}`, `Date: ${date}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=utf-8', '', body].join('\r\n')),
+    });
+    const inbox = [
+      mail('h1', 'Talent <talent@hok.com>', 'Next step: design task', 'Please complete the design exercise for the Architectural Designer Intern role.', 'Wed, 22 Oct 2026 09:00:00 +0530'),
+      mail('l1', 'Careers <no-reply@myworkday.com>', 'Update on your application', 'Unfortunately we will not be moving forward.', 'Tue, 21 Oct 2026 09:00:00 +0530'),
+      mail('x1', 'Archdaily <news@archdaily.com>', 'Houses of the year', 'This week: 20 houses.', 'Mon, 20 Oct 2026 09:00:00 +0530'),
+    ];
+    const realFetch = google.deps.fetch;
+    google.deps.fetch = async (url) => {
+      const u = new URL(url);
+      if (u.pathname.endsWith('/messages')) return Response.json({ messages: inbox.map((m) => ({ id: m.id })) });
+      const m = inbox.find((x) => u.pathname.endsWith(`/messages/${x.id}`));
+      return Response.json({ id: m.id, raw: m.raw.toString('base64url') });
+    };
+    // Stand-in for FreeLLMAPI: what the model answers for each email, or down.
+    const answers = {
+      'Next step: design task': { kind: 'assessment', company: 'HOK', role: 'Architectural Designer Intern' },
+      'Update on your application': { kind: 'rejected', company: 'Studio Lotus', role: 'Junior Architect' },
+      'Houses of the year': { kind: 'other', company: null, role: null },
+    };
+    const aiTriage = { down: null, triage: async (m) => ({ ...answers[m.subject], reason: '', classifier: 'freellm' }) };
+    const outage = { down: 'rate_limit', triage: async () => ({ kind: 'other', company: null, role: null, reason: '', classifier: 'rules' }) };
+    const user = async () => (await query('SELECT * FROM users WHERE id = ?', [uid]))[0];
+    try {
+      // 1. AI out: nothing placed, nothing recorded, read position unchanged.
+      assert.deepEqual(await syncApplications(await user(), 'token', { triage: outage, now }), { emails: 3, tracked: 0 });
+      assert.equal((await query('SELECT COUNT(*) AS n FROM mail_events WHERE user_id = ?', [uid]))[0].n, 0);
+      assert.equal((await user()).gmail_apps_synced_at, null);
+
+      // 2. AI back: the same three emails are read. Two reads at once (connecting Gmail starts one,
+      //    "Check now" another) still apply each email once.
+      const both = await Promise.all([1, 2].map(async () => syncApplications(await user(), 'token', { triage: aiTriage, now })));
+      assert.equal(both[0].tracked + both[1].tracked, 2);
+      const apps = await query('SELECT * FROM applications WHERE user_id = ? ORDER BY id', [uid]);
+      assert.equal(apps.length, 2);
+      const [lotus, hok] = apps;
+      assert.deepEqual([lotus.status, lotus.source, lotus.contact_email], ['rejected', null, null], 'moved on; a job-site robot is no contact');
+      assert.match(lotus.notes, /not selected/);
+      assert.deepEqual([hok.status, hok.job_id, hok.source, hok.contact_email], ['interview', jobId, 'gmail', 'talent@hok.com'], 'linked to the posting in the list');
+      const kinds = await query('SELECT gmail_id, kind, application_id FROM mail_events WHERE user_id = ? ORDER BY received_at', [uid]);
+      assert.deepEqual(kinds.map((k) => [k.gmail_id, k.kind, k.application_id]), [['x1', 'other', null], ['l1', 'rejected', lotus.id], ['h1', 'assessment', hok.id]]);
+      assert.ok((await user()).gmail_apps_synced_at);
+
+      // 3. Again: all already read.
+      assert.deepEqual(await syncApplications(await user(), 'token', { triage: aiTriage, now }), { emails: 0, tracked: 0 });
+
+      // 4. Removing the person removes what was read from their mail.
+      await query('DELETE FROM users WHERE id = ?', [uid]);
+      const { deleteUser } = await import('../server/lib/users.js');
+      await deleteUser(uid);
+      assert.equal((await query('SELECT COUNT(*) AS n FROM mail_events WHERE user_id = ?', [uid]))[0].n, 0);
+    } finally {
+      google.deps.fetch = realFetch;
+      await query('DELETE FROM jobs WHERE id = ?', [jobId]);
     }
   });
 
