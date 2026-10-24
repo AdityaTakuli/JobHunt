@@ -52,6 +52,8 @@ export function createApp() {
   // React app (built by `npm run build`).
   if (fs.existsSync(WEB_DIST)) {
     app.use(express.static(WEB_DIST, { index: false, maxAge: '1h' }));
+    // Public, for Google's consent screen and anyone not signed in.
+    app.get('/privacy', (req, res) => res.sendFile(path.join(WEB_DIST, 'privacy.html')));
     app.get('/{*splat}', (req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(WEB_DIST, 'index.html'));

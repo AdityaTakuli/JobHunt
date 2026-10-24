@@ -644,6 +644,17 @@ describe('integration', { skip: !dbReady }, () => {
     }
   });
 
+  it('serves the privacy policy to anyone, signed in or not', async () => {
+    for (const path of ['/privacy', '/privacy.html']) {
+      const res = await fetch(`${base}${path}`);
+      assert.equal(res.status, 200, path);
+      assert.match(res.headers.get('content-type'), /text\/html/);
+      const html = await res.text();
+      assert.match(html, /<title>Privacy policy · ArchJobs<\/title>/);
+      assert.match(html, /Limited Use\s+requirements/, 'the statement Google asks of apps that read Gmail');
+    }
+  });
+
   it('signs in with Google, then reads LinkedIn alerts from Gmail', async () => {
     Object.assign(config.google, { clientId: 'cid', clientSecret: 'secret' });
     config.auth.allowedEmails = ['gmail.user@example.com'];
