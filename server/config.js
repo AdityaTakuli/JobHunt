@@ -142,14 +142,6 @@ export const config = {
     },
   },
 
-  imap: {
-    host: env.IMAP_HOST || 'imap.hostinger.com',
-    port: num(env.IMAP_PORT, 993),
-    secure: env.IMAP_SECURE !== 'false',
-    user: env.IMAP_USER || '',
-    pass: env.IMAP_PASSWORD || '',
-    mailbox: env.IMAP_MAILBOX || 'INBOX',
-  },
 
   smtp: {
     host: env.SMTP_HOST || 'smtp.hostinger.com',

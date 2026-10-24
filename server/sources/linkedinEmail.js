@@ -1,8 +1,9 @@
-// Parses LinkedIn job-alert emails (forwarded from her Gmail) into job rows.
+// Parses LinkedIn job-alert emails (read from each person's Gmail) into job rows.
 // Works from the job links, not from LinkedIn's exact layout, so format changes degrade
 // gracefully: any linkedin.com/jobs/view/<id> link plus the text near it becomes a job.
 
 import * as cheerio from 'cheerio';
+import { simpleParser } from 'mailparser';
 import { APPLY_RANK, cleanText, decodeEntities, normalizeCity } from '../lib/normalize.js';
 
 export const SOURCE = 'linkedin_email';
@@ -165,4 +166,22 @@ export function countJobLinks(html, text) {
   const ids = new Set();
   for (const m of `${html || ''}\n${text || ''}`.matchAll(JOB_LINK_RE_G)) ids.add(m[1]);
   return ids.size;
+}
+
+// Parses raw RFC 822 messages (Buffers) into jobs, plus a note for each email with no job cards.
+export async function parseMessages(sources) {
+  const jobs = [];
+  const failures = [];
+  for (const source of sources) {
+    const mail = await simpleParser(source);
+    const html = typeof mail.html === 'string' ? mail.html : '';
+    const text = mail.text || '';
+    const parsed = parseLinkedInAlert({ html, text, receivedAt: mail.date || new Date() });
+    if (!parsed.length) {
+      const links = countJobLinks(html, text);
+      failures.push(`"${mail.subject || '(no subject)'}": ${links ? `${links} job links but no cards parsed` : 'no LinkedIn job links'}`);
+    }
+    jobs.push(...parsed);
+  }
+  return { jobs, failures };
 }

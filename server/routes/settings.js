@@ -47,7 +47,6 @@ settingsRouter.get('/system', requireAdmin, async (req, res) => {
       freellm: providerConfigured(config.freellm),
       groq: Boolean(config.groq.apiKey),
       gemini: Boolean(config.gemini.apiKey),
-      imap: Boolean(config.imap.user && config.imap.pass),
       google: Boolean(config.google.clientId && config.google.clientSecret),
       smtp: mailConfigured(),
       scheduler: config.enableScheduler,

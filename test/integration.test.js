@@ -22,7 +22,6 @@ Object.assign(process.env, {
   FREELLM_API_KEY: '',
   GROQ_API_KEY: '',
   GEMINI_API_KEY: '',
-  IMAP_USER: '',
   SMTP_USER: '',
 });
 
@@ -38,7 +37,7 @@ const { fetchJobs, searchesForThisRun, pickQueries, searchPairs, searchText } = 
 const { resolveLocation } = await import('../server/sources/serpapi.js');
 const { feedFilters } = await import('../server/routes/jobs.js');
 const { liveSearch, CACHE_HOURS } = await import('../server/tasks/liveSearch.js');
-const { parseMessages } = await import('../server/tasks/readInbox.js');
+const { parseMessages } = await import('../server/sources/linkedinEmail.js');
 const { archiveOldJobs } = await import('../server/tasks/archive.js');
 const { digestDue, renderDigest } = await import('../server/tasks/sendDigest.js');
 const { createSessionToken } = await import('../server/auth.js');
@@ -138,7 +137,7 @@ describe('integration', { skip: !dbReady }, () => {
     assert.equal(again.new, 0);
   });
 
-  it('parses raw forwarded LinkedIn emails', async () => {
+  it('parses raw LinkedIn alert emails', async () => {
     const raw = [
       'From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>',
       'To: jobs@example.com',

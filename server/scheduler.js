@@ -5,7 +5,6 @@ import { TIMEZONE } from './config.js';
 import { runTask } from './tasks/index.js';
 
 const SCHEDULE = [
-  ['*/10 * * * *', 'read-inbox'],
   ['*/30 * * * *', 'read-gmail'],
   ['0 7,18 * * *', 'fetch-jobs'],
   ['20 * * * *', 'retry-classify'],
@@ -21,7 +20,7 @@ export function startScheduler(log = console) {
         try {
           const result = await runTask(name);
           // Skips (not due, not configured) and empty inbox checks are routine; stay quiet.
-          const routine = result.skipped || (['read-inbox', 'read-gmail'].includes(name) && !result.messages && !result.error && !result.errors);
+          const routine = result.skipped || (name === 'read-gmail' && !result.messages && !result.emails && !result.error && !result.errors);
           if (!routine) log.info(`[cron] ${name}`, JSON.stringify(result));
         } catch (err) {
           log.error(`[cron] ${name} failed:`, err.message);

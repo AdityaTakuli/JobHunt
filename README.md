@@ -2,7 +2,7 @@
 
 One dashboard for architecture and BIM internships and fresher jobs in whichever cities she picks: a filtered job feed with direct apply links, an application tracker, a cold-email firms list and a daily digest email. Friends can join with their Google account and get their own tracker, searches and Gmail job alerts on the same job list. Spec: [docs/PRD.md](docs/PRD.md).
 
-**Stack:** Node.js (Express 5) + MySQL, React (Vite), node-cron. Jobs come from the [SerpApi Google Jobs API](https://serpapi.com/google-jobs-api) and from LinkedIn job-alert emails forwarded to a mailbox. AI labels each job through the FreeLLMAPI gateway (which holds the Groq and Gemini keys) inside a daily token budget, with a rule-based fallback.
+**Stack:** Node.js (Express 5) + MySQL, React (Vite), node-cron. Jobs come from the [SerpApi Google Jobs API](https://serpapi.com/google-jobs-api) and from the LinkedIn job-alert emails in each person's Gmail (read through the Gmail API). AI labels each job through the FreeLLMAPI gateway (which holds the Groq and Gemini keys) inside a daily token budget, with a rule-based fallback.
 
 ```
 server/
@@ -10,7 +10,7 @@ server/
   app.js              Express app, auth, routes, serves web/dist
   sources/            serpapi.js (Google Jobs), linkedinEmail.js (alert parser)
   lib/                ingest (normalize + dedupe + classify + store), rules, groq, gemini, aiBudget, salary, …
-  tasks/              fetch-jobs, read-inbox, read-gmail, retry-classify, send-digest, archive (clean-up)
+  tasks/              fetch-jobs, read-gmail, retry-classify, send-digest, archive (clean-up)
   routes/             REST API
   db/schema.sql       tables (idempotent; applied on every boot)
 shared/format.js      display helpers used by server and web
@@ -34,7 +34,7 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 - `npm test` runs all tests. The integration tests need the `archjobs_test` database:
   `docker exec jobhunt-mysql-1 mysql -uroot -parchjobs-root -e "CREATE DATABASE IF NOT EXISTS archjobs_test; GRANT ALL ON archjobs_test.* TO 'archjobs'@'%';"`
   They are skipped when that database is not reachable.
-- `npm run task -- fetch-jobs` (or `read-inbox`, `retry-classify`, `send-digest --force`, `archive`) runs one task from the CLI.
+- `npm run task -- fetch-jobs` (or `read-gmail`, `retry-classify`, `send-digest --force`, `archive`) runs one task from the CLI.
 - `npm run build && npm start` serves the built app from the API on :3000.
 
 ## Keys and accounts
@@ -45,7 +45,6 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 | FreeLLMAPI (main AI) | Your own gateway at `llm.velocitytechnologies.in` (holds the Groq and Gemini keys), unified key from its Keys page | `FREELLM_URL`, `FREELLM_API_KEY`, `FREELLM_MODEL` |
 | Groq (optional direct backup) | [console.groq.com/keys](https://console.groq.com/keys), free tier: 1,000 requests/day, 8,000 tokens/minute | `GROQ_API_KEY`, `GROQ_MODEL` |
 | Gemini (optional direct backup) | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | `GEMINI_API_KEY`, `GEMINI_MODEL` |
-| Jobs mailbox (IMAP) | Hostinger email, e.g. `jobs@yourdomain` | `IMAP_USER`, `IMAP_PASSWORD` |
 | Digest email (SMTP) | Same Hostinger mailbox, or Brevo | `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` |
 | Owner password | Anything strong | `APP_PASSWORD`, `SESSION_SECRET` |
 | Google sign-in + Gmail | [Google Cloud console](https://console.cloud.google.com/apis/credentials), free | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_EMAIL`, `ALLOWED_EMAILS`, `TOKEN_SECRET` |
@@ -71,12 +70,7 @@ Without API keys the app still runs: the feed stays empty until a source is conf
 
 Daily totals are stored in the `ai_usage` table, so every task and restart shares one budget; Groq's own "requests left today" header also stops calls 25 short of zero. Descriptions are cut to 2,500 characters and reasoning/thinking tokens are turned off, so a full-length job costs about 1,150 tokens. A job that gets no AI call is labeled by keyword rules and re-sent by the hourly `retry-classify` once budget is back. Today's usage shows on Settings → Sources.
 
-**LinkedIn alerts (no scraping).**
-1. On LinkedIn, create job alerts: "BIM intern", "Revit", "architectural intern", "junior architect", location set to each city she wants.
-2. Create the mailbox `jobs@yourdomain` in Hostinger hPanel → Emails.
-3. In Gmail → Settings → Forwarding, add `jobs@yourdomain` as a forwarding address and confirm it (Gmail emails a code to that mailbox).
-4. Gmail → Settings → Filters → Create filter: From `jobalerts-noreply@linkedin.com` → *Forward it to* `jobs@yourdomain`.
-5. `read-inbox` runs every 10 minutes, parses each job card and marks the email as read. Emails it could not parse show as errors on Settings → Sources.
+**LinkedIn alerts (no scraping).** On LinkedIn, create job alerts ("BIM intern", "Revit", "architectural intern", "junior architect", in each city) and set them to arrive by email. Once Gmail is connected (below), `read-gmail` picks them up from that person's Gmail every 30 minutes. Emails it could not parse show as errors on Settings → Sources.
 
 ## Accounts and Gmail
 
@@ -84,16 +78,16 @@ Daily totals are stored in the `ai_usage` table, so every task and restart share
 
 **Who may join:** the owner, `ADMIN_EMAILS`, the emails in `ALLOWED_EMAILS` (or `*` for anyone), and the list the owner keeps in Settings → People. Removing someone there deletes their own data and takes them off the list.
 
-**Gmail job alerts.** In Settings → Account, *Connect Gmail* asks Google for read-only Gmail access (`gmail.readonly`, offline). Every 30 minutes `read-gmail` searches each connected inbox for LinkedIn job-alert emails only (`from:jobalerts-noreply@linkedin.com …`), parses them like the forwarded alerts and adds the jobs to the shared list.
+**Gmail job alerts.** In Settings → Account, *Connect Gmail* asks Google for read-only Gmail access (`gmail.readonly`, offline). Every 30 minutes `read-gmail` searches each connected inbox for LinkedIn job-alert emails only (`from:jobalerts-noreply@linkedin.com …`), parses each job card and adds the jobs to the shared list.
 
 **Tracker from Gmail.** The same run searches for emails about that person's own applications (subjects with *application*, *interview*, *offer*, *assessment* …, LinkedIn's "your application was sent to …"; promotions and job alerts left out), 60 days back on the first run. FreeLLMAPI reads each one (`FREELLM_MAIL_MODEL`, Groq models by default; sender, subject and the first ~1,800 characters, quoted replies dropped) and labels it applied / interview / assessment / offer / rejected / other with the company and role. `lib/tracker.js` then moves the matching tracker entry forward (never backwards; rejected unless there is an offer), notes the email on it and keeps a recruiter's address as the contact, or adds the role as a new entry marked *From Gmail*. Each email is recorded once in `mail_events`. While the AI is down, keyword rules stand in and anything they can't place is read again on the next run.
 
-Nothing in the mailbox is changed. Refresh tokens are stored encrypted with AES-256-GCM (`TOKEN_SECRET`); *Disconnect* deletes the token and revokes it at Google. Forwarding to the jobs mailbox (below) still works alongside.
+Nothing in the mailbox is changed. Refresh tokens are stored encrypted with AES-256-GCM (`TOKEN_SECRET`); *Disconnect* deletes the token and revokes it at Google.
 
 **Setting up Google (once, free):**
 1. [console.cloud.google.com](https://console.cloud.google.com) → create a project → *APIs & Services* → *Library* → enable **Gmail API**.
 2. *OAuth consent screen* (Google Auth Platform → Branding): app name ArchJobs, your support email, authorised domain `velocitytechnologies.in`. *Data access*: add the scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` and `.../auth/gmail.readonly`. *Audience*: External, then **Publish app** (in *Testing* status Google cuts Gmail access after 7 days).
-3. *Clients* → *Create client* → Web application. Authorised redirect URI: `https://velocitytechnologies.in/api/auth/google/callback` (add `http://localhost:3000/api/auth/google/callback` for local use). Copy the client ID and secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+3. *Clients* → *Create client* → Web application. Authorised redirect URI: `https://archjobs.velocitytechnologies.in/api/auth/google/callback` (add `http://localhost:3000/api/auth/google/callback` for local use). Copy the client ID and secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 
 Gmail read access is a "restricted" scope. Until Google verifies the app (a review that needs a privacy policy and, for restricted scopes, a paid security assessment), people see "Google hasn't verified this app" and choose *Advanced → Go to ArchJobs*, and at most 100 people can connect. Plain Google sign-in (name and email only) has no such warning.
 
@@ -111,7 +105,6 @@ The plan needs Node.js hosting (hPanel → Websites → *Node.js* / "Node.js Web
    - Or leave it `false`, set `CRON_SECRET`, and add Hostinger cron jobs (hPanel → Advanced → Cron Jobs):
 
      ```
-     */10 * * * *  curl -fsS "https://yourdomain/api/cron/read-inbox?key=CRON_SECRET"
      */30 * * * *  curl -fsS "https://yourdomain/api/cron/read-gmail?key=CRON_SECRET"
      30 1,12 * * * curl -fsS "https://yourdomain/api/cron/fetch-jobs?key=CRON_SECRET"      # 07:00, 18:00 IST
      0 22,10 * * * curl -fsS "https://yourdomain/api/cron/archive?key=CRON_SECRET"         # 03:30, 15:30 IST

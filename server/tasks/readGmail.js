@@ -16,7 +16,7 @@ import { open } from '../lib/secretBox.js';
 import { classifierContext } from '../lib/settings.js';
 import { DAY_MS } from '../lib/time.js';
 import { applyMailEvent } from '../lib/tracker.js';
-import { parseMessages } from './readInbox.js';
+import { parseMessages } from '../sources/linkedinEmail.js';
 
 export const SOURCE = 'gmail';
 const FIRST_LOOK_BACK_DAYS = 7;

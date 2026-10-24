@@ -1,13 +1,11 @@
 import { tidyJobs } from './archive.js';
 import { fetchJobs } from './fetchJobs.js';
 import { readGmail } from './readGmail.js';
-import { readInbox } from './readInbox.js';
 import { retryClassify } from './retryClassify.js';
 import { sendDigest } from './sendDigest.js';
 
 export const TASKS = {
   'fetch-jobs': () => fetchJobs(),
-  'read-inbox': () => readInbox(),
   'read-gmail': () => readGmail(),
   'retry-classify': () => retryClassify(),
   // Scheduled calls only send when due; manual runs pass force.

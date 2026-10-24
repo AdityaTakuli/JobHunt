@@ -14,7 +14,6 @@ function warnAboutConfig() {
   if (!google) missing.push('GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET (no Google sign-in or Gmail alerts)');
   if (!config.serpapi.apiKey) missing.push('SERPAPI_KEY (no Google Jobs fetch)');
   if (!anyAiConfigured()) missing.push('FREELLM_API_KEY/GROQ_API_KEY/GEMINI_API_KEY (rule classifier only)');
-  if (!config.imap.user) missing.push('IMAP_USER/IMAP_PASSWORD (no LinkedIn alerts)');
   if (!config.smtp.user) missing.push('SMTP_USER/SMTP_PASSWORD (no digest email)');
   if (missing.length) console.warn(`Not configured: ${missing.join('; ')}`);
 }
