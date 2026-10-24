@@ -4,6 +4,7 @@ import { api, toQuery } from '../api.js';
 import { useMeta } from '../App.jsx';
 import JobCard from '../components/JobCard.jsx';
 import JobDetail, { JobDetailPane } from '../components/JobDetail.jsx';
+import GmailBar from '../components/GmailBar.jsx';
 import JobFilters from '../components/JobFilters.jsx';
 import SearchBar from '../components/SearchBar.jsx';
 import { JobListSkeleton } from '../components/Skeleton.jsx';
@@ -485,6 +486,8 @@ export default function JobsPage() {
           ? 'Google search is not set up on the server yet.'
           : `Searches Google Jobs live${meta?.search ? ` · ${meta.search.leftToday} search${meta.search.leftToday === 1 ? '' : 'es'} left today` : ''}. The same search again within 6 hours is free.`}
       </p>
+
+      <GmailBar onSynced={reload} />
 
       <JobFilters filters={filters} setFilters={setFilters} cityOptions={cityOptions} cityCounts={meta?.cities || []} searchMode={Boolean(search)} />
 

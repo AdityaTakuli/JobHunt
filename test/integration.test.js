@@ -46,6 +46,8 @@ const google = await import('../server/lib/google.js');
 const { open: unseal } = await import('../server/lib/secretBox.js');
 const { tidyJobs, deleteOldJobs } = await import('../server/tasks/archive.js');
 const { syncApplications } = await import('../server/tasks/readGmail.js');
+const { fetchCompanies } = await import('../server/tasks/fetchCompanies.js');
+const { COMPANIES } = await import('../server/lib/companies.js');
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
 const NOW = new Date();
@@ -662,14 +664,15 @@ describe('integration', { skip: !dbReady }, () => {
     const raw = Buffer.from(
       ['From: LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>', 'To: gmail.user@example.com', 'Subject: New jobs', 'Content-Type: text/html; charset=utf-8', '', fixture('linkedin-alert.html')].join('\r\n'),
     ).toString('base64url');
+    const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toUTCString();
     const mail = (headers, body) => Buffer.from([...headers, 'Content-Type: text/plain; charset=utf-8', '', body].join('\r\n')).toString('base64url');
     const appMail = {
       applied: mail(
-        ['From: LinkedIn <jobs-noreply@linkedin.com>', 'Date: Mon, 20 Oct 2026 10:00:00 +0530', 'Subject: Gmail User, your application was sent to Morphogenesis'],
+        ['From: LinkedIn <jobs-noreply@linkedin.com>', `Date: ${daysAgo(5)}`, 'Subject: Gmail User, your application was sent to Morphogenesis'],
         'Your application was sent to Morphogenesis.',
       ),
       interview: mail(
-        ['From: Priya Rao <priya@morphogenesis.org>', 'Date: Thu, 23 Oct 2026 10:00:00 +0530', 'Subject: Interview next week'],
+        ['From: Priya Rao <priya@morphogenesis.org>', `Date: ${daysAgo(2)}`, 'Subject: Interview next week'],
         'Hello, we would like to invite you to an interview for the position of Architectural Intern at Morphogenesis.\n> On Mon you wrote:\n> thanks',
       ),
     };
@@ -738,7 +741,7 @@ describe('integration', { skip: !dbReady }, () => {
 
       // 3. Read the alerts.
       const synced = await (await fetch(`${base}/api/account/gmail/sync`, { method: 'POST', headers: { Cookie: session } })).json();
-      assert.equal(synced.result.messages, 1);
+      assert.equal(synced.result.messages, 0, 'the alert was read by the first run, and is not parsed again');
       assert.ok(synced.account.gmail.connected);
       assert.ok(synced.account.gmail.syncedAt);
       assert.ok(calls.includes('GET gmail.googleapis.com/gmail/v1/users/me/messages/m1'));
@@ -757,6 +760,16 @@ describe('integration', { skip: !dbReady }, () => {
       assert.match(entry.notes, /application sent[\s\S]*interview — "Interview next week"/);
       const events = await query("SELECT gmail_id, kind, classifier FROM mail_events WHERE application_id = ? ORDER BY received_at", [entry.id]);
       assert.deepEqual(events.map((e) => [e.gmail_id, e.kind, e.classifier]), [['a1', 'applied', 'rules'], ['a2', 'interview', 'rules']]);
+
+      // Emails read, by day, newest first: today's alert, then the interview, then the application.
+      const { days } = await (await fetch(`${base}/api/account/gmail/emails`, { headers: { Cookie: session } })).json();
+      assert.deepEqual(days.map((d) => d.emails.map((e) => e.kind)), [['alert'], ['interview'], ['applied']]);
+      const [alert] = days[0].emails;
+      assert.ok(alert.jobsFound > 0 && alert.from === 'jobalerts-noreply@linkedin.com', JSON.stringify(alert));
+      const interview = days[1].emails[0];
+      assert.deepEqual([interview.subject, interview.company, interview.tracker.status], ['Interview next week', 'Morphogenesis', 'interview']);
+      assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(days[1].day));
+      assert.equal((await fetch(`${base}/api/account/gmail/emails`)).status, 401);
 
 
       // 4. Disconnect: the permission is withdrawn at Google too.
@@ -836,6 +849,90 @@ describe('integration', { skip: !dbReady }, () => {
       google.deps.fetch = realFetch;
       await query('DELETE FROM jobs WHERE id = ?', [jobId]);
     }
+  });
+
+  it('reads company careers feeds into the job list, without SerpApi', async () => {
+    const sj = COMPANIES.find((c) => c.slug === 'surbana-jurong');
+    const ramboll = COMPANIES.find((c) => c.slug === 'ramboll');
+    const calls = [];
+    let rambollDown = false;
+    const fetchImpl = async (url, init = {}) => {
+      const u = new URL(url);
+      calls.push(`${init.method || 'GET'} ${u.host}${u.pathname}`);
+      assert.ok(!u.host.includes('serpapi'), 'company feeds never use SerpApi');
+      if (u.host === sj.feed.host && u.pathname.endsWith('/jobs')) {
+        const { offset } = JSON.parse(init.body);
+        return Response.json({
+          total: 2,
+          jobPostings: offset ? [] : [
+            { title: 'Graduate Architect', externalPath: '/job/Noida/Graduate-Architect_JR1', locationsText: 'Noida', postedOn: 'Posted 2 Days Ago' },
+            { title: 'Data Architect', externalPath: '/job/Noida/Data-Architect_JR2', locationsText: 'Noida', postedOn: 'Posted Today' },
+          ],
+        });
+      }
+      if (u.host === sj.feed.host) {
+        return Response.json({ jobPostingInfo: { title: 'Graduate Architect', location: 'Noida', country: { descriptor: 'India' }, startDate: '2026-10-20', jobDescription: '<p>Fresh B.Arch graduates, 0-2 years. Revit, AutoCAD.</p>', externalUrl: `https://${sj.feed.host}/SJ_Careers/job/Noida/Graduate-Architect_JR1` } });
+      }
+      if (u.host === 'api.smartrecruiters.com') {
+        if (rambollDown) return new Response('down', { status: 503 });
+        if (u.pathname.endsWith('/postings')) return Response.json({ totalFound: 1, content: [{ id: '9', name: 'Architectural Designer', releasedDate: '2026-10-22T00:00:00Z', location: { city: 'Gurugram', country: 'in', fullLocation: 'Gurugram, India' } }] });
+        return Response.json({ id: '9', postingUrl: 'https://jobs.smartrecruiters.com/Ramboll3/9-architectural-designer', jobAd: { sections: { jobDescription: { text: '<p>Architecture intern role. B.Arch final year.</p>' } } } });
+      }
+      throw new Error(`unexpected ${url}`);
+    };
+    const classifier = createClassifier({ freellm: null, groq: null, gemini: null });
+    const now = new Date();
+
+    const first = await fetchCompanies({ companies: [sj, ramboll], fetchImpl, classifier, now });
+    assert.deepEqual([first.companies, first.found, first.new, first.errors], [2, 2, 2, undefined]);
+    const rows = await query("SELECT title, company, city, apply_kind, sources FROM jobs WHERE JSON_SEARCH(sources, 'one', 'company_careers', NULL, '$[*].source') IS NOT NULL ORDER BY title");
+    assert.deepEqual(rows.map((r) => [r.title, r.company, r.city, r.apply_kind]), [['Architectural Designer', 'Ramboll', 'Gurugram', 'company'], ['Graduate Architect', 'Surbana Jurong', 'Noida', 'company']]);
+    assert.ok(!calls.some((c) => c.includes('Data-Architect')), 'no detail call for an IT role');
+    const [log] = await query("SELECT jobs_new, requests_used, error FROM fetch_log WHERE source = 'company_careers' ORDER BY id DESC LIMIT 1");
+    assert.deepEqual([log.jobs_new, log.error], [2, null]);
+    assert.equal(log.requests_used, calls.length);
+
+    // Next day: nothing new, no detail calls for roles already stored. One feed down: the other still runs.
+    calls.length = 0;
+    rambollDown = true;
+    const second = await fetchCompanies({ companies: [sj, ramboll], fetchImpl, classifier, now });
+    assert.equal(second.new, 0);
+    assert.match(second.errors[0], /Ramboll careers answered 503/);
+    assert.ok(!calls.some((c) => c.includes('Graduate-Architect_JR1')), 'known role: details not fetched again');
+
+    // The Companies page.
+    const { status, data } = await request('/api/companies');
+    assert.equal(status, 200);
+    assert.equal(data.companies.length, COMPANIES.length);
+    const sjRow = data.companies.find((c) => c.slug === 'surbana-jurong');
+    assert.deepEqual([sjRow.tracked, sjRow.openRoles, sjRow.roles[0].title, sjRow.lastError], [true, 1, 'Graduate Architect', null]);
+    assert.ok(sjRow.lastCheckedAt);
+    const rRow = data.companies.find((c) => c.slug === 'ramboll');
+    assert.match(rRow.lastError, /503/);
+    assert.equal(data.companies.find((c) => c.slug === 'gensler').tracked, false);
+    assert.equal((await request('/api/companies', { auth: false })).status, 401);
+  });
+
+  it('once re-queues architecture jobs the AI wrongly called not relevant', async () => {
+    const now = new Date();
+    const add = (title, classifier, relevant) =>
+      query('INSERT INTO jobs SET ?', [{ dedupe_key: `relabel-${title}`, title, company: 'Relabel Co', city: 'Noida', apply_url: 'https://example.com/r', is_relevant: relevant, classifier, classify_attempts: 1, created_at: now, updated_at: now }]);
+    await add('Landscape Architect I', 'freellm', 0);
+    await add('Solution Architect', 'freellm', 0);
+    await add('Senior Architect', 'freellm', 1);
+    await query("DELETE FROM settings WHERE k = 'relevance_relabel_v1'");
+    await migrate();
+    const rows = await query("SELECT title, classifier, classify_attempts FROM jobs WHERE company = 'Relabel Co' ORDER BY title");
+    assert.deepEqual(rows.map((r) => [r.title, r.classifier, r.classify_attempts]), [
+      ['Landscape Architect I', 'rules', 0],
+      ['Senior Architect', 'freellm', 1],
+      ['Solution Architect', 'freellm', 1],
+    ]);
+    // Only once: a later AI answer of "not relevant" stands.
+    await query("UPDATE jobs SET classifier = 'freellm' WHERE company = 'Relabel Co'");
+    await migrate();
+    assert.equal((await query("SELECT classifier FROM jobs WHERE title = 'Landscape Architect I' AND company = 'Relabel Co'"))[0].classifier, 'freellm');
+    await query("DELETE FROM jobs WHERE company = 'Relabel Co'");
   });
 
   it('keeps her search history, with only the results still open', async () => {

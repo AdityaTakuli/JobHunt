@@ -123,10 +123,11 @@ async function searchMessages(token, q, max) {
 
 const afterSeconds = (date) => Math.floor(date.getTime() / 1000);
 
-// LinkedIn job alert emails since `after` (newest first), as raw RFC 822 Buffers.
+// LinkedIn job alert emails since `after` (newest first): [{ id, raw }]. "Your application was
+// sent" emails come from the same address; they are application emails, not alerts.
 export async function fetchAlertEmails(token, { after, max = config.google.gmailMaxMessages }) {
-  const q = `from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com) after:${afterSeconds(after)}`;
-  return (await searchMessages(token, q, max)).map((m) => m.raw);
+  const q = `from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com) -subject:application after:${afterSeconds(after)}`;
+  return searchMessages(token, q, max);
 }
 
 // Emails about her own applications since `after`: confirmations, interviews, tests, offers,

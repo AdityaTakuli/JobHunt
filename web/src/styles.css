@@ -374,7 +374,7 @@ main:focus {
   inset: auto 0 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--surface);
@@ -3259,4 +3259,148 @@ dialog.dialog::backdrop {
 .app-tag {
   justify-self: start;
   width: fit-content;
+}
+
+/* Companies page */
+.co-intro {
+  max-width: 72ch;
+  margin: -6px 0 18px;
+}
+
+.co-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.co-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.co-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.co-head h2 {
+  margin: 0 0 2px;
+  font-size: 17px;
+}
+
+.co-note {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.co-roles {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.co-roles li {
+  display: grid;
+  gap: 1px;
+}
+
+.co-roles a {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.co-roles a:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+
+.co-none {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.co-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* Gmail bar on the Jobs page, and the emails-read dialog */
+.gmail-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: -6px 4px 14px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.gmail-bar .form-error {
+  display: inline;
+  margin: 0;
+}
+
+.mail-day h3 {
+  margin: 4px 0 8px;
+  font-size: 14px;
+}
+
+.mail-day ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mail-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mail-row .badge {
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.mail-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mail-subject {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .mail-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mail-row .badge {
+    justify-self: start;
+  }
 }

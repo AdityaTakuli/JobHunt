@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import { revoke } from '../lib/google.js';
 import { open } from '../lib/secretBox.js';
+import { DAY_MS, istDateString } from '../lib/time.js';
 import { getSettings, saveSettings } from '../lib/settings.js';
 import { deleteUser, findUser, isAdmin, OWNER_ID } from '../lib/users.js';
 import { readGmail } from '../tasks/readGmail.js';
@@ -18,6 +19,39 @@ accountRouter.get('/account', async (req, res) => {
 accountRouter.post('/account/gmail/sync', async (req, res) => {
   const result = await readGmail({ userId: req.user.id });
   res.json({ result, account: accountView(await findUser(req.user.id)) });
+});
+
+// Emails read from her Gmail, newest day first: [{ day: 'YYYY-MM-DD' (IST), emails: [...] }].
+accountRouter.get('/account/gmail/emails', async (req, res) => {
+  const days = Math.min(Math.max(Number.parseInt(req.query.days, 10) || 30, 1), 90);
+  const rows = await query(
+    `SELECT e.gmail_id, e.received_at, e.from_addr, e.subject, e.kind, e.company, e.role, e.jobs_found, e.application_id,
+            COALESCE(j.title, a.title) AS tracked_title, a.status AS tracked_status
+       FROM mail_events e
+       LEFT JOIN applications a ON a.id = e.application_id AND a.user_id = e.user_id
+       LEFT JOIN jobs j ON j.id = a.job_id
+      WHERE e.user_id = ? AND e.received_at >= ?
+      ORDER BY e.received_at DESC
+      LIMIT 500`,
+    [req.user.id, new Date(Date.now() - days * DAY_MS)],
+  );
+  const byDay = new Map();
+  for (const r of rows) {
+    const day = istDateString(new Date(r.received_at));
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push({
+      id: r.gmail_id,
+      receivedAt: r.received_at,
+      from: r.from_addr,
+      subject: r.subject,
+      kind: r.kind,
+      company: r.company,
+      role: r.role,
+      jobsFound: r.jobs_found,
+      tracker: r.application_id ? { id: r.application_id, title: r.tracked_title, status: r.tracked_status } : null,
+    });
+  }
+  res.json({ days: [...byDay].map(([day, emails]) => ({ day, emails })) });
 });
 
 accountRouter.post('/account/gmail/disconnect', async (req, res) => {

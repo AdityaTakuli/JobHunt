@@ -184,12 +184,32 @@ CREATE TABLE IF NOT EXISTS mail_events (
   received_at DATETIME NOT NULL,
   from_addr VARCHAR(254) NULL,
   subject VARCHAR(300) NULL,
-  kind VARCHAR(12) NOT NULL,                 -- applied / interview / assessment / offer / rejected / other
+  kind VARCHAR(12) NOT NULL,                 -- alert / applied / interview / assessment / offer / rejected / other
   company VARCHAR(200) NULL,
   role VARCHAR(300) NULL,
-  classifier VARCHAR(8) NOT NULL,            -- freellm / rules
+  classifier VARCHAR(8) NOT NULL,            -- freellm / rules / parser (alerts)
   application_id INT UNSIGNED NULL,
+  jobs_found SMALLINT UNSIGNED NULL,         -- LinkedIn alerts: job cards in the email
   created_at DATETIME NOT NULL,
   PRIMARY KEY (user_id, gmail_id),
   KEY idx_mail_app (application_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Companies whose careers pages are watched (lib/companies.js is the source, migrate.js copies it
+-- here). The ones with a public feed are read daily by tasks/fetchCompanies.js.
+CREATE TABLE IF NOT EXISTS companies (
+  slug VARCHAR(60) NOT NULL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  kind VARCHAR(60) NULL,
+  cities VARCHAR(300) NULL,
+  careers_url VARCHAR(500) NOT NULL,
+  feed_type VARCHAR(16) NULL,                -- workday / smartrecruiters / NULL = link only
+  note VARCHAR(300) NULL,
+  match_names JSON NULL,                     -- names its listings appear under
+  sort_order SMALLINT NOT NULL DEFAULT 0,
+  last_checked_at DATETIME NULL,
+  last_found INT UNSIGNED NULL,              -- India design roles in the feed at the last check
+  last_new INT UNSIGNED NULL,
+  last_error VARCHAR(300) NULL,
+  updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

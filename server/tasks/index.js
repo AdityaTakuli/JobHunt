@@ -1,4 +1,5 @@
 import { tidyJobs } from './archive.js';
+import { fetchCompanies } from './fetchCompanies.js';
 import { fetchJobs } from './fetchJobs.js';
 import { readGmail } from './readGmail.js';
 import { retryClassify } from './retryClassify.js';
@@ -6,6 +7,8 @@ import { sendDigest } from './sendDigest.js';
 
 export const TASKS = {
   'fetch-jobs': () => fetchJobs(),
+  // Company careers feeds (lib/companies.js). Free: no SerpApi searches.
+  'fetch-companies': () => fetchCompanies(),
   'read-gmail': () => readGmail(),
   'retry-classify': () => retryClassify(),
   // Scheduled calls only send when due; manual runs pass force.

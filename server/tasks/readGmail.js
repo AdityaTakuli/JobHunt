@@ -23,6 +23,10 @@ const FIRST_LOOK_BACK_DAYS = 7;
 // Application emails: the first read goes further back, to fill the tracker with recent ones.
 const APPS_FIRST_LOOK_BACK_DAYS = 60;
 
+// Gmail message ids already recorded for this person.
+const knownIds = async (userId, ids) =>
+  new Set(ids.length ? (await query('SELECT gmail_id FROM mail_events WHERE user_id = ? AND gmail_id IN (?)', [userId, ids])).map((r) => r.gmail_id) : []);
+
 async function readMail({ id, raw }) {
   const mail = await simpleParser(raw);
   const from = mail.from?.value?.[0] || {};
@@ -47,9 +51,7 @@ export async function syncApplications(user, token, { triage = createMailTriage(
     ? new Date(new Date(user.gmail_apps_synced_at).getTime() - DAY_MS)
     : new Date(now.getTime() - APPS_FIRST_LOOK_BACK_DAYS * DAY_MS);
   const found = await fetchApplicationEmails(token, { after: since });
-  const seen = new Set(
-    found.length ? (await query('SELECT gmail_id FROM mail_events WHERE user_id = ? AND gmail_id IN (?)', [user.id, found.map((m) => m.id)])).map((r) => r.gmail_id) : [],
-  );
+  const seen = await knownIds(user.id, found.map((m) => m.id));
   const mails = [];
   for (const m of found) if (!seen.has(m.id)) mails.push(await readMail(m));
   mails.sort((a, b) => a.receivedAt - b.receivedAt);
@@ -88,6 +90,33 @@ export async function syncApplications(user, token, { triage = createMailTriage(
   return summary;
 }
 
+/**
+ * New LinkedIn alert emails: their jobs join the shared list, and each email is recorded (with how
+ * many jobs it held) so it is shown under its date and never parsed again.
+ */
+export async function syncAlerts(user, token, { since, linkChecker, now = new Date() }) {
+  const found = await fetchAlertEmails(token, { after: since });
+  const seen = await knownIds(user.id, found.map((m) => m.id));
+  const fresh = found.filter((m) => !seen.has(m.id));
+  const summary = { messages: fresh.length, found: 0, new: 0 };
+  if (!fresh.length) return summary;
+
+  const parsed = [];
+  for (const m of fresh) parsed.push({ mail: await readMail(m), ...(await parseMessages([m.raw])) });
+  const jobs = parsed.flatMap((p) => p.jobs);
+  if (jobs.length) {
+    const classifier = createClassifier({ ...(await classifierContext()) });
+    const result = await ingestJobs(jobs, { classifier, ...(linkChecker !== undefined && { linkChecker }), now });
+    Object.assign(summary, { found: result.found, new: result.new });
+  }
+  const failures = parsed.filter((p) => p.failures.length).length;
+  if (failures) summary.parseFailures = failures;
+  await query('INSERT IGNORE INTO mail_events (user_id, gmail_id, received_at, from_addr, subject, kind, classifier, jobs_found, created_at) VALUES ?', [
+    parsed.map(({ mail, jobs: j }) => [user.id, mail.id, mail.receivedAt, mail.fromAddress?.slice(0, 254) ?? null, mail.subject.slice(0, 300) || null, 'alert', 'parser', j.length, now]),
+  ]);
+  return summary;
+}
+
 // Access she removed (or a token the server can no longer read): stop trying until she reconnects.
 const GONE = new Set(['invalid_grant', 'unauthorized_client']);
 
@@ -103,16 +132,10 @@ export async function syncGmail(user, { linkChecker, triage, now = new Date() } 
 
   try {
     const token = await accessToken(refreshToken);
-    const sources = await fetchAlertEmails(token, { after: since });
-    const summary = { user: user.id, messages: sources.length, found: 0, new: 0 };
-    if (sources.length) {
-      const { jobs, failures } = await parseMessages(sources);
-      const classifier = createClassifier({ ...(await classifierContext()) });
-      const result = await ingestJobs(jobs, { classifier, ...(linkChecker !== undefined && { linkChecker }), now });
-      Object.assign(summary, { found: result.found, new: result.new });
-      if (failures.length) summary.parseFailures = failures.length;
-    }
-    Object.assign(summary, await syncApplications(user, token, { ...(triage && { triage }), now }));
+    // Application emails first: LinkedIn's "application sent" emails must not be taken for alerts.
+    const applications = await syncApplications(user, token, { ...(triage && { triage }), now });
+    const alerts = await syncAlerts(user, token, { since, linkChecker, now });
+    const summary = { user: user.id, ...alerts, ...applications };
     await query('UPDATE users SET gmail_synced_at = ?, gmail_error = NULL WHERE id = ?', [now, user.id]);
     return summary;
   } catch (err) {

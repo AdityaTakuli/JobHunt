@@ -72,6 +72,8 @@ Daily totals are stored in the `ai_usage` table, so every task and restart share
 
 **LinkedIn alerts (no scraping).** On LinkedIn, create job alerts ("BIM intern", "Revit", "architectural intern", "junior architect", in each city) and set them to arrive by email. Once Gmail is connected (below), `read-gmail` picks them up from that person's Gmail every 30 minutes. Emails it could not parse show as errors on Settings → Sources.
 
+**Companies (careers feeds, no SerpApi).** The Companies page lists global firms with India offices that take architecture interns and freshers (`server/lib/companies.js`; edit that list and the next start syncs the `companies` table). Firms whose careers site runs on Workday or SmartRecruiters have a free public job feed, and `fetch-companies` reads it every morning: India roles with architecture, interiors, landscape, urban design or BIM in the title (IT "architects" and civil/structural roles left out) go into the shared job list as *Company careers*, with the firm's own apply link. Details are only fetched for roles not stored yet, so a run is about 40 requests for four firms. For firms without a feed the page links to their careers site.
+
 ## Accounts and Gmail
 
 **Who is who.** Account 1 is the owner: the `APP_PASSWORD` login, and everything saved before accounts existed. Signing in with the `OWNER_EMAIL` Google account opens the same account. Everyone else signs in with Google and gets their own tracker, firms list, hidden jobs, search history, settings (name, cities, searches, digest) and digest email. The job list, the AI labels and the SerpApi quota are shared: the scheduled fetch searches everyone's queries in everyone's cities, and typed searches are limited per person per day.
@@ -106,6 +108,7 @@ The plan needs Node.js hosting (hPanel → Websites → *Node.js* / "Node.js Web
 
      ```
      */30 * * * *  curl -fsS "https://yourdomain/api/cron/read-gmail?key=CRON_SECRET"
+     45 0 * * *    curl -fsS "https://yourdomain/api/cron/fetch-companies?key=CRON_SECRET"  # 06:15 IST
      30 1,12 * * * curl -fsS "https://yourdomain/api/cron/fetch-jobs?key=CRON_SECRET"      # 07:00, 18:00 IST
      0 22,10 * * * curl -fsS "https://yourdomain/api/cron/archive?key=CRON_SECRET"         # 03:30, 15:30 IST
      50 * * * *    curl -fsS "https://yourdomain/api/cron/retry-classify?key=CRON_SECRET"

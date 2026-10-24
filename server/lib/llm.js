@@ -22,6 +22,8 @@ Relevant = the work is architecture, architectural design, interior/landscape ar
 (Revit, Navisworks, BIM modelling/coordination) in the building/construction industry.
 NOT relevant = IT roles that use the word "architect" (software, solution, cloud, data, enterprise,
 network, security, Salesforce, AWS, Java architect), sales, or unrelated fields.
+is_relevant is ONLY about the field: senior roles or roles outside her cities are still relevant
+(show that in role_type, min_years_experience and match_score).
 
 Reply with one JSON object and nothing else, with exactly these keys:
 {

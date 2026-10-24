@@ -3,7 +3,8 @@ import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useS
 import { api, setUnauthorizedHandler } from './api.js';
 import Logo, { LogoMark } from './components/Logo.jsx';
 import { LoadingQuote } from './components/Skeleton.jsx';
-import { IconBriefcase, IconBuilding, IconColumns, IconMonitor, IconMoon, IconSettings, IconSun } from './icons.jsx';
+import { IconBriefcase, IconBuilding, IconColumns, IconGlobe, IconMonitor, IconMoon, IconSettings, IconSun } from './icons.jsx';
+import CompaniesPage from './pages/CompaniesPage.jsx';
 import FirmsPage from './pages/FirmsPage.jsx';
 import JobsPage from './pages/JobsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
@@ -17,6 +18,7 @@ const Welcome = lazy(() => import('./components/Welcome.jsx'));
 const ROUTES = [
   { path: 'jobs', label: 'Jobs', Icon: IconBriefcase, Page: JobsPage },
   { path: 'tracker', label: 'Tracker', Icon: IconColumns, Page: TrackerPage },
+  { path: 'companies', label: 'Companies', Icon: IconGlobe, Page: CompaniesPage },
   { path: 'firms', label: 'Firms', Icon: IconBuilding, Page: FirmsPage },
   { path: 'settings', label: 'Settings', Icon: IconSettings, Page: SettingsPage },
 ];

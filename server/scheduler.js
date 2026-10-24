@@ -7,6 +7,7 @@ import { runTask } from './tasks/index.js';
 const SCHEDULE = [
   ['*/30 * * * *', 'read-gmail'],
   ['0 7,18 * * *', 'fetch-jobs'],
+  ['15 6 * * *', 'fetch-companies'],
   ['20 * * * *', 'retry-classify'],
   ['*/5 * * * *', 'send-digest'], // sends once per day, after the digest time in Settings
   ['30 3,15 * * *', 'archive'],

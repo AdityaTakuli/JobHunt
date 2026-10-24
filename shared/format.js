@@ -3,10 +3,22 @@
 export const SOURCE_LABELS = {
   google_jobs: 'Google Jobs',
   linkedin_email: 'LinkedIn alert',
+  company_careers: 'Company careers',
   manual: 'Added by you',
 };
 
 export const ROLE_LABELS = { internship: 'Internship', fresher: 'Fresher', experienced: 'Experienced' };
+
+// What an email read from Gmail turned out to be.
+export const MAIL_KIND_LABELS = {
+  alert: 'LinkedIn alert',
+  applied: 'Application sent',
+  interview: 'Interview',
+  assessment: 'Test or task',
+  offer: 'Offer',
+  rejected: 'Not selected',
+  other: 'Not about an application',
+};
 
 export const APP_STATUSES = ['saved', 'applied', 'interview', 'offer', 'rejected'];
 export const STATUS_LABELS = { saved: 'Saved', applied: 'Applied', interview: 'Interview', offer: 'Offer', rejected: 'Rejected' };

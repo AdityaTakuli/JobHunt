@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { parseDeadline } from '../lib/deadline.js';
 import { rankApplyOptions } from '../lib/normalize.js';
+import { COMPANIES } from '../lib/companies.js';
 import { parseExperience } from '../lib/rules.js';
+import { isDesignRole } from '../sources/companyFeeds.js';
 import { closePool, parseJson, query } from './pool.js';
 
 const schemaPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql');
@@ -28,6 +30,7 @@ const ADDED_COLUMNS = [
   ['searches', 'hidden', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER cached'],
   ['applications', 'source', 'VARCHAR(12) NULL AFTER notes'],
   ['users', 'gmail_apps_synced_at', 'DATETIME NULL AFTER gmail_synced_at'],
+  ['mail_events', 'jobs_found', 'SMALLINT UNSIGNED NULL AFTER application_id'],
 ];
 
 async function hasIndex(table, name) {
@@ -90,6 +93,38 @@ async function backfillDeadlines() {
     if (deadline) await query('UPDATE jobs SET deadline_at = ? WHERE id = ?', [deadline, r.id]);
   }
   await query("INSERT INTO settings (k, v, updated_at) VALUES ('deadlines_backfilled', 'true', ?)", [new Date()]);
+}
+
+// Once: the AI used to answer "not relevant" for architecture jobs that were senior or in another
+// city. Those go back to the hourly retry-classify, which labels them with the fixed prompt.
+async function requeueMislabeled() {
+  const [done] = await query("SELECT v FROM settings WHERE k = 'relevance_relabel_v1'");
+  if (done) return;
+  const rows = await query(
+    "SELECT id, title FROM jobs WHERE is_relevant = 0 AND classifier IN ('freellm', 'groq', 'gemini') AND closed_at IS NULL AND is_archived = 0",
+  );
+  const ids = rows.filter((r) => isDesignRole(r.title)).map((r) => r.id);
+  if (ids.length) await query("UPDATE jobs SET classifier = 'rules', classify_attempts = 0 WHERE id IN (?)", [ids]);
+  await query("INSERT INTO settings (k, v, updated_at) VALUES ('relevance_relabel_v1', 'true', ?)", [new Date()]);
+}
+
+// The watched companies follow lib/companies.js: added, updated, and removed when taken out.
+async function syncCompanies(now = new Date()) {
+  for (const [i, c] of COMPANIES.entries()) {
+    const row = {
+      name: c.name,
+      kind: c.kind || null,
+      cities: c.cities.join(', '),
+      careers_url: c.careersUrl,
+      feed_type: c.feed?.type || null,
+      note: c.note || null,
+      match_names: JSON.stringify(c.match || [c.name]),
+      sort_order: i,
+      updated_at: now,
+    };
+    await query('INSERT INTO companies SET ? ON DUPLICATE KEY UPDATE ?', [{ slug: c.slug, ...row }, row]);
+  }
+  await query('DELETE FROM companies WHERE slug NOT IN (?)', [COMPANIES.map((c) => c.slug)]);
 }
 
 async function addMissingColumns() {
@@ -159,6 +194,8 @@ export async function migrate() {
   await backfillExperience();
   await backfillApplyOptions();
   await backfillDeadlines();
+  await syncCompanies();
+  await requeueMislabeled();
   return statements.length;
 }
 

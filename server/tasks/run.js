@@ -1,4 +1,4 @@
-// CLI: npm run task -- fetch-jobs | read-gmail | retry-classify | send-digest [--force] | archive
+// CLI: npm run task -- fetch-jobs | fetch-companies | read-gmail | retry-classify | send-digest [--force] | archive
 import { closePool } from '../db/pool.js';
 import { runTask, TASKS } from './index.js';
 

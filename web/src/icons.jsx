@@ -39,6 +39,12 @@ export const IconBuilding = (p) => (
     <path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M2 21h20M8 7h4M8 11h4M8 15h4" />
   </Icon>
 );
+export const IconGlobe = (p) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+  </Icon>
+);
 export const IconSettings = (p) => (
   <Icon {...p}>
     <circle cx="12" cy="12" r="3" />

@@ -30,6 +30,7 @@ const SOURCES = [
   { value: '', label: 'All sources' },
   { value: 'google_jobs', label: SOURCE_LABELS.google_jobs },
   { value: 'linkedin_email', label: SOURCE_LABELS.linkedin_email },
+  { value: 'company_careers', label: SOURCE_LABELS.company_careers },
 ];
 
 const APPLY_ON = [

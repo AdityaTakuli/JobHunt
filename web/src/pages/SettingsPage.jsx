@@ -20,6 +20,7 @@ const TAB_KEY = 'aj-settings-tab';
 
 const TASKS = [
   { name: 'fetch-jobs', label: 'Fetch jobs', hint: "Search Google Jobs now. Uses up to 3 of this month's searches." },
+  { name: 'fetch-companies', label: 'Check company careers', hint: 'Read the careers feeds of the companies on the Companies page. Free: no searches used.' },
   { name: 'read-gmail', label: "Check everyone's Gmail", hint: 'Read new LinkedIn alerts and application emails for everyone who connected Gmail.' },
   { name: 'archive', label: 'Clean up postings', hint: 'Close postings past their deadline or taken down, and delete old ones.' },
   { name: 'retry-classify', label: 'Re-label with AI', hint: 'Send keyword-labelled jobs to the AI (FreeLLMAPI, Groq or Gemini). Uses AI tokens.' },
