@@ -8,7 +8,7 @@ import { sendDigest } from './sendDigest.js';
 export const TASKS = {
   'fetch-jobs': () => fetchJobs(),
   // Company careers feeds (lib/companies.js). Free: no SerpApi searches.
-  'fetch-companies': () => fetchCompanies(),
+  'fetch-companies': ({ slugs } = {}) => fetchCompanies({ slugs }),
   'read-gmail': () => readGmail(),
   'retry-classify': () => retryClassify(),
   // Scheduled calls only send when due; manual runs pass force.
@@ -18,6 +18,8 @@ export const TASKS = {
 };
 
 const running = new Set();
+
+export const isRunning = (name) => running.has(name);
 
 // Runs a task by name, skipping it if the same task is still running (cron overlap).
 export async function runTask(name, options) {

@@ -110,6 +110,29 @@ export const config = {
     },
   },
 
+  // OmniRoute: a second self-hosted gateway (OpenAI-style), tried before FreeLLMAPI for job
+  // analysis when set. Its models are named in OMNIROUTE_ANALYSIS_MODELS.
+  omniroute: {
+    url: env.OMNIROUTE_URL || '',
+    apiKey: env.OMNIROUTE_API_KEY || '',
+  },
+
+  // "Analyse with AI" on a job (lib/jobAnalysis.js). Needs a stronger model than labeling, so it
+  // has its own model lists, tried in order: OmniRoute's first, then FreeLLMAPI's.
+  analysis: {
+    omnirouteModels: env.OMNIROUTE_ANALYSIS_MODELS ?? '',
+    // Best first, from a 2026-10-27 test on real postings: gpt-oss-120b (Groq: fast and accurate,
+    // ~1 analysis per 30 s on the free tier), gemini-3.5-flash-lite (steady, ~18 s), gpt-oss-20b.
+    freellmModels: env.AI_ANALYSIS_MODELS ?? 'gpt-oss-120b,gemini-3.5-flash-lite,gpt-oss-20b',
+    maxOutputTokens: num(env.AI_ANALYSIS_MAX_TOKENS, 1_800),
+    timeoutMs: num(env.AI_ANALYSIS_TIMEOUT_MS, 45_000),
+    // Give up on further models once this much time has passed, so the request still answers.
+    deadlineMs: num(env.AI_ANALYSIS_DEADLINE_MS, 80_000),
+    maxDescriptionChars: num(env.AI_ANALYSIS_DESCRIPTION_CHARS, 6_000),
+    // New analyses one person may start per IST day (opening a stored one is free).
+    dailyPerPerson: num(env.AI_ANALYSIS_DAILY_LIMIT, 20),
+  },
+
   groq: {
     apiKey: env.GROQ_API_KEY || '',
     model: env.GROQ_MODEL || 'qwen/qwen3.8-27b',

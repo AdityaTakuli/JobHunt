@@ -12,7 +12,7 @@ export const SOURCE = 'company_careers';
 
 const DESIGN = /\b(architect\w*|bim|revit|interiors?|landscape|urban (design\w*|plann\w*)|master ?plann\w*|draughts\w*|drafts(man|person))\b/i;
 const NOT_DESIGN =
-  /\b(solutions?|data|cloud|enterprise|software|security|network|salesforce|sap|aws|azure|gcp|java|devops|platform|integration|application|systems?|technical|technology|it|infrastructure|ai|ml|mep|mechanical|electrical|plumbing|hvac|structur\w*|civil|geotech\w*|roads?|highways?|bridges?|rail\w*|water|w&wwtr|wastewater|elv|ict|fire)\b/i;
+  /\b(solutions?|data|cloud|enterprise|software|security|network|salesforce|sap|aws|azure|gcp|java|devops|platform|integration|application|systems?|technical|technology|it|infrastructure|ai|ml|mep|mech\w*|electrical|plumbing|phe|hvac|structur\w*|civil|geotech\w*|roads?|highways?|bridges?|rail\w*|water|w&wwtr|wastewater|elv|ict|fire)\b/i;
 
 // Architecture, BIM and design roles, not IT "architects" or other engineering fields.
 export const isDesignRole = (title) => DESIGN.test(title || '') && !NOT_DESIGN.test(title || '');
@@ -152,7 +152,8 @@ async function readSmartRecruiters(company, http, { isKnown, maxDetails }) {
   let details = 0;
   for (const p of postings) {
     if (!isDesignRole(p.name) || (p.location?.country && p.location.country !== 'in')) continue;
-    const place = p.location?.fullLocation || [p.location?.city, 'India'].filter(Boolean).join(', ');
+    // SmartRecruiters leaves empty parts in: "Madhapur, , India".
+    const place = (p.location?.fullLocation || [p.location?.city, 'India'].filter(Boolean).join(', ')).replace(/(,\s*)+,/g, ',');
     const listed = job(company, {
       title: p.name,
       locationText: place,

@@ -47,7 +47,7 @@ const CITY_ALIASES = [
   [/\bnoida\b/i, 'Noida'],
   [/\b(new delhi|delhi)\b/i, 'Delhi'],
   [/\bpune\b/i, 'Pune'],
-  [/\b(hyderabad|secunderabad)\b/i, 'Hyderabad'],
+  [/\b(hyderabad|secunderabad|hitec city|madhapur|gachibowli|kondapur)\b/i, 'Hyderabad'],
   [/\b(chennai|madras)\b/i, 'Chennai'],
   [/\b(kolkata|calcutta)\b/i, 'Kolkata'],
   [/\bahmedabad\b/i, 'Ahmedabad'],

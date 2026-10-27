@@ -14,6 +14,7 @@ export const COMPANIES = [
     kind: 'Engineering & design',
     cities: ['Bengaluru', 'Gurugram', 'Mumbai', 'Chennai'],
     careersUrl: 'https://careers.atkinsrealis.com/en',
+    feed: { type: 'workday', host: 'slihrms.wd3.myworkdayjobs.com', tenant: 'slihrms', site: 'Careers' },
     note: 'Architect Intern (B.Arch, 6 to 12 months; Revit, SketchUp, AutoCAD) and a 12-month BIM Trainee programme in Chennai.',
   },
   {

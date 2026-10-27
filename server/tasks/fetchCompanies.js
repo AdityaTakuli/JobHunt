@@ -10,8 +10,9 @@ import { dedupeKey } from '../lib/normalize.js';
 import { classifierContext } from '../lib/settings.js';
 import { fetchCompanyJobs, SOURCE } from '../sources/companyFeeds.js';
 
-export async function fetchCompanies({ companies = COMPANIES, fetchImpl = fetch, classifier, now = new Date() } = {}) {
-  const watched = companies.filter((c) => c.feed);
+// `slugs` limits the run to those firms (a "Check now" on the Companies page).
+export async function fetchCompanies({ companies = COMPANIES, slugs, fetchImpl = fetch, classifier, now = new Date() } = {}) {
+  const watched = companies.filter((c) => c.feed && (!slugs?.length || slugs.includes(c.slug)));
   const ai = classifier || createClassifier({ ...(await classifierContext()) });
   const summary = { source: SOURCE, companies: watched.length, found: 0, new: 0, requests: 0 };
   const errors = [];

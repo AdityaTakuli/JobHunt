@@ -6,6 +6,7 @@ import { APP_STATUSES, formatDate, formatDateTime, ROLE_LABELS, STATUS_LABELS } 
 import { IconAlert, IconBookmark, IconBookmarkFilled, IconExternal, IconX } from '../icons.jsx';
 import { APPLY_KIND_LABELS, CompanyAvatar, experience, JobBadges, postedLabel, Salary } from './JobBits.jsx';
 import { extractKeywords, highlightParts } from '../keywords.js';
+import JobAnalysis from './JobAnalysis.jsx';
 import { DetailSkeleton } from './Skeleton.jsx';
 
 const EASE = [0.22, 1, 0.36, 1];
@@ -197,6 +198,8 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
         </p>
       )}
       <JobBadges job={job} showSources={false} />
+
+      <JobAnalysis jobId={job.id} />
 
       <FocusKeywords keywords={keywords} />
 

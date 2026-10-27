@@ -213,3 +213,17 @@ CREATE TABLE IF NOT EXISTS companies (
   last_error VARCHAR(300) NULL,
   updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- "Analyse with AI" answers (lib/jobAnalysis.js), one per job, shared by everyone who opens it.
+CREATE TABLE IF NOT EXISTS job_analyses (
+  job_id INT UNSIGNED NOT NULL PRIMARY KEY,
+  analysis JSON NOT NULL,
+  version SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  gateway VARCHAR(16) NOT NULL,              -- omniroute / freellm
+  model VARCHAR(80) NOT NULL,
+  tokens INT UNSIGNED NULL,
+  created_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL,
+  KEY idx_analyses_user (created_by, created_at),
+  CONSTRAINT fk_analyses_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -4,6 +4,7 @@ import express from 'express';
 import { googleCallback, googleStart, login, logout, me, requireAuth, requireCronKey } from './auth.js';
 import { config, ROOT_DIR } from './config.js';
 import { accountRouter } from './routes/account.js';
+import { analysisRouter } from './routes/analysis.js';
 import { applicationsRouter } from './routes/applications.js';
 import { companiesRouter } from './routes/companies.js';
 import { firmsRouter } from './routes/firms.js';
@@ -42,6 +43,7 @@ export function createApp() {
   });
 
   app.use('/api', requireAuth);
+  app.use('/api/jobs', analysisRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/search', searchRouter);
   app.use('/api/applications', applicationsRouter);
