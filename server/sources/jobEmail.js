@@ -4,8 +4,9 @@
 // openings it holds (lib/mailTriage.js, extractJobs), and each one becomes a job row here.
 
 import * as cheerio from 'cheerio';
-import { cleanText, decodeEntities, hostOf, normalizeCity } from '../lib/normalize.js';
+import { cleanText, decodeEntities, hostOf, isHttpUrl, normalizeCity } from '../lib/normalize.js';
 import { parseDeadline } from '../lib/deadline.js';
+import { safeFetch } from '../lib/safeFetch.js';
 import { parseSalary } from '../lib/salary.js';
 import { DAY_MS } from '../lib/time.js';
 
@@ -201,7 +202,7 @@ export function stripTracking(url) {
  * the job page itself and drops the tracking parameters, so the shared Jobs list holds a clean
  * link. Keeps the original link when it can't be followed.
  */
-export async function resolveJobLink(url, { fetchImpl = fetch, timeoutMs = 8_000, maxHops = 6 } = {}) {
+export async function resolveJobLink(url, { fetchImpl = safeFetch, timeoutMs = 8_000, maxHops = 6 } = {}) {
   let current = url;
   try {
     for (let hop = 0; hop < maxHops; hop += 1) {
@@ -215,7 +216,8 @@ export async function resolveJobLink(url, { fetchImpl = fetch, timeoutMs = 8_000
       const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
       if (!location) break;
       const next = new URL(location, current).toString();
-      if (!/^https?:/i.test(next)) break;
+      // A tracker that sends the link to a private address: keep the last public one.
+      if (!isHttpUrl(next)) break;
       current = next;
     }
   } catch {
@@ -223,4 +225,29 @@ export async function resolveJobLink(url, { fetchImpl = fetch, timeoutMs = 8_000
   }
   // A tracker that was never left still needs its own parameters to work.
   return current === url ? url : stripTracking(current);
+}
+
+const aligned = (a, b) => Boolean(a && b) && (a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`));
+
+/**
+ * Did Gmail confirm the sender is who the From line says (DMARC, or DKIM / SPF for the same
+ * domain)? Anyone can write "From: Glassdoor <noreply@glassdoor.com>"; Gmail checks and records
+ * the result in the Authentication-Results header it puts at the top. Only that first header,
+ * from mx.google.com, is trusted: a forger can add their own lower down. Mail without one never
+ * came in from outside (her own messages, imports), so it counts as hers.
+ * @param headerLines mailparser's headerLines: [{ key, line }] in message order
+ */
+export function senderVerified(headerLines, fromAddress) {
+  const first = (headerLines || []).find((h) => h.key === 'authentication-results');
+  if (!first) return true;
+  const text = String(first.line)
+    .replace(/^authentication-results:\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  if (!/^mx\.google\.com\s*;/.test(text)) return false;
+  const domain = String(fromAddress || '').toLowerCase().split('@')[1] || '';
+  if (/\bdmarc=pass\b/.test(text)) return true;
+  for (const m of text.matchAll(/\bdkim=pass\b[^;]*?\bheader\.(?:i=[^@\s;]*@|d=)([a-z0-9.-]+)/g)) if (aligned(m[1], domain)) return true;
+  for (const m of text.matchAll(/\bspf=pass\b[^;]*?\bsmtp\.mailfrom=(?:[^@\s;]*@)?([a-z0-9.-]+)/g)) if (aligned(m[1], domain)) return true;
+  return false;
 }

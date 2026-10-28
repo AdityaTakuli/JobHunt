@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { checkPublicUrl } from './safeFetch.js';
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: "'", lsquo: "'", ndash: '–', mdash: '—', middot: '·', bull: '•', rupee: '₹' };
 
@@ -208,10 +209,12 @@ export function rankApplyOptions(options, company) {
   return out.sort((a, b) => b.rank - a.rank).slice(0, 10);
 }
 
+// An http(s) link that can go in the job list: not a private-network address (lib/safeFetch.js),
+// since anyone can put a link in an email.
 export function isHttpUrl(url) {
   try {
-    const { protocol } = new URL(url);
-    return protocol === 'http:' || protocol === 'https:';
+    checkPublicUrl(url);
+    return true;
   } catch {
     return false;
   }

@@ -4,6 +4,8 @@ import { query } from '../db/pool.js';
 import { getUserSettings } from '../lib/settings.js';
 
 export const firmsRouter = Router();
+// Ids are whole numbers; anything else ("1 OR 1=1") is simply not found.
+firmsRouter.param('id', (req, res, next, id) => (/^\d{1,10}$/.test(id) ? next() : res.status(404).json({ error: 'Not found.' })));
 
 const TEXT_FIELDS = { name: 200, city: 120, type: 40, website: 500, contact_email: 200, notes: 5000 };
 

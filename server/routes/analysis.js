@@ -9,6 +9,8 @@ import { istDateString, startOfIstDay } from '../lib/time.js';
 
 // "Analyse with AI" on a job. The answer is stored per job, so opening it again (by anyone) is free.
 export const analysisRouter = Router();
+// Ids are whole numbers; anything else ("1 OR 1=1") is simply not found.
+analysisRouter.param('id', (req, res, next, id) => (/^\d{1,10}$/.test(id) ? next() : res.status(404).json({ error: 'Not found.' })));
 
 const inFlight = new Map(); // job id -> promise, so two clicks make one call
 

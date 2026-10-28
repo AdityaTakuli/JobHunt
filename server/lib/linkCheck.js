@@ -1,6 +1,9 @@
 // Checks an apply link at ingest. Returns 'ok', 'broken' or 'unknown'.
 // Only a clear signal (404/410 or an "expired" page) marks a link broken; bot walls,
 // timeouts and odd status codes (LinkedIn's 999) stay 'unknown' so good jobs are not flagged.
+// Links are opened with safeFetch: never on a private-network address.
+
+import { safeFetch } from './safeFetch.js';
 
 // The wording job sites use on a closed posting (LinkedIn, Indeed, Glassdoor, Naukri, Internshala,
 // Workday, Greenhouse, Lever...). Only phrases that mean "this one posting is closed".
@@ -37,7 +40,7 @@ async function readStart(res) {
   return text;
 }
 
-export async function checkLink(url, { fetchImpl = fetch, timeoutMs = 8_000 } = {}) {
+export async function checkLink(url, { fetchImpl = safeFetch, timeoutMs = 8_000 } = {}) {
   try {
     const res = await fetchImpl(url, {
       redirect: 'follow',

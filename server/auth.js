@@ -122,6 +122,8 @@ export function login(req, res) {
     return res.status(400).json({ error: 'Password sign-in is off. Use Continue with Google.' });
   }
   if (!safeEqual(req.body?.password ?? '', config.auth.password)) {
+    // Forget old entries now and then, so a flood of addresses can't grow this without end.
+    if (failures.size > 10_000) for (const [key, s] of failures) if (!(s.until > Date.now())) failures.delete(key);
     const count = (state?.count || 0) + 1;
     failures.set(ip, { count: count >= MAX_FAILS ? 0 : count, until: count >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
     return res.status(401).json({ error: 'Wrong password.' });

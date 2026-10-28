@@ -736,7 +736,7 @@ describe('integration', { skip: !dbReady }, () => {
       assert.ok(!row.gmail_token.includes('refresh-1'));
 
       // Connecting started the first read in the background; let it finish.
-      for (let i = 0; i < 100 && !(await query('SELECT gmail_apps_synced_at AS at FROM users WHERE email = ?', ['gmail.user@example.com']))[0].at; i += 1) {
+      for (let i = 0; i < 100 && !(await query('SELECT gmail_synced_at AS at FROM users WHERE email = ?', ['gmail.user@example.com']))[0].at; i += 1) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
@@ -1109,5 +1109,63 @@ describe('integration', { skip: !dbReady }, () => {
     assert.ok(await state('Future Deadline Intern'), 'kept: it is in her tracker');
     const again = await ingestJobs([job('Gone Intern')], { classifier: createClassifier({ freellm: null, groq: null, gemini: null }), linkChecker: null, now: later });
     assert.deepEqual([again.new, again.skippedClosed], [0, 1]);
+  });
+
+  it('holds up against bad and hostile requests', async () => {
+    // Security headers on pages and API answers.
+    const health = await fetch(`${base}/api/health`);
+    const csp = health.headers.get('content-security-policy');
+    assert.match(csp, /script-src 'self'/);
+    assert.match(csp, /frame-ancestors 'none'/);
+    assert.equal(health.headers.get('x-frame-options'), 'DENY');
+
+    // Signed out, or with a forged or tampered cookie: nothing personal.
+    assert.equal((await request('/api/applications', { auth: false })).status, 401);
+    const [payload, sig] = cookie.replace(/^aj_session=/, '').split('.');
+    const forged = Buffer.from(JSON.stringify({ uid: 1, exp: Date.now() + 1e9, admin: true })).toString('base64url');
+    for (const bad of [`aj_session=${forged}.${sig}`, `aj_session=${payload}.x${sig}`, 'aj_session=garbage', 'aj_session=']) {
+      assert.equal((await request('/api/applications', { auth: false, headers: { Cookie: bad } })).status, 401, bad);
+    }
+
+    // One person cannot see, change or delete another's tracker entry or firm.
+    const other = await query('INSERT INTO users SET ?', [{ email: 'other.person@example.com', name: 'Other', created_at: new Date() }]);
+    const otherCookie = `aj_session=${createSessionToken(other.insertId)}`;
+    const mine = await request('/api/applications', { method: 'POST', body: { title: 'Private Role', company: 'Private Co', status: 'applied' } });
+    assert.equal(mine.status, 201, JSON.stringify(mine.data));
+    const appId = mine.data.application.id;
+    const asOther = (path, init = {}) => request(path, { ...init, auth: false, headers: { Cookie: otherCookie } });
+    assert.ok(!(await asOther('/api/applications')).data.applications.some((a) => a.id === appId));
+    assert.equal((await asOther(`/api/applications/${appId}`, { method: 'PATCH', body: { status: 'rejected' } })).status, 404);
+    await asOther(`/api/applications/${appId}`, { method: 'DELETE' });
+    assert.ok((await request('/api/applications')).data.applications.some((a) => a.id === appId && a.status === 'applied'), 'untouched');
+    assert.equal((await asOther('/api/people')).status, 403, 'admin pages stay closed');
+    assert.equal((await asOther('/api/system')).status, 403);
+    assert.equal((await asOther('/api/tasks/archive', { method: 'POST' })).status, 403);
+
+    // Odd values answer normally instead of failing.
+    for (const qs of ['sort=constructor', 'apply=__proto__', 'sort=toString&apply=constructor', 'q=%27%20OR%201%3D1%20--', 'city=%00', 'ids=1,2,abc,-5', 'within=99999999', 'exp=-1', 'software=Revit%22)%20OR%20(1']) {
+      const res = await request(`/api/jobs?${qs}`);
+      assert.equal(res.status, 200, `${qs}: ${JSON.stringify(res.data)}`);
+    }
+    assert.equal((await request('/api/jobs/1%20OR%201=1')).status, 404);
+    // Cron needs its key before anything else (503 when no key is set up, as here).
+    assert.ok([401, 503].includes((await fetch(`${base}/api/cron/constructor?key=x`)).status));
+    assert.equal((await request('/api/tasks/constructor', { method: 'POST' })).status, 404);
+    assert.equal((await request('/api/tasks/__proto__', { method: 'POST' })).status, 404);
+
+    // Broken or oversized bodies are refused cleanly.
+    const broken = await fetch(`${base}/api/applications`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{"title": ' });
+    assert.equal(broken.status, 400);
+    const huge = await fetch(`${base}/api/firms/import`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ text: 'x'.repeat(1_100_000) }) });
+    assert.equal(huge.status, 413);
+
+    // "Check now" twice in a row: the second waits.
+    const first = await request('/api/account/gmail/sync', { method: 'POST' });
+    assert.equal(first.status, 200);
+    const second = await request('/api/account/gmail/sync', { method: 'POST' });
+    assert.equal(second.status, 429);
+
+    await query('DELETE FROM users WHERE id = ?', [other.insertId]);
+    await query('DELETE FROM applications WHERE id = ?', [appId]);
   });
 });

@@ -10,13 +10,24 @@ import { deleteUser, findUser, isAdmin, OWNER_ID } from '../lib/users.js';
 import { readGmail } from '../tasks/readGmail.js';
 
 export const accountRouter = Router();
+// Ids are whole numbers; anything else ("1 OR 1=1") is simply not found.
+accountRouter.param('id', (req, res, next, id) => (/^\d{1,10}$/.test(id) ? next() : res.status(404).json({ error: 'Not found.' })));
 
 accountRouter.get('/account', async (req, res) => {
   res.json({ account: accountView(await findUser(req.user.id)) });
 });
 
-// "Check Gmail now" on the Settings screen: reads only her own mailbox.
+// "Check Gmail now" on the Settings screen: reads only her own mailbox. At most once every 30
+// seconds per person, so a stuck finger can't spend the mail AI's budget.
+const CHECK_COOLDOWN_MS = 30_000;
+const lastCheck = new Map(); // user id -> time
 accountRouter.post('/account/gmail/sync', async (req, res) => {
+  const last = lastCheck.get(req.user.id) || 0;
+  if (Date.now() - last < CHECK_COOLDOWN_MS) {
+    return res.status(429).json({ error: 'Gmail was just checked. Try again in half a minute.' });
+  }
+  lastCheck.set(req.user.id, Date.now());
+  if (lastCheck.size > 5000) for (const [id, at] of lastCheck) if (Date.now() - at > CHECK_COOLDOWN_MS) lastCheck.delete(id);
   // A few job emails per click keeps the answer quick; the 30-minute run reads the rest.
   const result = await readGmail({ userId: req.user.id, jobEmailsPerRun: 4 });
   res.json({ result, account: accountView(await findUser(req.user.id)) });

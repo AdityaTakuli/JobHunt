@@ -23,7 +23,7 @@ export const isRunning = (name) => running.has(name);
 
 // Runs a task by name, skipping it if the same task is still running (cron overlap).
 export async function runTask(name, options) {
-  const task = TASKS[name];
+  const task = Object.hasOwn(TASKS, name) ? TASKS[name] : null;
   if (!task) throw Object.assign(new Error(`Unknown task "${name}"`), { status: 404 });
   if (running.has(name)) return { task: name, skipped: 'already running' };
   running.add(name);

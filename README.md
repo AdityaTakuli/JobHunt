@@ -99,6 +99,15 @@ Gmail read access is a "restricted" scope. Until Google verifies the app (a revi
 
 **Closed postings.** Only jobs that can still be applied to are shown. A posting leaves every list (Jobs, Companies, search results, the digest) the moment its "apply by" date passes (`STILL_OPEN` in `lib/deadline.js`, which reads "Last date to apply: 20 Oct", "Apply before 31/10/2026"…, and the apply-by dates the AI finds in job emails), and closes when its apply links say it is gone (404/410, or a closed-posting page: "no longer accepting applications", "this job has expired", "applications are closed"… in `lib/linkCheck.js`). The `archive` task runs twice a day: it closes postings past their deadline, re-checks 150 apply links (each about every 2 days; a dead best link is swapped for another listing that still works), archives jobs older than 30 days, and deletes closed jobs after 14 days and archived ones after 60, unless someone has them in their tracker, where they show *Posting closed*. Deleted postings are remembered for 180 days, so a site that still lists them cannot bring them back.
 
+## Security
+
+- **Sign-in:** HMAC-signed session cookie (HttpOnly, Secure, SameSite=Lax); password compared in constant time and locked for 15 minutes after 5 wrong tries per address. Every API route except health, login, Google sign-in and cron needs a session; admin pages need an admin. Each person only ever reads or changes their own tracker, firms, hidden jobs, searches and emails; ids in URLs must be whole numbers.
+- **Links the server opens** (link checks, following click trackers in emails) go through `lib/safeFetch.js`: http(s) on ports 80/443 only, and never to localhost, private networks or cloud metadata addresses, checked again at connect time and on every redirect. Links like that are also kept out of the job list.
+- **Forged email:** a job email, LinkedIn alert or application email counts only when Gmail's own Authentication-Results header (the first one, from mx.google.com) shows the sender passed DMARC, or DKIM/SPF for the From domain (`senderVerified` in `sources/jobEmail.js`). Spam is never searched.
+- **Browser:** Content-Security-Policy (own scripts only; the inline theme script allowed by hash, computed from `web/dist/index.html` at start), HSTS in production, no framing, nosniff, no referrer. React escapes all text; apply links must be http(s).
+- **Limits:** *Check now* at most every 30 s per person and one Gmail read per person at a time; daily caps on typed searches and AI analyses per person; separate AI budgets for job labeling and mail.
+- **Secrets** live only in hPanel and the git-ignored `hostinger*.env`; Gmail refresh tokens are encrypted with AES-256-GCM. `npm test` includes `test/security.test.js` and a hostile-request test in `test/integration.test.js`.
+
 ## Deploy on Hostinger
 
 The plan needs Node.js hosting (hPanel → Websites → *Node.js* / "Node.js Web App"). If it is not there, upgrade the plan or use a small VPS.

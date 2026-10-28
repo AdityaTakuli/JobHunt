@@ -10,6 +10,8 @@ import { localSearchesThisMonth } from '../tasks/fetchJobs.js';
 import { typedSearchesToday } from '../tasks/liveSearch.js';
 
 export const jobsRouter = Router();
+// Ids are whole numbers; anything else ("1 OR 1=1") is simply not found.
+jobsRouter.param('id', (req, res, next, id) => (/^\d{1,10}$/.test(id) ? next() : res.status(404).json({ error: 'Not found.' })));
 
 const LIST_COLUMNS = `j.id, j.title, j.company, j.city, j.location_text, j.apply_url, j.apply_kind, j.apply_options, j.link_status, j.sources,
   j.posted_at, j.created_at, j.salary_text, j.salary_min, j.salary_max, j.salary_period, j.salary_is_estimate,
@@ -125,7 +127,8 @@ export function feedFilters(q, now = new Date(), myCities = [], uid = 1) {
   }
   // Where she can apply: company = the firm's own site, direct = + LinkedIn, trusted = + job boards.
   const APPLY_KINDS = { company: ['company'], direct: ['company', 'linkedin'], trusted: ['company', 'linkedin', 'board'] };
-  if (APPLY_KINDS[q.apply]) {
+  // Object.hasOwn: "?apply=constructor" must not reach Object's built-ins.
+  if (Object.hasOwn(APPLY_KINDS, String(q.apply))) {
     where.push('j.apply_kind IN (?)');
     params.push(APPLY_KINDS[q.apply]);
   }
@@ -144,7 +147,7 @@ const SORTS = { match: 'j.match_score DESC,', direct: 'j.apply_url_rank DESC,' }
 
 // Search results sorted by relevance: roles judged relevant first, each group in Google's order.
 // `ids` are integers checked by idList, so they can sit in the SQL.
-const orderBy = (sort, ids) => (sort === 'relevance' && ids.length ? `j.is_relevant DESC, FIELD(j.id, ${ids.join(',')}),` : SORTS[sort] || '');
+const orderBy = (sort, ids) => (sort === 'relevance' && ids.length ? `j.is_relevant DESC, FIELD(j.id, ${ids.join(',')}),` : (Object.hasOwn(SORTS, String(sort)) ? SORTS[sort] : ''));
 
 jobsRouter.get('/', async (req, res) => {
   const myCities = req.query.city === 'mine' ? (await getUserSettings(req.user.id)).cities : [];

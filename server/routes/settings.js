@@ -74,7 +74,7 @@ settingsRouter.get('/system', requireAdmin, async (req, res) => {
 
 // Manual "Run now" buttons on the Settings screen.
 settingsRouter.post('/tasks/:task', requireAdmin, async (req, res) => {
-  if (!TASKS[req.params.task]) return res.status(404).json({ error: 'Unknown task.' });
+  if (!Object.hasOwn(TASKS, req.params.task)) return res.status(404).json({ error: 'Unknown task.' });
   // "Send now" sends her own digest; the other tasks work on the shared job list.
   res.json(await runTask(req.params.task, { force: true, userId: req.user.id }));
 });

@@ -20,7 +20,7 @@ import { open } from '../lib/secretBox.js';
 import { classifierContext } from '../lib/settings.js';
 import { DAY_MS } from '../lib/time.js';
 import { applyMailEvent } from '../lib/tracker.js';
-import { emailToText, jobsFromEmail, mightListJobs, resolveJobLink } from '../sources/jobEmail.js';
+import { emailToText, jobsFromEmail, mightListJobs, resolveJobLink, senderVerified } from '../sources/jobEmail.js';
 import { parseMessages } from '../sources/linkedinEmail.js';
 
 export const SOURCE = 'gmail';
@@ -40,10 +40,13 @@ const knownIds = async (userId, ids) =>
 async function readMail({ id, raw }) {
   const mail = await simpleParser(raw);
   const from = mail.from?.value?.[0] || {};
+  const fromAddress = from.address ? String(from.address).toLowerCase() : null;
   return {
     id,
     from: mail.from?.text || from.address || '',
-    fromAddress: from.address ? String(from.address).toLowerCase() : null,
+    fromAddress,
+    // Gmail confirmed the sender (sources/jobEmail.js): spoofed mail adds no jobs, moves no tracker.
+    verified: senderVerified(mail.headerLines, fromAddress),
     fromName: from.name || null,
     subject: mail.subject || '',
     text: mail.text || '',
@@ -68,9 +71,9 @@ export async function syncApplications(user, token, { triage = createMailTriage(
   const summary = { emails: mails.length, tracked: 0 };
   let aiMissed = false;
   for (const mail of mails) {
-    const out = await triage.triage(mail);
+    const out = mail.verified ? await triage.triage(mail) : { kind: 'other', company: null, role: null, classifier: 'rules' };
     // Rules standing in for an AI that is down or out of budget (not one that was never set up).
-    const standIn = out.classifier === 'rules' && triage.down !== 'not_configured';
+    const standIn = mail.verified && out.classifier === 'rules' && triage.down !== 'not_configured';
     if (standIn) aiMissed = true;
     if (standIn && out.kind === 'other') continue;
     // Claim the email first: a run started alongside this one (connecting Gmail starts one,
@@ -111,7 +114,11 @@ export async function syncAlerts(user, token, { since, linkChecker, now = new Da
   if (!fresh.length) return summary;
 
   const parsed = [];
-  for (const m of fresh) parsed.push({ mail: await readMail(m), ...(await parseMessages([m.raw])) });
+  for (const m of fresh) {
+    const mail = await readMail(m);
+    // A forged "LinkedIn" alert adds nothing.
+    parsed.push(mail.verified ? { mail, ...(await parseMessages([m.raw])) } : { mail, jobs: [], failures: [] });
+  }
   const jobs = parsed.flatMap((p) => p.jobs);
   if (jobs.length) {
     const classifier = createClassifier({ ...(await classifierContext()) });
@@ -181,7 +188,7 @@ export async function syncJobEmails(user, token, { triage, linkChecker, resolveL
     if (!raw) continue;
     const mail = await readMail(raw);
     const { text, links } = emailToText(mail);
-    if (!mightListJobs({ subject: mail.subject, text }, links)) {
+    if (!mail.verified || !mightListJobs({ subject: mail.subject, text }, links)) {
       await record(mail, 'other', 'rules', 0);
       continue;
     }
@@ -241,6 +248,19 @@ export async function syncGmail(user, { linkChecker, triage = createMailTriage()
   }
 }
 
+// One read of a person's mailbox at a time: connecting Gmail, "Check now" and the 30-minute run
+// started together share the read already going instead of each calling Gmail and the AI.
+const reading = new Map(); // user id -> promise
+function syncOnce(user, options) {
+  if (!reading.has(user.id)) {
+    reading.set(
+      user.id,
+      syncGmail(user, options).finally(() => reading.delete(user.id)),
+    );
+  }
+  return reading.get(user.id);
+}
+
 /** @param jobEmailsPerRun fewer job emails for "Check now", so the button answers quickly */
 export async function readGmail({ linkChecker, now = new Date(), userId, triage, jobEmailsPerRun } = {}) {
   if (!googleConfigured()) return { source: SOURCE, skipped: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set' };
@@ -250,7 +270,7 @@ export async function readGmail({ linkChecker, now = new Date(), userId, triage,
   const results = [];
   // One triage session for the run, so its token budget and down models carry across people.
   const shared = triage || createMailTriage();
-  for (const user of users) results.push(await syncGmail(user, { linkChecker, triage: shared, jobEmailsPerRun, now }));
+  for (const user of users) results.push(await syncOnce(user, { linkChecker, triage: shared, jobEmailsPerRun, now }));
   const total = (key) => results.reduce((n, r) => n + (r[key] || 0), 0);
   // LinkedIn alerts and job emails from other senders count together.
   const messages = total('messages') + total('jobEmails');

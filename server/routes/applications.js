@@ -4,6 +4,8 @@ import { query } from '../db/pool.js';
 import { applyStatusSideEffects } from '../lib/tracker.js';
 
 export const applicationsRouter = Router();
+// Ids are whole numbers; anything else ("1 OR 1=1") is simply not found.
+applicationsRouter.param('id', (req, res, next, id) => (/^\d{1,10}$/.test(id) ? next() : res.status(404).json({ error: 'Not found.' })));
 
 const EDITABLE = ['status', 'applied_at', 'follow_up_at', 'contact_name', 'contact_email', 'notes', 'title', 'company', 'apply_url'];
 
