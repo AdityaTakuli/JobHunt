@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   exp_min TINYINT UNSIGNED NULL,             -- years of experience asked for (NULL = not stated)
   exp_max TINYINT UNSIGNED NULL,             -- upper end of a range ("0-1 years"), NULL = open-ended
   exp_parsed TINYINT(1) NOT NULL DEFAULT 0,  -- 1 once exp_* were worked out (see migrate.js backfill)
-  classifier VARCHAR(8) NULL,                -- freellm / groq / gemini / rules / manual
+  classifier VARCHAR(8) NULL,                -- freellm / groq / gemini / mail_ai / rules / manual
   classify_reason VARCHAR(300) NULL,
   classify_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
   classified_at DATETIME NULL,
@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS searches (
 
 -- AI tokens and requests spent per provider per IST day, for the guardrails in lib/aiBudget.js.
 CREATE TABLE IF NOT EXISTS ai_usage (
-  provider VARCHAR(12) NOT NULL,             -- freellm / groq / gemini
+  provider VARCHAR(12) NOT NULL,             -- freellm / groq / gemini / mail_ai
   day DATE NOT NULL,
   requests INT UNSIGNED NOT NULL DEFAULT 0,
   tokens INT UNSIGNED NOT NULL DEFAULT 0,
@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS users (
   gmail_connected_at DATETIME NULL,
   gmail_synced_at DATETIME NULL,
   gmail_apps_synced_at DATETIME NULL,        -- last read of her application emails
+  gmail_jobs_synced_at DATETIME NULL,        -- last full read of job emails from other sites
   gmail_error VARCHAR(300) NULL,
   created_at DATETIME NOT NULL,
   last_login_at DATETIME NULL,

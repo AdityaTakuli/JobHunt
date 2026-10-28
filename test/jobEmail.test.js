@@ -156,6 +156,27 @@ describe('job email AI', () => {
     assert.equal(t.stats.ai, 1);
   });
 
+  it('counts mail reading in its own budget, and sends no reasoning setting to Llama models', async () => {
+    const usageStore = memoryUsageStore();
+    const sent = [];
+    const fetchImpl = async (url, init) => {
+      const body = JSON.parse(init.body);
+      sent.push([body.model, body.reasoning_effort]);
+      if (body.model === 'openai/gpt-oss-20b') return new Response('busy', { status: 503 });
+      return Response.json({ choices: [{ message: { content: '{"jobs": []}' } }], usage: { total_tokens: 500 } });
+    };
+    const cfg = { ...freellm, mailModel: 'openai/gpt-oss-20b,meta-llama/llama-4-scout-17b-16e-instruct', reasoningEffort: 'low', mailLimits: { dailyRequests: 1 } };
+    const t = createMailTriage({ freellm: cfg, fetchImpl, usageStore });
+    assert.deepEqual(await t.extractJobs(MAIL, 'text'), { jobs: [] });
+    assert.deepEqual(sent, [['openai/gpt-oss-20b', 'low'], ['meta-llama/llama-4-scout-17b-16e-instruct', undefined]]);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    assert.equal((await usageStore.get('mail_ai', today)).tokens, 500);
+    assert.equal((await usageStore.get('freellm', today)).tokens, 0, 'job labeling budget untouched');
+    // Its own daily limit: one request a day here.
+    assert.equal(await t.extractJobs(MAIL, 'text'), null);
+    assert.equal(t.down, 'budget:daily_requests');
+  });
+
   it('answers null while the AI is out, so the email is read on a later run', async () => {
     const t = createMailTriage({ freellm, fetchImpl: async () => new Response('', { status: 429 }), usageStore: memoryUsageStore() });
     assert.equal(await t.extractJobs(MAIL, 'text'), null);

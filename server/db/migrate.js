@@ -30,6 +30,7 @@ const ADDED_COLUMNS = [
   ['searches', 'hidden', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER cached'],
   ['applications', 'source', 'VARCHAR(12) NULL AFTER notes'],
   ['users', 'gmail_apps_synced_at', 'DATETIME NULL AFTER gmail_synced_at'],
+  ['users', 'gmail_jobs_synced_at', 'DATETIME NULL AFTER gmail_apps_synced_at'],
   ['mail_events', 'jobs_found', 'SMALLINT UNSIGNED NULL AFTER application_id'],
 ];
 

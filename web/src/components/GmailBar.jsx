@@ -96,6 +96,7 @@ export default function GmailBar({ onSynced }) {
     try {
       const { result: r = {} } = await api('/account/gmail/sync', { method: 'POST' });
       const parts = [`${r.messages || 0} new job email${r.messages === 1 ? '' : 's'} (${r.new || 0} new jobs)`, `${r.emails || 0} application email${r.emails === 1 ? '' : 's'} (${r.tracked || 0} tracker updates)`];
+      if (r.jobEmailsLeft) parts.push(`${r.jobEmailsLeft} more job email${r.jobEmailsLeft === 1 ? '' : 's'} to read next time`);
       toast({ message: r.skipped ? `Skipped: ${r.skipped}` : r.errors?.length ? r.errors[0] : `Gmail checked: ${parts.join(', ')}.`, error: Boolean(r.errors?.length), duration: 7000 });
       refreshMe();
       refreshMeta();

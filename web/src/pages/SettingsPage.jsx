@@ -325,6 +325,7 @@ function ConnectionsPanel({ system, onRan }) {
   const connections = [
     { name: 'Google Jobs', detail: 'Job search via SerpApi', ok: configured.serpapi },
     { name: 'FreeLLMAPI', detail: `Main AI · ${ai.freellm.model.split(',').join(' → ')}`, ok: configured.freellm },
+    ...(ai.mail ? [{ name: 'Mail AI', detail: `Reads Gmail, own quota · ${ai.mail.model.split(',').join(' → ')}`, ok: ai.mail.configured }] : []),
     // Groq and Gemini normally run inside FreeLLMAPI; list them only when called directly too.
     ...(configured.groq || !configured.freellm ? [{ name: 'Groq', detail: `Direct backup AI · ${ai.groq.model}`, ok: configured.groq }] : []),
     ...(configured.gemini || !configured.freellm ? [{ name: 'Gemini', detail: `Direct backup AI · ${ai.gemini.model}`, ok: configured.gemini }] : []),
@@ -340,6 +341,9 @@ function ConnectionsPanel({ system, onRan }) {
           <Usage label="Searches" period="this month" used={serpapi.searchesUsedThisMonth} limit={serpapi.monthlyLimit} note={`Pauses with ${serpapi.reserve} left`} />
           {ai.freellm.configured && (
             <Usage label="FreeLLMAPI tokens" period="today" used={ai.freellm.today.tokens} limit={ai.freellm.dailyTokens} note={`${ai.freellm.today.requests} of ${ai.freellm.dailyRequests} requests`} />
+          )}
+          {ai.mail?.configured && (
+            <Usage label="Mail AI tokens" period="today" used={ai.mail.today.tokens} limit={ai.mail.dailyTokens} note={`${ai.mail.today.requests} of ${ai.mail.dailyRequests} requests`} />
           )}
           {ai.groq.configured && <Usage label="Groq tokens" period="today" used={ai.groq.today.tokens} limit={ai.groq.dailyTokens} note={`${ai.groq.today.requests} of ${ai.groq.dailyRequests} requests`} />}
           {ai.gemini.configured && (

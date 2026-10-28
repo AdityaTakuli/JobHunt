@@ -1,8 +1,9 @@
 // Reads one email about a job application and says what it means for the tracker: she applied,
 // got an interview or a test, an offer, a rejection, or nothing to do with her applications.
 // FreeLLMAPI first (models tried in order, FREELLM_MAIL_MODEL), keyword rules when it is out.
-// Shares the FreeLLMAPI daily budget with job labeling (lib/aiBudget.js). The same session also
-// lists the openings in job emails from any sender (sources/jobEmail.js).
+// Has its own models and daily budget (FREELLM_MAIL_MODEL, MAIL_AI_*; ai_usage row "mail_ai"), so
+// reading mail never uses up job labeling's. The same session also lists the openings in job
+// emails from any sender (sources/jobEmail.js).
 
 import { config } from '../config.js';
 import { createBudget, dbUsageStore } from './aiBudget.js';
@@ -11,6 +12,7 @@ import { estimateTokens, LlmError, retryInvalidJsonOnce } from './llm.js';
 import { chatJson } from './openaiChat.js';
 import { JOB_EMAIL_PROMPT, jobEmailPrompt, validateJobList } from '../sources/jobEmail.js';
 
+export const MAIL_BUDGET = 'mail_ai';
 export const MAIL_KINDS = ['applied', 'interview', 'assessment', 'offer', 'rejected', 'other'];
 const KINDS = new Set(MAIL_KINDS);
 const MAX_BODY_CHARS = 1800;
@@ -114,7 +116,7 @@ export function triageWithRules(mail) {
  */
 export function createMailTriage({ freellm = config.freellm, fetchImpl = fetch, usageStore = dbUsageStore, sleep } = {}) {
   const cfg = freellm && { ...freellm, model: freellm.mailModel || freellm.model };
-  const budget = cfg && createBudget('freellm', cfg.limits, { store: usageStore, maxWaitMs: config.ai.maxWaitMs, ...(sleep && { sleep }) });
+  const budget = cfg && createBudget(MAIL_BUDGET, cfg.mailLimits || cfg.limits, { store: usageStore, maxWaitMs: config.ai.maxWaitMs, ...(sleep && { sleep }) });
   const state = {};
   const stats = { ai: 0, rules: 0, tokens: 0, failures: {} };
   let down = !cfg?.url || !cfg?.apiKey ? 'not_configured' : null;
@@ -137,7 +139,10 @@ export function createMailTriage({ freellm = config.freellm, fetchImpl = fetch, 
       });
     };
     return withFreeLlmModels({ ...cfg, state, fetchImpl }, (o) =>
-      retryInvalidJsonOnce(async () => parse(await chatJson({ ...o, system, user, maxOutputTokens, onUsage }), o.label)),
+      retryInvalidJsonOnce(async () =>
+        // Llama models take no reasoning setting.
+        parse(await chatJson({ ...o, ...(/llama/i.test(o.model) && { reasoningEffort: undefined }), system, user, maxOutputTokens, onUsage }), o.label),
+      ),
     );
   }
 

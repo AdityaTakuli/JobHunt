@@ -866,11 +866,15 @@ describe('integration', { skip: !dbReady }, () => {
     };
     await query('INSERT INTO mail_events SET ?', [{ user_id: uid, gmail_id: 'o1', received_at: now, kind: 'other', classifier: 'freellm', created_at: now }]);
     const seen = [];
+    const searchedFrom = [];
     const realFetch = google.deps.fetch;
     google.deps.fetch = async (url) => {
       const u = new URL(url);
       if (u.pathname.endsWith('/messages')) {
-        assert.match(u.searchParams.get('q'), /^-from:\(jobalerts-noreply@linkedin\.com/);
+        const q = u.searchParams.get('q');
+        assert.match(q, /^-from:\(jobalerts-noreply@linkedin\.com/);
+        searchedFrom.push(Number(q.match(/after:(\d+)/)[1]) * 1000);
+        // Newest first, as Gmail lists them.
         return Response.json({ messages: Object.keys(inbox).map((id) => ({ id })) });
       }
       const id = u.pathname.split('/').pop();
@@ -892,9 +896,24 @@ describe('integration', { skip: !dbReady }, () => {
     const resolveLink = async (link) => `${link.split('?')[0]}?resolved=1`;
     const user = async () => (await query('SELECT * FROM users WHERE id = ?', [uid]))[0];
     try {
-      const first = await syncJobEmails(await user(), 'token', { triage, linkChecker: null, resolveLink, now, perRun: 10 });
-      assert.deepEqual(first, { jobEmails: 3, jobEmailJobs: 3, jobEmailNew: 3 });
-      assert.deepEqual(asked.sort(), ['Internationalisation Architect at Moyo Innovations and 11 more jobs', 'New jobs this week', "We're hiring: BIM interns"], 'the Naukri ad never reached the AI');
+      // 1. First read: 30 days back, oldest first, two per run. The position stays put while
+      //    emails are left.
+      const first = await syncJobEmails(await user(), 'token', { triage, linkChecker: null, resolveLink, now, perRun: 2 });
+      assert.deepEqual(first, { jobEmails: 2, jobEmailJobs: 1, jobEmailNew: 1, jobEmailsLeft: 2 });
+      assert.ok(Math.abs(searchedFrom[0] - (now.getTime() - 30 * 86_400_000)) < 2000, 'never more than a month back');
+      assert.deepEqual(asked, ['New jobs this week', "We're hiring: BIM interns"]);
+      assert.equal((await user()).gmail_jobs_synced_at, null);
+
+      // 2. The AI is out: nothing is read and the position still stays put.
+      const out = { extractJobs: async () => null };
+      assert.deepEqual(await syncJobEmails(await user(), 'token', { triage: out, linkChecker: null, resolveLink, now, perRun: 10 }), { jobEmails: 0, jobEmailJobs: 0, jobEmailNew: 0, jobEmailsLeft: 1 });
+      assert.equal((await user()).gmail_jobs_synced_at, null);
+
+      // 3. Back: the rest are read and the position moves to now.
+      const rest = await syncJobEmails(await user(), 'token', { triage, linkChecker: null, resolveLink, now, perRun: 10 });
+      assert.deepEqual(rest, { jobEmails: 1, jobEmailJobs: 2, jobEmailNew: 2 });
+      assert.deepEqual(asked, ['New jobs this week', "We're hiring: BIM interns", 'Internationalisation Architect at Moyo Innovations and 11 more jobs'], 'the Naukri ad never reached the AI');
+      assert.equal((await user()).gmail_jobs_synced_at.getTime(), Math.floor(now.getTime() / 1000) * 1000);
 
       const jobs = await query("SELECT title, company, city, apply_url, salary_min, sources FROM jobs WHERE company LIKE '%Integration' ORDER BY title");
       assert.deepEqual(jobs.map((j) => [j.title, j.city, j.salary_min]), [['Intern Architect', 'Pune', null], ['Junior Architect', 'Bengaluru', 14000], ['Landscape Architect', '', 30000]]);
@@ -909,9 +928,12 @@ describe('integration', { skip: !dbReady }, () => {
         ['s1', 'other', 'freellm', 0],
       ]);
 
-      // Again: everything was read, nothing is downloaded or sent to the AI.
+      // 4. Days later: only mail since the last read (less an hour) is searched, and what was
+      //    already read is neither downloaded nor sent to the AI.
       seen.length = 0;
-      assert.deepEqual(await syncJobEmails(await user(), 'token', { triage: { extractJobs: () => assert.fail('read twice') }, linkChecker: null, now }), { jobEmails: 0, jobEmailJobs: 0, jobEmailNew: 0 });
+      const later = new Date(now.getTime() + 4 * 86_400_000);
+      assert.deepEqual(await syncJobEmails(await user(), 'token', { triage: { extractJobs: () => assert.fail('read twice') }, linkChecker: null, now: later }), { jobEmails: 0, jobEmailJobs: 0, jobEmailNew: 0 });
+      assert.equal(searchedFrom.at(-1), Math.floor(now.getTime() / 1000) * 1000 - 3_600_000);
       assert.deepEqual(seen, []);
     } finally {
       google.deps.fetch = realFetch;

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import { usageToday } from '../lib/aiBudget.js';
+import { MAIL_BUDGET } from '../lib/mailTriage.js';
 import { providerConfigured } from '../lib/classify.js';
 import { mailConfigured } from '../lib/mailer.js';
 import { requireAdmin } from '../auth.js';
@@ -54,7 +55,19 @@ settingsRouter.get('/system', requireAdmin, async (req, res) => {
     },
     serpapi: { searchesUsedThisMonth: searchesUsed, monthlyLimit: config.serpapi.monthlyLimit, reserve: config.serpapi.reserve },
     groqModel: config.groq.model,
-    ai: { freellm: aiStatus('freellm', today), groq: aiStatus('groq', today), gemini: aiStatus('gemini', today) },
+    ai: {
+      freellm: aiStatus('freellm', today),
+      groq: aiStatus('groq', today),
+      gemini: aiStatus('gemini', today),
+      // Reading Gmail: its own models and budget on FreeLLMAPI.
+      mail: {
+        configured: providerConfigured(config.freellm),
+        model: config.freellm.mailModel || config.freellm.model,
+        today: today[MAIL_BUDGET] || { requests: 0, tokens: 0 },
+        dailyTokens: config.freellm.mailLimits.dailyTokens,
+        dailyRequests: config.freellm.mailLimits.dailyRequests,
+      },
+    },
     fetchLog: recent,
   });
 });

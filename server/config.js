@@ -60,7 +60,7 @@ export const config = {
     // Job emails from other senders (Glassdoor, Naukri, company newsletters...): how many recent
     // ones are listed per sync, and how many new ones the AI reads per sync (the rest wait for
     // the next run, every 30 minutes).
-    gmailJobEmailList: num(env.GMAIL_JOB_EMAIL_LIST, 100),
+    gmailJobEmailList: num(env.GMAIL_JOB_EMAIL_LIST, 500),
     gmailJobEmailsPerRun: num(env.GMAIL_JOB_EMAILS_PER_RUN, 8),
   },
 
@@ -97,9 +97,19 @@ export const config = {
     // its own daily quota), gemini-3.5-flash-lite on Gemini (steadier than flash on the free
     // tier). "auto" lets FreeLLMAPI pick (auto:smart once picked a weak 7B model).
     model: env.FREELLM_MODEL || 'openai/gpt-oss-120b,qwen3.8-27b,gemini-3.5-flash-lite',
-    // Models for reading application emails (lib/mailTriage.js). Groq first: it does not train on
-    // what it is sent, which matters for people's mail. Empty = the same as FREELLM_MODEL.
-    mailModel: env.FREELLM_MAIL_MODEL ?? 'openai/gpt-oss-120b,qwen3.8-27b',
+    // Models for reading mail: application emails and job emails (lib/mailTriage.js). Groq only:
+    // it does not train on what it is sent, which matters for people's mail. Different models
+    // from FREELLM_MODEL on purpose: each Groq model has its own daily quota, so reading mail
+    // never uses up what job labeling needs. Empty = the same as FREELLM_MODEL.
+    mailModel: env.FREELLM_MAIL_MODEL ?? 'openai/gpt-oss-20b,meta-llama/llama-4-scout-17b-16e-instruct',
+    // Mail reading's own budget (ai_usage row "mail_ai"), kept under gpt-oss-20b's free Groq
+    // limits (200K tokens/day, 8K tokens/minute). Job labeling keeps the limits below.
+    mailLimits: {
+      dailyTokens: num(env.MAIL_AI_DAILY_TOKEN_LIMIT, 150_000),
+      dailyRequests: num(env.MAIL_AI_DAILY_REQUEST_LIMIT, 800),
+      minuteTokens: num(env.MAIL_AI_MINUTE_TOKEN_LIMIT, 7_500),
+      runTokens: num(env.MAIL_AI_RUN_TOKEN_LIMIT, 60_000),
+    },
     // gpt-oss always reasons a little; "low" keeps it short. Empty = omit.
     reasoningEffort: env.FREELLM_REASONING_EFFORT ?? 'low',
     // Room for the reasoning plus the ~100-token JSON answer.

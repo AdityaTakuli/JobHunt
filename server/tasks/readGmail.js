@@ -24,13 +24,14 @@ import { emailToText, jobsFromEmail, mightListJobs, resolveJobLink } from '../so
 import { parseMessages } from '../sources/linkedinEmail.js';
 
 export const SOURCE = 'gmail';
-const FIRST_LOOK_BACK_DAYS = 7;
-// Application emails: the first read goes further back, to fill the tracker with recent ones.
-const APPS_FIRST_LOOK_BACK_DAYS = 60;
-// Job emails from other senders: always the last few days, newest first. Each is read once, so
-// emails the AI had no time or budget for are simply picked up on a later run.
-const JOB_EMAILS_LOOK_BACK_DAYS = 3;
-const JOB_EMAILS_FIRST_LOOK_BACK_DAYS = 7;
+// Mail is never read further back than a month: the first read covers the last 30 days, and every
+// later read starts where the last one ended (less a small overlap for mail that arrives late;
+// emails already read are skipped before any AI call). Each kind keeps its own position, which
+// only moves on once everything up to it was read.
+export const FIRST_LOOK_BACK_DAYS = 30;
+const OVERLAP_MS = 60 * 60 * 1000;
+
+const readFrom = (lastRead, now) => (lastRead ? new Date(new Date(lastRead).getTime() - OVERLAP_MS) : new Date(now.getTime() - FIRST_LOOK_BACK_DAYS * DAY_MS));
 
 // Gmail message ids already recorded for this person.
 const knownIds = async (userId, ids) =>
@@ -57,9 +58,7 @@ async function readMail({ id, raw }) {
  * read position stays put so they are seen again.
  */
 export async function syncApplications(user, token, { triage = createMailTriage(), now = new Date() } = {}) {
-  const since = user.gmail_apps_synced_at
-    ? new Date(new Date(user.gmail_apps_synced_at).getTime() - DAY_MS)
-    : new Date(now.getTime() - APPS_FIRST_LOOK_BACK_DAYS * DAY_MS);
+  const since = readFrom(user.gmail_apps_synced_at, now);
   const found = await fetchApplicationEmails(token, { after: since });
   const seen = await knownIds(user.id, found.map((m) => m.id));
   const mails = [];
@@ -128,14 +127,16 @@ export async function syncAlerts(user, token, { since, linkChecker, now = new Da
 }
 
 /**
- * Job emails from any sender other than LinkedIn's alerts. Each new one is turned into text with
+ * Job emails from any sender other than LinkedIn's alerts, received since the last full read (30
+ * days on the first). Oldest first, up to `perRun` new ones per run: each is turned into text with
  * numbered links; emails without links or job words are noted without asking the AI; the rest go
- * to the AI, whose openings join the shared Jobs list. An email the AI could not read (down or out
- * of budget) is not recorded, so a later run reads it.
+ * to the AI, whose openings join the shared Jobs list. The read position moves to now only once
+ * every email up to now is read, so emails left for later (the per-run cap, or the AI down or out
+ * of budget) are read on a later run.
  */
 export async function syncJobEmails(user, token, { triage, linkChecker, resolveLink = resolveJobLink, now = new Date(), perRun = config.google.gmailJobEmailsPerRun }) {
-  const days = user.gmail_synced_at ? JOB_EMAILS_LOOK_BACK_DAYS : JOB_EMAILS_FIRST_LOOK_BACK_DAYS;
-  const ids = await listJobEmailIds(token, { after: new Date(now.getTime() - days * DAY_MS) });
+  // Gmail lists newest first; read oldest first so the position can follow.
+  const ids = (await listJobEmailIds(token, { after: readFrom(user.gmail_jobs_synced_at, now) })).reverse();
   // Done = read here before, or found to be about one of her applications. Emails the application
   // reader set aside as "other" may still hold openings, so they are read here too.
   const done = new Set(
@@ -148,9 +149,10 @@ export async function syncJobEmails(user, token, { triage, linkChecker, resolveL
         ).map((r) => r.gmail_id)
       : [],
   );
-  const todo = ids.filter((id) => !done.has(id)).slice(0, perRun);
+  const left = ids.filter((id) => !done.has(id));
+  const todo = left.slice(0, perRun);
   const summary = { jobEmails: 0, jobEmailJobs: 0, jobEmailNew: 0 };
-  if (!todo.length) return summary;
+  let finished = todo.length === left.length;
 
   const record = (mail, kind, classifier, jobsFound) =>
     query(
@@ -172,8 +174,10 @@ export async function syncJobEmails(user, token, { triage, linkChecker, resolveL
     );
 
   const jobs = [];
+  let handled = 0;
   for (const id of todo) {
     const raw = await fetchRawMessage(token, id);
+    handled += 1;
     if (!raw) continue;
     const mail = await readMail(raw);
     const { text, links } = emailToText(mail);
@@ -182,7 +186,11 @@ export async function syncJobEmails(user, token, { triage, linkChecker, resolveL
       continue;
     }
     const found = await triage.extractJobs(mail, text);
-    if (!found) break; // AI out for this run; the rest wait too.
+    if (!found) {
+      finished = false; // AI out for this run; this email and the rest wait.
+      handled -= 1;
+      break;
+    }
     const rows = jobsFromEmail(found, { links, mail });
     summary.jobEmails += 1;
     if (rows.length) {
@@ -200,6 +208,8 @@ export async function syncJobEmails(user, token, { triage, linkChecker, resolveL
     const result = await ingestJobs(jobs, { classifier, ...(linkChecker !== undefined && { linkChecker }), now });
     Object.assign(summary, { jobEmailJobs: result.found, jobEmailNew: result.new });
   }
+  if (finished) await query('UPDATE users SET gmail_jobs_synced_at = ? WHERE id = ?', [now, user.id]);
+  else summary.jobEmailsLeft = left.length - handled;
   return summary;
 }
 
@@ -212,9 +222,7 @@ export async function syncGmail(user, { linkChecker, triage = createMailTriage()
     await query('UPDATE users SET gmail_token = NULL, gmail_error = ? WHERE id = ?', ['Gmail needs to be connected again.', user.id]);
     return { user: user.id, error: 'token unreadable' };
   }
-  const since = user.gmail_synced_at
-    ? new Date(new Date(user.gmail_synced_at).getTime() - DAY_MS)
-    : new Date(now.getTime() - FIRST_LOOK_BACK_DAYS * DAY_MS);
+  const since = readFrom(user.gmail_synced_at, now);
 
   try {
     const token = await accessToken(refreshToken);
@@ -255,6 +263,7 @@ export async function readGmail({ linkChecker, now = new Date(), userId, triage,
     new: total('new') + total('jobEmailNew'),
     emails: results.reduce((n, r) => n + (r.emails || 0), 0),
     tracked: results.reduce((n, r) => n + (r.tracked || 0), 0),
+    jobEmailsLeft: total('jobEmailsLeft'),
     ...(errors.length && { errors }),
   };
   // Quiet runs are not logged; this runs 48 times a day.
