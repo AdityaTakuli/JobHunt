@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { parseJson, query } from '../db/pool.js';
+import { STILL_OPEN } from '../lib/deadline.js';
 import { isRunning, runTask } from '../tasks/index.js';
 
 export const companiesRouter = Router();
@@ -17,7 +18,7 @@ companiesRouter.get('/', async (req, res) => {
   for (const c of rows) {
     const names = parseJson(c.match_names, [c.name]);
     const like = names.map(() => 'j.company LIKE ?').join(' OR ');
-    const where = `j.closed_at IS NULL AND j.is_archived = 0 AND j.is_relevant = 1 AND (${like})
+    const where = `${STILL_OPEN} AND j.is_archived = 0 AND j.is_relevant = 1 AND (${like})
       AND NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ?)`;
     const params = [...names.map((n) => `${n.replace(/[\\%_]/g, '\\$&')}%`), req.user.id];
     const [{ n }] = await query(`SELECT COUNT(*) AS n FROM jobs j WHERE ${where}`, params);

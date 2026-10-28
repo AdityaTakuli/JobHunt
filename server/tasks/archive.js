@@ -11,8 +11,9 @@ import { parseJson, query } from '../db/pool.js';
 import { checkLink, mapLimit } from '../lib/linkCheck.js';
 import { DAY_MS } from '../lib/time.js';
 
-const RECHECK_DAYS = 3;
-const LINKS_PER_RUN = 60;
+// Every open job's link is looked at about every two days (150 per run, two runs a day).
+const RECHECK_DAYS = 2;
+const LINKS_PER_RUN = 150;
 const DELETE_CLOSED_AFTER_DAYS = 14;
 const DELETE_ARCHIVED_AFTER_DAYS = 60;
 const FORGET_AFTER_DAYS = 180;
@@ -50,7 +51,7 @@ export async function recheckLinks({ now = new Date(), linkChecker = checkLink, 
   );
   const summary = { checked: jobs.length, closed: 0, relinked: 0 };
 
-  await mapLimit(jobs, 4, async (job) => {
+  await mapLimit(jobs, 6, async (job) => {
     const status = await linkChecker(job.apply_url);
     if (status !== 'broken') {
       await query('UPDATE jobs SET link_status = ?, link_checked_at = ? WHERE id = ?', [status, now, job.id]);

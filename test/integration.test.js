@@ -913,7 +913,9 @@ describe('integration', { skip: !dbReady }, () => {
       const rest = await syncJobEmails(await user(), 'token', { triage, linkChecker: null, resolveLink, now, perRun: 10 });
       assert.deepEqual(rest, { jobEmails: 1, jobEmailJobs: 2, jobEmailNew: 2 });
       assert.deepEqual(asked, ['New jobs this week', "We're hiring: BIM interns", 'Internationalisation Architect at Moyo Innovations and 11 more jobs'], 'the Naukri ad never reached the AI');
-      assert.equal((await user()).gmail_jobs_synced_at.getTime(), Math.floor(now.getTime() / 1000) * 1000);
+      // MySQL keeps whole seconds (rounded).
+      const position = (await user()).gmail_jobs_synced_at.getTime();
+      assert.ok(Math.abs(position - now.getTime()) <= 1000);
 
       const jobs = await query("SELECT title, company, city, apply_url, salary_min, sources FROM jobs WHERE company LIKE '%Integration' ORDER BY title");
       assert.deepEqual(jobs.map((j) => [j.title, j.city, j.salary_min]), [['Intern Architect', 'Pune', null], ['Junior Architect', 'Bengaluru', 14000], ['Landscape Architect', '', 30000]]);
@@ -933,7 +935,7 @@ describe('integration', { skip: !dbReady }, () => {
       seen.length = 0;
       const later = new Date(now.getTime() + 4 * 86_400_000);
       assert.deepEqual(await syncJobEmails(await user(), 'token', { triage: { extractJobs: () => assert.fail('read twice') }, linkChecker: null, now: later }), { jobEmails: 0, jobEmailJobs: 0, jobEmailNew: 0 });
-      assert.equal(searchedFrom.at(-1), Math.floor(now.getTime() / 1000) * 1000 - 3_600_000);
+      assert.equal(searchedFrom.at(-1), position - 3_600_000);
       assert.deepEqual(seen, []);
     } finally {
       google.deps.fetch = realFetch;
@@ -1074,6 +1076,15 @@ describe('integration', { skip: !dbReady }, () => {
     assert.equal((await state('Past Deadline Intern')).closed_reason, 'deadline', 'closed as it came in');
     assert.ok((await state('Future Deadline Intern')).deadline_at);
     assert.equal((await state('Future Deadline Intern')).closed_reason, null);
+
+    // Its date passes: it leaves the list at once, before any clean-up has closed it.
+    const listed = async () => (await request('/api/jobs?city=all&exp=any')).data.jobs.filter((j) => j.company === 'Close Studio').map((j) => j.title);
+    assert.ok((await listed()).includes('Future Deadline Intern'));
+    const { deadline_at: realDeadline } = await state('Future Deadline Intern');
+    await query("UPDATE jobs SET deadline_at = ? WHERE title = 'Future Deadline Intern'", [new Date(Date.now() - 60_000)]);
+    assert.ok(!(await listed()).includes('Future Deadline Intern'));
+    assert.equal((await state('Future Deadline Intern')).closed_reason, null, 'not closed yet, only hidden');
+    await query("UPDATE jobs SET deadline_at = ? WHERE title = 'Future Deadline Intern'", [realDeadline]);
 
     // Later: the deadline passes, one link moved, one posting was taken down.
     await query(

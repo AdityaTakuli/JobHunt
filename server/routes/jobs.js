@@ -4,6 +4,7 @@ import { parseJson, query } from '../db/pool.js';
 import { getEstimates } from '../lib/estimate.js';
 import { normalizeCity } from '../lib/normalize.js';
 import { getUserSettings } from '../lib/settings.js';
+import { STILL_OPEN } from '../lib/deadline.js';
 import { DAY_MS, startOfIstDay } from '../lib/time.js';
 import { localSearchesThisMonth } from '../tasks/fetchJobs.js';
 import { typedSearchesToday } from '../tasks/liveSearch.js';
@@ -33,7 +34,8 @@ export function serializeJob(row, estimates = {}) {
     is_bim: Boolean(row.is_bim),
     is_relevant: Boolean(row.is_relevant),
     is_hidden: Boolean(row.is_hidden),
-    is_closed: Boolean(row.closed_at),
+    // Past its apply-by date counts as closed even before the clean-up marks it.
+    is_closed: Boolean(row.closed_at) || (row.deadline_at != null && new Date(row.deadline_at) < new Date()),
     salary_is_estimate: Boolean(row.salary_is_estimate),
     sources: parseJson(row.sources, []),
     apply_options: parseJson(row.apply_options, []),
@@ -63,7 +65,7 @@ const idList = (v) =>
 // she asked for them. Closed postings and jobs she hid never show.
 export function feedFilters(q, now = new Date(), myCities = [], uid = 1) {
   const ids = idList(q.ids);
-  const where = ['j.closed_at IS NULL', notHiddenBy(uid), ...(ids.length ? ['j.id IN (?)'] : ['j.is_archived = 0', 'j.is_relevant = 1'])];
+  const where = [STILL_OPEN, notHiddenBy(uid), ...(ids.length ? ['j.id IN (?)'] : ['j.is_archived = 0', 'j.is_relevant = 1'])];
   const params = ids.length ? [ids] : [];
 
   if (ids.length) {
@@ -167,7 +169,7 @@ jobsRouter.get('/', async (req, res) => {
 jobsRouter.get('/meta', async (req, res) => {
   const now = new Date();
   const uid = req.user.id;
-  const open = `j.is_archived = 0 AND j.closed_at IS NULL AND j.is_relevant = 1 AND ${notHiddenBy(uid)}`;
+  const open = `j.is_archived = 0 AND ${STILL_OPEN} AND j.is_relevant = 1 AND ${notHiddenBy(uid)}`;
   const [cities, [counts], [followUps], settings, searchesUsed, typedToday] = await Promise.all([
     query(`SELECT j.city, COUNT(*) AS n FROM jobs j WHERE ${open} AND j.city <> '' GROUP BY j.city ORDER BY n DESC LIMIT 30`),
     query(
@@ -211,7 +213,7 @@ jobsRouter.get('/review', async (req, res) => {
     ),
     query(
       `SELECT j.id, j.title, j.company, j.city, j.apply_url, j.classifier, j.classify_reason, j.created_at FROM jobs j
-        WHERE j.is_relevant = 0 AND j.closed_at IS NULL AND ${notHiddenBy(req.user.id)} AND j.created_at >= ?
+        WHERE j.is_relevant = 0 AND ${STILL_OPEN} AND ${notHiddenBy(req.user.id)} AND j.created_at >= ?
         ORDER BY j.created_at DESC LIMIT 50`,
       [since],
     ),

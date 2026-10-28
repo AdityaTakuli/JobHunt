@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { parseJson, query } from '../db/pool.js';
+import { STILL_OPEN } from '../lib/deadline.js';
 import { runTask } from '../tasks/index.js';
 import { liveSearch } from '../tasks/liveSearch.js';
 
@@ -39,7 +40,7 @@ searchRouter.get('/history', async (req, res) => {
       ? (
           await query(
             `SELECT j.id FROM jobs j
-              WHERE j.id IN (?) AND j.closed_at IS NULL AND j.is_archived = 0
+              WHERE j.id IN (?) AND ${STILL_OPEN} AND j.is_archived = 0
                 AND NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ?)`,
             [all, uid],
           )

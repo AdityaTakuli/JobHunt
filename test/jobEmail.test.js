@@ -56,16 +56,16 @@ describe('job email answer', () => {
     assert.deepEqual(validateJobList({ jobs: [] }), { jobs: [] });
     const { jobs } = validateJobList({
       jobs: [
-        { title: ' Senior Architect ', company: 'buildAhome', location: 'Bengaluru', salary: '₹51K - ₹86K', posted_days_ago: 3, link: 'L5' },
+        { title: ' Senior Architect ', company: 'buildAhome', location: 'Bengaluru', salary: '₹51K - ₹86K', posted_days_ago: 3, apply_by: '30 Nov 2026', link: 'L5' },
         { title: '', company: 'X', link: 'L2' },
         { title: 'Architect', company: 'N/A', location: null, salary: null, posted_days_ago: -1, link: '[L4]' },
         { title: 'Architect', link: 'see more' },
       ],
     });
     assert.deepEqual(jobs, [
-      { title: 'Senior Architect', company: 'buildAhome', location: 'Bengaluru', salary: '₹51K - ₹86K', postedDaysAgo: 3, link: 5 },
-      { title: 'Architect', company: null, location: null, salary: null, postedDaysAgo: null, link: 4 },
-      { title: 'Architect', company: null, location: null, salary: null, postedDaysAgo: null, link: null },
+      { title: 'Senior Architect', company: 'buildAhome', location: 'Bengaluru', salary: '₹51K - ₹86K', postedDaysAgo: 3, applyBy: '30 Nov 2026', link: 5 },
+      { title: 'Architect', company: null, location: null, salary: null, postedDaysAgo: null, applyBy: null, link: 4 },
+      { title: 'Architect', company: null, location: null, salary: null, postedDaysAgo: null, applyBy: null, link: null },
     ]);
   });
 
@@ -75,7 +75,7 @@ describe('job email answer', () => {
       {
         jobs: [
           { title: 'Internationalisation Architect', company: 'Moyo Innovations', location: 'Bengaluru', salary: '₹3M - ₹4M (Employer Est.)', postedDaysAgo: 0, link: 3 },
-          { title: 'Senior Architect', company: 'buildAhome', location: 'Bengaluru', salary: '₹51K - ₹86K (Employer Est.)', postedDaysAgo: 3, link: 5 },
+          { title: 'Senior Architect', company: 'buildAhome', location: 'Bengaluru', salary: '₹51K - ₹86K (Employer Est.)', postedDaysAgo: 3, applyBy: '5 Nov', link: 5 },
           { title: 'Architect', company: 'Somewhere', location: 'India', salary: null, postedDaysAgo: null, link: null },
           { title: 'Ghost', company: 'Nobody', location: null, salary: null, postedDaysAgo: null, link: 99 },
         ],
@@ -95,12 +95,14 @@ describe('job email answer', () => {
         applyUrl: links[2],
         publisher: 'Glassdoor',
         postedAt: MAIL.receivedAt,
+        deadlineAt: null,
         salary: undefined,
       },
     );
     assert.deepEqual(rows[0].salary, { text: '₹3M - ₹4M', min: 3_000_000, max: 4_000_000, period: 'year' });
     assert.equal(rows[1].postedAt.toISOString(), '2026-10-24T10:35:00.000Z');
     assert.equal(rows[1].salary.period, 'month');
+    assert.equal(rows[1].deadlineAt.toISOString(), '2026-11-05T18:29:59.000Z', 'apply-by read as the end of that day in IST');
   });
 
   it('names the site that sent the email', () => {

@@ -5,6 +5,7 @@
 
 import * as cheerio from 'cheerio';
 import { cleanText, decodeEntities, hostOf, normalizeCity } from '../lib/normalize.js';
+import { parseDeadline } from '../lib/deadline.js';
 import { parseSalary } from '../lib/salary.js';
 import { DAY_MS } from '../lib/time.js';
 
@@ -95,6 +96,7 @@ Reply with one JSON object and nothing else:
       "location": string | null,    // city or area as written, e.g. "Bengaluru", "Remote", "India"
       "salary": string | null,      // pay or stipend exactly as written, e.g. "₹3M - ₹4M"
       "posted_days_ago": integer | null, // 0 for "just posted" or hours; "3d" = 3; null if not shown
+      "apply_by": string | null,    // last date to apply, exactly as written, e.g. "30 Nov 2026"
       "link": string | null         // the [L..] link that opens this job, written like "L3"
     }
   ]
@@ -125,7 +127,15 @@ export function validateJobList(value) {
     if (!title || title.length < 2) continue;
     const days = Number.isInteger(j.posted_days_ago) && j.posted_days_ago >= 0 && j.posted_days_ago <= 90 ? j.posted_days_ago : null;
     const link = typeof j.link === 'string' ? j.link.trim().match(/^\[?L(\d{1,4})\]?$/i)?.[1] : null;
-    jobs.push({ title, company: str(j.company, 200), location: str(j.location, 200), salary: str(j.salary, 120), postedDaysAgo: days, link: link ? Number(link) : null });
+    jobs.push({
+      title,
+      company: str(j.company, 200),
+      location: str(j.location, 200),
+      salary: str(j.salary, 120),
+      postedDaysAgo: days,
+      applyBy: str(j.apply_by, 60),
+      link: link ? Number(link) : null,
+    });
   }
   return { jobs };
 }
@@ -164,6 +174,7 @@ export function jobsFromEmail(found, { links, mail }) {
       applyUrl: url,
       publisher,
       postedAt: j.postedDaysAgo != null ? new Date(receivedAt.getTime() - j.postedDaysAgo * DAY_MS) : receivedAt,
+      deadlineAt: j.applyBy ? parseDeadline(`Apply by ${j.applyBy}`, receivedAt) : null,
       salary,
     });
   }

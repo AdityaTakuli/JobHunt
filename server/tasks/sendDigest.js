@@ -7,6 +7,7 @@
 import { formatSalary, ROLE_LABELS } from '../../shared/format.js';
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
+import { STILL_OPEN } from '../lib/deadline.js';
 import { escapeHtml, mailConfigured, sendMail } from '../lib/mailer.js';
 import { allUserSettings, saveUserSettings } from '../lib/settings.js';
 import { DAY_MS, formatIst, istDateString, istTime } from '../lib/time.js';
@@ -25,7 +26,7 @@ async function digestData(userId, settings, now) {
     `SELECT j.id, j.title, j.company, j.city, j.apply_url, j.role_type, j.is_bim, j.match_score,
             j.salary_text, j.salary_min, j.salary_max, j.salary_period
        FROM jobs j
-      WHERE j.created_at > ? AND j.is_relevant = 1 AND j.is_archived = 0 AND j.closed_at IS NULL
+      WHERE j.created_at > ? AND j.is_relevant = 1 AND j.is_archived = 0 AND ${STILL_OPEN}
         AND NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ${Number(userId)})
         AND (j.role_type IS NULL OR j.role_type <> 'experienced')
         ${cityFilter}

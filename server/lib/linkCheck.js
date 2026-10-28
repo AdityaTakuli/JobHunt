@@ -2,7 +2,22 @@
 // Only a clear signal (404/410 or an "expired" page) marks a link broken; bot walls,
 // timeouts and odd status codes (LinkedIn's 999) stay 'unknown' so good jobs are not flagged.
 
-const EXPIRED_RE = /no longer accepting applications|this job (is|has) (no longer available|expired|been closed)|job (has )?expired|position has been filled|job posting (has been )?(removed|closed)/i;
+// The wording job sites use on a closed posting (LinkedIn, Indeed, Glassdoor, Naukri, Internshala,
+// Workday, Greenhouse, Lever...). Only phrases that mean "this one posting is closed".
+const EXPIRED_RE = new RegExp(
+  [
+    'no longer accepting applications',
+    'not accepting applications',
+    '(this|the) (job|position|role|vacancy|opening|internship|listing|posting|requisition) (is|has) (no longer (available|active|open|accepting)|expired|been (closed|filled|removed))',
+    '(job|listing|posting|internship|vacancy) (has )?expired',
+    'position has been filled',
+    'job (posting|listing|post) (has been |is )?(removed|closed|deleted)',
+    'applications? (for this (job|role|position|internship) )?(are|is|have been|has been) closed',
+    'this job (post )?is closed',
+    'the job you are (looking for|trying to apply for) (is no longer|has been)',
+  ].join('|'),
+  'i',
+);
 const MAX_BYTES = 400_000;
 
 async function readStart(res) {

@@ -4,6 +4,11 @@
 
 import { DAY_MS } from './time.js';
 
+// SQL: a job (alias j) that can still be applied to. Not closed, and its "apply by" date (if any)
+// not passed, so a posting leaves every list the moment its date passes, not only when the
+// twice-daily clean-up closes it. Dates are stored in UTC (db/pool.js).
+export const STILL_OPEN = '(j.closed_at IS NULL AND (j.deadline_at IS NULL OR j.deadline_at > UTC_TIMESTAMP()))';
+
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const MONTH = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
 

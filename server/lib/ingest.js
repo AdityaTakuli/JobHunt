@@ -1,6 +1,7 @@
 // Normalize + dedupe + classify + store. Every source hands its jobs to ingestJobs() in the
 // same shape: { source, title, company, locationText, city, description, applyUrl, applyRank,
-// applyKind, applyOptions?, postedAt, salary: { text, min, max, period } | null, publisher }.
+// applyKind, applyOptions?, postedAt, deadlineAt?, salary: { text, min, max, period } | null,
+// publisher }. deadlineAt is an "apply by" date the source states outside the description.
 // Every apply option seen for a job is kept (best first); the best one becomes apply_url.
 
 import { parseJson, query } from '../db/pool.js';
@@ -32,6 +33,7 @@ function mergeCandidates(a, b) {
     description: (b.description?.length || 0) > (a.description?.length || 0) ? b.description : a.description,
     salary: a.salary || b.salary,
     postedAt: earliest(a.postedAt, b.postedAt),
+    deadlineAt: a.deadlineAt || b.deadlineAt,
     locationText: a.locationText || b.locationText,
     sources: mergeSources(a.sources, b.sources),
   };
@@ -96,8 +98,8 @@ async function mergeIntoExisting(row, job, now) {
   if (!row.salary_text && job.salary?.text) Object.assign(updates, salaryColumns(job.salary));
   if (job.postedAt && (!row.posted_at || job.postedAt < row.posted_at)) updates.posted_at = job.postedAt;
   if (!row.location_text && job.locationText) updates.location_text = job.locationText;
-  if (!row.deadline_at && updates.description) {
-    const deadline = parseDeadline(updates.description, row.posted_at || now);
+  if (!row.deadline_at) {
+    const deadline = job.deadlineAt || (updates.description && parseDeadline(updates.description, row.posted_at || now));
     if (deadline) updates.deadline_at = deadline;
   }
   if (!Object.keys(updates).length) return false;
@@ -146,7 +148,7 @@ export async function ingestJobs(rawJobs, { classifier, linkChecker = checkLink,
 
   for (const [i, job] of fresh.entries()) {
     // Deadline already passed, or the link says the posting is gone: stored closed, never shown.
-    const deadline = parseDeadline(job.description, job.postedAt || now);
+    const deadline = job.deadlineAt || parseDeadline(job.description, job.postedAt || now);
     const closed = linkStatuses[i] === 'broken' ? 'removed' : deadline && deadline < now ? 'deadline' : null;
     const base = {
       title: job.title,
