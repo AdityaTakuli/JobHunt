@@ -23,7 +23,7 @@ export function ApplyBadge({ job }) {
 }
 
 export function sourceLabels(sources = []) {
-  const labels = sources.map((s) => (s.source === 'google_jobs' ? s.publisher || SOURCE_LABELS.google_jobs : SOURCE_LABELS[s.source] || s.source));
+  const labels = sources.map((s) => (['google_jobs', 'job_email'].includes(s.source) ? s.publisher || SOURCE_LABELS[s.source] : SOURCE_LABELS[s.source] || s.source));
   return [...new Set(labels.filter(Boolean))];
 }
 

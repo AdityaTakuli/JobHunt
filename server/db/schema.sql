@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS mail_events (
   role VARCHAR(300) NULL,
   classifier VARCHAR(8) NOT NULL,            -- freellm / rules / parser (alerts)
   application_id INT UNSIGNED NULL,
-  jobs_found SMALLINT UNSIGNED NULL,         -- LinkedIn alerts: job cards in the email
+  jobs_found SMALLINT UNSIGNED NULL,         -- job alerts and job emails: openings found in the email
   created_at DATETIME NOT NULL,
   PRIMARY KEY (user_id, gmail_id),
   KEY idx_mail_app (application_id)

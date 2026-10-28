@@ -17,7 +17,8 @@ accountRouter.get('/account', async (req, res) => {
 
 // "Check Gmail now" on the Settings screen: reads only her own mailbox.
 accountRouter.post('/account/gmail/sync', async (req, res) => {
-  const result = await readGmail({ userId: req.user.id });
+  // A few job emails per click keeps the answer quick; the 30-minute run reads the rest.
+  const result = await readGmail({ userId: req.user.id, jobEmailsPerRun: 4 });
   res.json({ result, account: accountView(await findUser(req.user.id)) });
 });
 

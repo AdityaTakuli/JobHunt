@@ -3,7 +3,7 @@
 // month / year / week / day / hour (or null).
 
 const NUM = String.raw`(\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?)`;
-const UNIT = String.raw`\s*(k|lakhs?|lacs?|l)?\b`;
+const UNIT = String.raw`\s*(k|lakhs?|lacs?|l|m|mn)?\b`;
 const CUR = String.raw`(?:₹|rs\.?|inr)`;
 const RANGE_SEP = String.raw`\s*(?:-|–|—|to)\s*`;
 
@@ -32,6 +32,8 @@ function toRupees(raw, unit) {
   const u = (unit || '').toLowerCase();
   if (u === 'k') n *= 1_000;
   else if (u.startsWith('lakh') || u.startsWith('lac') || u === 'l') n *= 100_000;
+  // Glassdoor writes "₹3M - ₹4M": millions.
+  else if (u === 'm' || u === 'mn') n *= 1_000_000;
   return Math.round(n);
 }
 

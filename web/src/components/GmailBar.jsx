@@ -50,7 +50,7 @@ function EmailsDialog({ open, onClose, days, loading }) {
   return (
     <Dialog open={open} title="Emails read from Gmail" onClose={onClose}>
       <p className="small muted" style={{ margin: 0 }}>
-        The last 30 days: LinkedIn alerts and emails about your applications. Nothing else in your mailbox is opened.
+        The last 30 days: job alerts and job emails from any site, and emails about your applications. Only emails that mention jobs are opened.
       </p>
       {loading && <p className="muted">Loading…</p>}
       {!loading && days && !days.length && <p className="muted">No emails read yet. New ones show up here after the next check.</p>}
@@ -95,7 +95,7 @@ export default function GmailBar({ onSynced }) {
     setBusy(true);
     try {
       const { result: r = {} } = await api('/account/gmail/sync', { method: 'POST' });
-      const parts = [`${r.messages || 0} new alert${r.messages === 1 ? '' : 's'} (${r.new || 0} new jobs)`, `${r.emails || 0} application email${r.emails === 1 ? '' : 's'} (${r.tracked || 0} tracker updates)`];
+      const parts = [`${r.messages || 0} new job email${r.messages === 1 ? '' : 's'} (${r.new || 0} new jobs)`, `${r.emails || 0} application email${r.emails === 1 ? '' : 's'} (${r.tracked || 0} tracker updates)`];
       toast({ message: r.skipped ? `Skipped: ${r.skipped}` : r.errors?.length ? r.errors[0] : `Gmail checked: ${parts.join(', ')}.`, error: Boolean(r.errors?.length), duration: 7000 });
       refreshMe();
       refreshMeta();
@@ -112,7 +112,7 @@ export default function GmailBar({ onSynced }) {
   if (!gmail.connected) {
     return (
       <p className="gmail-bar muted">
-        <IconMail size={16} /> Connect Gmail to bring in your LinkedIn alerts and keep your Tracker up to date. <a href="#/settings">Connect in Settings</a>
+        <IconMail size={16} /> Connect Gmail to bring in job alerts from every site you follow and keep your Tracker up to date. <a href="#/settings">Connect in Settings</a>
       </p>
     );
   }

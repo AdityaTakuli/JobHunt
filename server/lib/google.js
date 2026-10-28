@@ -110,23 +110,36 @@ async function gmailGet(token, path) {
   return data;
 }
 
+// Ids of messages matching a Gmail search, newest first (one cheap call, no bodies).
+export async function listMessageIds(token, q, max) {
+  const list = await gmailGet(token, `/messages?${new URLSearchParams({ q, maxResults: String(max) })}`);
+  return (list.messages || []).map((m) => m.id);
+}
+
+// One raw RFC 822 message: { id, raw: Buffer } (null if Gmail sent no body).
+export async function fetchRawMessage(token, id) {
+  const msg = await gmailGet(token, `/messages/${encodeURIComponent(id)}?format=raw`);
+  return msg.raw ? { id, raw: Buffer.from(msg.raw, 'base64url') } : null;
+}
+
 // Raw RFC 822 messages matching a Gmail search, newest first: [{ id, raw: Buffer }].
 async function searchMessages(token, q, max) {
-  const list = await gmailGet(token, `/messages?${new URLSearchParams({ q, maxResults: String(max) })}`);
   const out = [];
-  for (const { id } of list.messages || []) {
-    const msg = await gmailGet(token, `/messages/${encodeURIComponent(id)}?format=raw`);
-    if (msg.raw) out.push({ id, raw: Buffer.from(msg.raw, 'base64url') });
+  for (const id of await listMessageIds(token, q, max)) {
+    const msg = await fetchRawMessage(token, id);
+    if (msg) out.push(msg);
   }
   return out;
 }
 
 const afterSeconds = (date) => Math.floor(date.getTime() / 1000);
 
+export const LINKEDIN_ALERT_SENDERS = 'jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com';
+
 // LinkedIn job alert emails since `after` (newest first): [{ id, raw }]. "Your application was
 // sent" emails come from the same address; they are application emails, not alerts.
 export async function fetchAlertEmails(token, { after, max = config.google.gmailMaxMessages }) {
-  const q = `from:(jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com OR jobs-listings@linkedin.com) -subject:application after:${afterSeconds(after)}`;
+  const q = `from:(${LINKEDIN_ALERT_SENDERS}) -subject:application after:${afterSeconds(after)}`;
   return searchMessages(token, q, max);
 }
 
@@ -140,4 +153,20 @@ export const APPLICATION_QUERY =
 
 export async function fetchApplicationEmails(token, { after, max = config.google.gmailApplicationMessages }) {
   return searchMessages(token, `${APPLICATION_QUERY} after:${afterSeconds(after)}`, max);
+}
+
+// Job emails from any other sender: alerts from job sites, company newsletters, "we're hiring"
+// posts, college placement mail. Wide on purpose, matched by words rather than by who sent it;
+// sources/jobEmail.js and the AI decide whether an email really lists openings. LinkedIn alerts
+// have their own parser.
+export const JOB_EMAIL_QUERY =
+  `-from:(${LINKEDIN_ALERT_SENDERS}) -in:sent -in:chats -in:drafts ` +
+  '(subject:(job OR jobs OR hiring OR vacancy OR vacancies OR opening OR openings OR internship OR internships OR careers OR ' +
+  'recruitment OR recruiting OR walk-in OR opportunity OR opportunities OR position OR positions) ' +
+  'OR "job alert" OR "jobs for you" OR "easy apply" OR "view job" OR "view all jobs" OR "job openings" OR "is hiring" ' +
+  'OR "are hiring" OR "now hiring" OR "new jobs" OR "matching jobs" OR "recommended jobs" OR "apply now")';
+
+// Ids only: the caller skips the ones it has already read before downloading any.
+export async function listJobEmailIds(token, { after, max = config.google.gmailJobEmailList }) {
+  return listMessageIds(token, `${JOB_EMAIL_QUERY} after:${afterSeconds(after)}`, max);
 }

@@ -57,6 +57,11 @@ export const config = {
     gmailMaxMessages: num(env.GMAIL_MAX_MESSAGES, 30),
     // Application emails (applied / interview / offer / rejected) read per person per sync.
     gmailApplicationMessages: num(env.GMAIL_APPLICATION_MESSAGES, 40),
+    // Job emails from other senders (Glassdoor, Naukri, company newsletters...): how many recent
+    // ones are listed per sync, and how many new ones the AI reads per sync (the rest wait for
+    // the next run, every 30 minutes).
+    gmailJobEmailList: num(env.GMAIL_JOB_EMAIL_LIST, 100),
+    gmailJobEmailsPerRun: num(env.GMAIL_JOB_EMAILS_PER_RUN, 8),
   },
 
   // Protects /api/cron/* endpoints called by Hostinger cron.

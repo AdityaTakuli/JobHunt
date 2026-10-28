@@ -45,7 +45,7 @@ const { signInWithGoogle } = await import('../server/lib/users.js');
 const google = await import('../server/lib/google.js');
 const { open: unseal } = await import('../server/lib/secretBox.js');
 const { tidyJobs, deleteOldJobs } = await import('../server/tasks/archive.js');
-const { syncApplications } = await import('../server/tasks/readGmail.js');
+const { syncApplications, syncJobEmails } = await import('../server/tasks/readGmail.js');
 const { fetchCompanies } = await import('../server/tasks/fetchCompanies.js');
 const { COMPANIES } = await import('../server/lib/companies.js');
 
@@ -693,6 +693,7 @@ describe('integration', { skip: !dbReady }, () => {
       if (u.pathname.endsWith('/messages')) {
         const q = u.searchParams.get('q');
         if (q.includes('your application was sent to')) return Response.json({ messages: [{ id: 'a2' }, { id: 'a1' }] });
+        if (q.startsWith('-from:(')) return Response.json({ messages: [] }); // job emails from other sites
         assert.match(q, /from:\(jobalerts-noreply@linkedin\.com/);
         return Response.json({ messages: [{ id: 'm1' }] });
       }
@@ -848,6 +849,75 @@ describe('integration', { skip: !dbReady }, () => {
     } finally {
       google.deps.fetch = realFetch;
       await query('DELETE FROM jobs WHERE id = ?', [jobId]);
+    }
+  });
+
+  it('reads job emails from any site into the shared list, once each', async () => {
+    const now = new Date();
+    const { insertId: uid } = await query('INSERT INTO users SET ?', [{ email: 'alerts@example.com', name: 'Alerts', gmail_synced_at: now, created_at: now }]);
+    const raw = (from, subject, type, body) =>
+      Buffer.from([`From: ${from}`, `Date: ${now.toUTCString()}`, `Subject: ${subject}`, `Content-Type: ${type}; charset=utf-8`, '', body].join('\r\n')).toString('base64url');
+    const inbox = {
+      g1: raw('Glassdoor Jobs <noreply@glassdoor.com>', 'Internationalisation Architect at Moyo Innovations and 11 more jobs', 'text/html', fixture('glassdoor-alert.html')),
+      n1: raw('Naukri <info@naukri.com>', 'Upgrade to Naukri Pro', 'text/plain', 'Get noticed by recruiters. No links here.'),
+      s1: raw('Studio Lotus <hr@studiolotus.in>', "We're hiring: BIM interns", 'text/plain', 'Openings this month. Write to us.\nhttps://studiolotus.in/news'),
+      // Read earlier by the application reader and set aside: may still hold openings.
+      o1: raw('Archinect Jobs <jobs@archinect.com>', 'New jobs this week', 'text/plain', 'Intern Architect, Studio X, Pune https://archinect.com/jobs/view/9'),
+    };
+    await query('INSERT INTO mail_events SET ?', [{ user_id: uid, gmail_id: 'o1', received_at: now, kind: 'other', classifier: 'freellm', created_at: now }]);
+    const seen = [];
+    const realFetch = google.deps.fetch;
+    google.deps.fetch = async (url) => {
+      const u = new URL(url);
+      if (u.pathname.endsWith('/messages')) {
+        assert.match(u.searchParams.get('q'), /^-from:\(jobalerts-noreply@linkedin\.com/);
+        return Response.json({ messages: Object.keys(inbox).map((id) => ({ id })) });
+      }
+      const id = u.pathname.split('/').pop();
+      seen.push(id);
+      return Response.json({ id, raw: inbox[id] });
+    };
+    const answers = {
+      'Internationalisation Architect at Moyo Innovations and 11 more jobs': {
+        jobs: [
+          { title: 'Landscape Architect', company: 'ART YARD Integration', location: 'India', salary: '₹30K - ₹40K', postedDaysAgo: 3, link: 6 },
+          { title: 'Junior Architect', company: 'Studio Aura Integration', location: 'Bengaluru', salary: '₹14K - ₹18K', postedDaysAgo: 1, link: 7 },
+        ],
+      },
+      "We're hiring: BIM interns": { jobs: [] },
+      'New jobs this week': { jobs: [{ title: 'Intern Architect', company: 'Studio X Integration', location: 'Pune', salary: null, postedDaysAgo: null, link: 1 }] },
+    };
+    const asked = [];
+    const triage = { extractJobs: async (m, text) => (asked.push(m.subject), assert.match(text, /\[L\d+\]/), answers[m.subject]) };
+    const resolveLink = async (link) => `${link.split('?')[0]}?resolved=1`;
+    const user = async () => (await query('SELECT * FROM users WHERE id = ?', [uid]))[0];
+    try {
+      const first = await syncJobEmails(await user(), 'token', { triage, linkChecker: null, resolveLink, now, perRun: 10 });
+      assert.deepEqual(first, { jobEmails: 3, jobEmailJobs: 3, jobEmailNew: 3 });
+      assert.deepEqual(asked.sort(), ['Internationalisation Architect at Moyo Innovations and 11 more jobs', 'New jobs this week', "We're hiring: BIM interns"], 'the Naukri ad never reached the AI');
+
+      const jobs = await query("SELECT title, company, city, apply_url, salary_min, sources FROM jobs WHERE company LIKE '%Integration' ORDER BY title");
+      assert.deepEqual(jobs.map((j) => [j.title, j.city, j.salary_min]), [['Intern Architect', 'Pune', null], ['Junior Architect', 'Bengaluru', 14000], ['Landscape Architect', '', 30000]]);
+      assert.equal(jobs[1].apply_url, 'https://www.glassdoor.co.in/partner/jobListing.htm?resolved=1', 'the click tracker was followed');
+      assert.deepEqual(parseJson(jobs[1].sources, []).map((s) => [s.source, s.publisher]), [['job_email', 'Glassdoor']]);
+
+      const events = await query('SELECT gmail_id, kind, classifier, jobs_found FROM mail_events WHERE user_id = ? ORDER BY gmail_id', [uid]);
+      assert.deepEqual(events.map((e) => [e.gmail_id, e.kind, e.classifier, e.jobs_found]), [
+        ['g1', 'alert', 'freellm', 2],
+        ['n1', 'other', 'rules', 0],
+        ['o1', 'alert', 'freellm', 1],
+        ['s1', 'other', 'freellm', 0],
+      ]);
+
+      // Again: everything was read, nothing is downloaded or sent to the AI.
+      seen.length = 0;
+      assert.deepEqual(await syncJobEmails(await user(), 'token', { triage: { extractJobs: () => assert.fail('read twice') }, linkChecker: null, now }), { jobEmails: 0, jobEmailJobs: 0, jobEmailNew: 0 });
+      assert.deepEqual(seen, []);
+    } finally {
+      google.deps.fetch = realFetch;
+      await query("DELETE FROM jobs WHERE company LIKE '%Integration'");
+      await query('DELETE FROM mail_events WHERE user_id = ?', [uid]);
+      await query('DELETE FROM users WHERE id = ?', [uid]);
     }
   });
 

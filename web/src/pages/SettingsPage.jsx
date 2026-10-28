@@ -21,7 +21,7 @@ const TAB_KEY = 'aj-settings-tab';
 const TASKS = [
   { name: 'fetch-jobs', label: 'Fetch jobs', hint: "Search Google Jobs now. Uses up to 3 of this month's searches." },
   { name: 'fetch-companies', label: 'Check company careers', hint: 'Read the careers feeds of the companies on the Companies page. Free: no searches used.' },
-  { name: 'read-gmail', label: "Check everyone's Gmail", hint: 'Read new LinkedIn alerts and application emails for everyone who connected Gmail.' },
+  { name: 'read-gmail', label: "Check everyone's Gmail", hint: 'Read new job alerts, job emails from any site and application emails for everyone who connected Gmail.' },
   { name: 'archive', label: 'Clean up postings', hint: 'Close postings past their deadline or taken down, and delete old ones.' },
   { name: 'retry-classify', label: 'Re-label with AI', hint: 'Send keyword-labelled jobs to the AI (FreeLLMAPI, Groq or Gemini). Uses AI tokens.' },
   { name: 'send-digest', label: 'Send digest', hint: "Email today's digest right away." },
@@ -328,7 +328,7 @@ function ConnectionsPanel({ system, onRan }) {
     // Groq and Gemini normally run inside FreeLLMAPI; list them only when called directly too.
     ...(configured.groq || !configured.freellm ? [{ name: 'Groq', detail: `Direct backup AI · ${ai.groq.model}`, ok: configured.groq }] : []),
     ...(configured.gemini || !configured.freellm ? [{ name: 'Gemini', detail: `Direct backup AI · ${ai.gemini.model}`, ok: configured.gemini }] : []),
-    { name: 'Google sign-in', detail: 'Accounts, LinkedIn alerts and application emails from Gmail (OAuth)', ok: configured.google },
+    { name: 'Google sign-in', detail: 'Accounts, job alerts and application emails from Gmail (OAuth)', ok: configured.google },
     { name: 'Digest email', detail: 'Sending (SMTP)', ok: configured.smtp },
     { name: 'Schedule', detail: scheduler, ok: configured.scheduler || configured.cron, okLabel: 'Active' },
   ];

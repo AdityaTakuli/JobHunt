@@ -1,18 +1,22 @@
 // Reads one email about a job application and says what it means for the tracker: she applied,
 // got an interview or a test, an offer, a rejection, or nothing to do with her applications.
 // FreeLLMAPI first (models tried in order, FREELLM_MAIL_MODEL), keyword rules when it is out.
-// Shares the FreeLLMAPI daily budget with job labeling (lib/aiBudget.js).
+// Shares the FreeLLMAPI daily budget with job labeling (lib/aiBudget.js). The same session also
+// lists the openings in job emails from any sender (sources/jobEmail.js).
 
 import { config } from '../config.js';
 import { createBudget, dbUsageStore } from './aiBudget.js';
 import { withFreeLlmModels } from './freellm.js';
 import { estimateTokens, LlmError, retryInvalidJsonOnce } from './llm.js';
 import { chatJson } from './openaiChat.js';
+import { JOB_EMAIL_PROMPT, jobEmailPrompt, validateJobList } from '../sources/jobEmail.js';
 
 export const MAIL_KINDS = ['applied', 'interview', 'assessment', 'offer', 'rejected', 'other'];
 const KINDS = new Set(MAIL_KINDS);
 const MAX_BODY_CHARS = 1800;
 const MAX_OUTPUT_TOKENS = 800;
+// A digest of 40 openings is ~2,500 tokens of JSON.
+const JOB_LIST_OUTPUT_TOKENS = 3_500;
 
 export const MAIL_PROMPT = `You read one email from a job seeker's inbox and tell her job tracker what it means.
 
@@ -62,17 +66,21 @@ export function validateTriage(value) {
   };
 }
 
-function parseTriage(content, label) {
-  let parsed;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    throw new LlmError(`${label} returned invalid JSON`, 'invalid_json');
-  }
-  const out = validateTriage(parsed);
-  if (!out) throw new LlmError(`${label} JSON did not match the expected shape`, 'invalid_json');
-  return out;
+function parseWith(validate) {
+  return (content, label) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      throw new LlmError(`${label} returned invalid JSON`, 'invalid_json');
+    }
+    const out = validate(parsed);
+    if (!out) throw new LlmError(`${label} JSON did not match the expected shape`, 'invalid_json');
+    return out;
+  };
 }
+const parseTriage = parseWith(validateTriage);
+const parseJobList = parseWith(validateJobList);
 
 // Keyword fallback. Careful on purpose: an email it is unsure about counts as "other".
 const RULES = [
@@ -112,9 +120,8 @@ export function createMailTriage({ freellm = config.freellm, fetchImpl = fetch, 
   let down = !cfg?.url || !cfg?.apiKey ? 'not_configured' : null;
   let lastCall = 0;
 
-  async function askAi(mail) {
-    const user = mailPrompt(mail);
-    const estimate = estimateTokens(MAIL_PROMPT) + estimateTokens(user) + MAX_OUTPUT_TOKENS;
+  async function askAi({ system, user, maxOutputTokens, parse }) {
+    const estimate = estimateTokens(system) + estimateTokens(user) + maxOutputTokens;
     const blocked = await budget.reserve(estimate).catch(() => 'budget_unavailable');
     if (blocked) {
       if (blocked !== 'minute_tokens') down = `budget:${blocked}`;
@@ -130,22 +137,41 @@ export function createMailTriage({ freellm = config.freellm, fetchImpl = fetch, 
       });
     };
     return withFreeLlmModels({ ...cfg, state, fetchImpl }, (o) =>
-      retryInvalidJsonOnce(async () =>
-        parseTriage(await chatJson({ ...o, system: MAIL_PROMPT, user, maxOutputTokens: MAX_OUTPUT_TOKENS, onUsage }), o.label),
-      ),
+      retryInvalidJsonOnce(async () => parse(await chatJson({ ...o, system, user, maxOutputTokens, onUsage }), o.label)),
     );
+  }
+
+  const noteFailure = (err) => {
+    const kind = err instanceof LlmError ? err.kind : 'unexpected';
+    stats.failures[kind] = (stats.failures[kind] || 0) + 1;
+    if (!['invalid_json', 'budget'].includes(kind)) down = kind;
+  };
+
+  /**
+   * The openings listed in a job email: { jobs: [{ title, company, location, salary,
+   * postedDaysAgo, link }] }, or null while the AI is out (the email is then read on a later run).
+   * @param emailText the email as text with numbered links (sources/jobEmail.js emailToText)
+   */
+  async function extractJobs(mail, emailText) {
+    if (down) return null;
+    try {
+      const out = await askAi({ system: JOB_EMAIL_PROMPT, user: jobEmailPrompt(mail, emailText), maxOutputTokens: JOB_LIST_OUTPUT_TOKENS, parse: parseJobList });
+      stats.ai += 1;
+      return out;
+    } catch (err) {
+      noteFailure(err);
+      return null;
+    }
   }
 
   async function triage(mail) {
     if (!down) {
       try {
-        const out = await askAi(mail);
+        const out = await askAi({ system: MAIL_PROMPT, user: mailPrompt(mail), maxOutputTokens: MAX_OUTPUT_TOKENS, parse: parseTriage });
         stats.ai += 1;
         return { ...out, classifier: 'freellm' };
       } catch (err) {
-        const kind = err instanceof LlmError ? err.kind : 'unexpected';
-        stats.failures[kind] = (stats.failures[kind] || 0) + 1;
-        if (!['invalid_json', 'budget'].includes(kind)) down = kind;
+        noteFailure(err);
       }
     }
     stats.rules += 1;
@@ -154,6 +180,7 @@ export function createMailTriage({ freellm = config.freellm, fetchImpl = fetch, 
 
   return {
     triage,
+    extractJobs,
     stats,
     get down() {
       return down;

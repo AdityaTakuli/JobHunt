@@ -79,10 +79,14 @@
 
       <h2>Gmail (optional)</h2>
       <p>Connecting Gmail is a separate step in Settings. It gives ArchJobs <strong>read-only</strong> access (the <code>gmail.readonly</code> permission).
-        ArchJobs never sends, deletes, labels or changes anything in your mailbox. Every 30 minutes it searches your mailbox for two kinds of email only:</p>
+        ArchJobs never sends, deletes, labels or changes anything in your mailbox. Every 30 minutes it searches your mailbox for these kinds of email only:</p>
       <ul>
         <li><strong>LinkedIn job alerts.</strong> The job postings in them (title, company, location, link) are added to the job list shared by everyone
           on ArchJobs. Nothing personal from the email is kept.</li>
+        <li><strong>Job emails from other sites and senders</strong> (job alerts from sites like Glassdoor or Naukri, company newsletters, hiring
+          posts), found by job words such as <em>job alert</em>, <em>hiring</em>, <em>vacancy</em> or <em>apply now</em>, from the last few days.
+          An AI model lists the openings in each one; their title, company, location, pay and link are added to the shared job list. Links are
+          followed to the job page and tracking parameters are removed, so nothing that identifies you is kept with the job.</li>
         <li><strong>Emails about your own job applications</strong>, found by words in the subject such as <em>application</em>, <em>interview</em>,
           <em>offer</em> or <em>assessment</em>, and LinkedIn's “your application was sent” emails. Promotions and social emails are skipped. The first check
           looks back 60 days.</li>
@@ -94,7 +98,7 @@
       <ul>
         <li>Your account: name, email address, profile picture, and when you last signed in.</li>
         <li>Your tracker entries, firms, searches and settings.</li>
-        <li>For each application email read: its Gmail message ID, sender address, subject, date, the label given to it (for example “interview”), and the
+        <li>For each application or job email read: its Gmail message ID, sender address, subject, date, the label given to it (for example “interview”), and the
           company and role named in it, so the same email is never read twice. <strong>The body of your emails is not stored.</strong></li>
         <li>A short note on the tracker entry (date, label and subject line), and the sender's address as the contact when it is a person rather than an
           automated sender.</li>

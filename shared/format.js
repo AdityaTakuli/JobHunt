@@ -3,6 +3,7 @@
 export const SOURCE_LABELS = {
   google_jobs: 'Google Jobs',
   linkedin_email: 'LinkedIn alert',
+  job_email: 'Job emails',
   company_careers: 'Company careers',
   manual: 'Added by you',
 };
@@ -11,7 +12,7 @@ export const ROLE_LABELS = { internship: 'Internship', fresher: 'Fresher', exper
 
 // What an email read from Gmail turned out to be.
 export const MAIL_KIND_LABELS = {
-  alert: 'LinkedIn alert',
+  alert: 'Job alert',
   applied: 'Application sent',
   interview: 'Interview',
   assessment: 'Test or task',
