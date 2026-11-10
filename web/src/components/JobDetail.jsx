@@ -165,7 +165,9 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
   const long = description.length > COLLAPSE_AT;
   const keywords = useMemo(() => extractKeywords(`${job.title}\n${description}`, job.software || []), [job.title, description, job.software]);
 
-  useEffect(() => setExpanded(false), [job.id]);
+  useEffect(() => {
+    setExpanded(false);
+  }, [job.id]);
 
   return (
     <>
@@ -281,7 +283,11 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
 export function JobDetailPane({ jobId, listJob, actions }) {
   const { job, error } = useJobDetail(jobId, listJob);
   const scrollRef = useRef(null);
-  useEffect(() => scrollRef.current?.scrollTo({ top: 0 }), [jobId]);
+  // Block body on purpose: an effect must return nothing or a cleanup function, and scrollTo
+  // can return a value (a Promise in some browsers), which React would then try to call.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [jobId]);
 
   return (
     <section className="detail-pane card" aria-labelledby="pane-title" ref={scrollRef}>
