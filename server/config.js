@@ -170,8 +170,14 @@ export const config = {
     // Between page batches, and before one retry when the vision model is rate-limited.
     pauseMs: num(env.PROFILE_PAUSE_MS, 4_000),
     retryWaitMs: num(env.PROFILE_RETRY_WAIT_MS, 35_000),
+    // Tries per batch of portfolio pages (the wait grows each time), plus one last pass at the end.
+    batchTries: num(env.PROFILE_BATCH_TRIES, 3),
     // Profile reads one person may start per IST day (each upload or re-read is one).
     dailyBuilds: num(env.PROFILE_DAILY_BUILDS, 6),
+    // Application forms one person may have the AI help fill per IST day (ARCH in Chrome). Fields
+    // the rules answer straight from the CV are not counted.
+    dailyFills: num(env.PROFILE_DAILY_FILLS, 40),
+    fillTimeoutMs: num(env.PROFILE_FILL_TIMEOUT_MS, 60_000),
   },
 
   groq: {

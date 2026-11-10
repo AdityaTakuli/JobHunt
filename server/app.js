@@ -4,6 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import { googleCallback, googleStart, login, logout, me, requireAuth, requireCronKey } from './auth.js';
 import { config, ROOT_DIR } from './config.js';
+import { zipDirectory } from './lib/zip.js';
 import { accountRouter } from './routes/account.js';
 import { analysisRouter } from './routes/analysis.js';
 import { profileRouter } from './routes/profile.js';
@@ -87,6 +88,18 @@ export function createApp() {
   app.use('/api/firms', firmsRouter);
   app.use('/api/companies', companiesRouter);
   app.use('/api/profile', profileRouter);
+  // ARCH in Chrome, zipped from extension/ (unzip, then chrome://extensions → Load unpacked).
+  app.get('/api/extension.zip', async (req, res, next) => {
+    try {
+      const zip = await zipDirectory(path.join(ROOT_DIR, 'extension'), 'arch-in-chrome');
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="arch-in-chrome.zip"');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.send(zip);
+    } catch (err) {
+      next(err);
+    }
+  });
   app.use('/api', accountRouter);
   app.use('/api', settingsRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));

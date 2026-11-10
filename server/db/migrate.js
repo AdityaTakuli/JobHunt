@@ -32,6 +32,9 @@ const ADDED_COLUMNS = [
   ['users', 'gmail_apps_synced_at', 'DATETIME NULL AFTER gmail_synced_at'],
   ['users', 'gmail_jobs_synced_at', 'DATETIME NULL AFTER gmail_apps_synced_at'],
   ['mail_events', 'jobs_found', 'SMALLINT UNSIGNED NULL AFTER application_id'],
+  ['profiles', 'resume_text', 'MEDIUMTEXT NULL AFTER builds_count'],
+  ['profiles', 'fills_on', 'DATE NULL AFTER resume_text'],
+  ['profiles', 'fills_count', 'SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER fills_on'],
 ];
 
 async function hasIndex(table, name) {

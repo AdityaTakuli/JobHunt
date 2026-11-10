@@ -11,6 +11,7 @@
 //   skills: [string],                                  canonical taxonomy labels where possible
 //   projects: [{ title, typology, scale, role, tools, drawings, academic }],
 //   typologies: [string], cities: [string], coa: bool, certifications: [string], summary,
+//   contact: { email, phone, linkedin, website, city, address, date_of_birth },   for application forms (lib/fill.js)
 //   portfolio: { pages, read_pages, typologies, drawing_types, software, rubric, strengths, weaknesses }
 // }
 
@@ -34,7 +35,16 @@ software, projects or experience. Reply with one JSON object and nothing else:
   "cities": string[],                                // cities they live in or are open to, if stated
   "coa": boolean,                                    // registered with the Council of Architecture, if stated
   "certifications": string[],
-  "summary": string                                  // 1-2 plain sentences on who they are and what they are strongest at
+  "summary": string,                                 // 1-2 plain sentences on who they are and what they are strongest at
+  "contact": {                                       // exactly as written on the CV, null when absent
+    "email": string | null,
+    "phone": string | null,                          // with country code if written
+    "linkedin": string | null,                       // profile URL
+    "website": string | null,                        // portfolio or personal site URL (Behance, Issuu, own site)
+    "city": string | null,                           // the city they live in now
+    "address": string | null,                        // postal address if written, one line
+    "date_of_birth": string | null                   // YYYY-MM-DD if written
+  }
 }`;
 
 export const PORTFOLIO_PAGES_SYSTEM_PROMPT = `You review pages of an architecture student's portfolio (images). For each page, say what it
@@ -77,6 +87,29 @@ const strList = (v, max, each = 60) =>
   Array.isArray(v) ? [...new Set(v.map((s) => str(s, each)).filter(Boolean))].slice(0, max) : [];
 const dedupeCanonical = (names) => [...new Set(names.map(canonicalSkill).filter(Boolean))];
 
+export const CONTACT_KEYS = ['email', 'phone', 'linkedin', 'website', 'city', 'address', 'date_of_birth'];
+const EMPTY_CONTACT = Object.fromEntries(CONTACT_KEYS.map((k) => [k, null]));
+
+// Contact details, tidied: a usable email, digits (and a leading +) in the phone, full URLs.
+export function validateContact(value) {
+  const c = { ...EMPTY_CONTACT };
+  if (!value || typeof value !== 'object') return c;
+  const email = str(value.email, 120).toLowerCase();
+  c.email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+  const phone = str(value.phone, 40).replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+  c.phone = phone.replace(/\D/g, '').length >= 7 ? phone : null;
+  for (const k of ['linkedin', 'website']) {
+    let url = str(value[k], 200);
+    if (url && !/^https?:\/\//i.test(url)) url = `https://${url.replace(/^\/+/, '')}`;
+    c[k] = /^https?:\/\/[^\s/]+\.[^\s]+$/i.test(url) ? url : null;
+  }
+  c.city = str(value.city, 60) || null;
+  c.address = str(value.address, 200) || null;
+  const dob = str(value.date_of_birth, 10);
+  c.date_of_birth = /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : null;
+  return c;
+}
+
 export function validateResumeProfile(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const stage = ['student', 'graduate', 'experienced'].includes(value.stage) ? value.stage : 'student';
@@ -115,6 +148,7 @@ export function validateResumeProfile(value) {
     coa: value.coa === true,
     certifications: strList(value.certifications, 8, 80),
     summary,
+    contact: validateContact(value.contact),
   };
 }
 
@@ -184,7 +218,8 @@ export function portfolioRubric(pages, totalPages) {
 export function mergeProfile({ resume = null, pages = null, review = null, totalPages = 0 } = {}) {
   const profile = resume
     ? structuredClone(resume)
-    : { name: null, stage: 'student', graduation_year: null, experience_months: 0, education: [], experience: [], software: [], skills: [], projects: [], cities: [], coa: false, certifications: [], summary: '' };
+    : { name: null, stage: 'student', graduation_year: null, experience_months: 0, education: [], experience: [], software: [], skills: [], projects: [], cities: [], coa: false, certifications: [], summary: '', contact: { ...EMPTY_CONTACT } };
+  profile.contact = { ...EMPTY_CONTACT, ...(profile.contact || {}) };
   const software = new Map(profile.software.map((s) => [s.name, s.level]));
   const typologies = new Set(profile.projects.map((p) => p.typology).filter(Boolean));
   let portfolio = null;
@@ -239,5 +274,7 @@ export function applyProfileEdits(profile, edits = {}) {
   if (['student', 'graduate', 'experienced'].includes(edits.stage)) next.stage = edits.stage;
   if (edits.experience_months != null) next.experience_months = int(edits.experience_months, { max: 600 }) ?? next.experience_months;
   if (typeof edits.coa === 'boolean') next.coa = edits.coa;
+  if (edits.name !== undefined) next.name = str(edits.name, 80) || null;
+  if (edits.contact && typeof edits.contact === 'object') next.contact = validateContact({ ...(profile.contact || {}), ...edits.contact });
   return next;
 }

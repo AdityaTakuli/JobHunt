@@ -7,6 +7,7 @@ import { canonicalSkill, findSkills, findTypologies } from '../shared/skills.js'
 import { gapSummary, jobRequirements, scoreFit } from '../server/lib/fit.js';
 import { openPdf, pdfText } from '../server/lib/pdf.js';
 import { applyProfileEdits, mergeProfile, portfolioRubric, validatePortfolioPages, validateResumeProfile } from '../server/lib/profile.js';
+import { buildProfile } from '../server/lib/profileBuild.js';
 import { riskyEffects } from './webEffects.test.js';
 
 const resume = validateResumeProfile({
@@ -234,4 +235,63 @@ describe('PDF reading', () => {
 
 describe('web effects check still exports its helper', () => {
   it('works', () => assert.equal(riskyEffects('useEffect(() => { a(); }, [])').length, 0));
+});
+
+// ---- Portfolio reading survives a flaky gateway (2026-11-11: three batches lost to 502/429) ----
+
+function fakeGateway({ failPages = {} } = {}) {
+  // failPages: { '3-4': 2 } = the batch starting at page 3 fails with 502 that many times first; Infinity = always.
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const content = body.messages[1].content;
+    const reply = (obj, status = 200) => new Response(JSON.stringify(status === 200 ? { choices: [{ message: { content: JSON.stringify(obj) } }], usage: { total_tokens: 10 } } : { error: 'upstream' }), { status, headers: { 'content-type': 'application/json' } });
+    if (typeof content === 'string') return reply({ strengths: ['a'], weaknesses: [], improvements: [], best_for: [], summary: 'Fine work.' });
+    const numbers = content.filter((c) => c.type === 'text' && /^Page \d+$/.test(c.text)).map((c) => Number(c.text.slice(5)));
+    const label = `${numbers[0]}-${numbers.at(-1)}`;
+    calls.push(label);
+    if (failPages[label] > 0) {
+      failPages[label] -= 1;
+      return reply(null, 502);
+    }
+    return reply({ pages: numbers.map((page) => ({ page, typology: 'residential', scale: 'small', drawings: ['plan'], software: ['Revit'], process: false, technical: true, quality: 4, note: 'ok' })) });
+  };
+  return { calls, fetchImpl };
+}
+
+const portfolioCfg = {
+  freellm: { url: 'https://gw.test', apiKey: 'k' },
+  profile: { textModels: 'gpt-oss-120b', visionModels: 'gemini-3.5-flash-lite', omnirouteModels: '', maxResumePages: 10, maxResumeChars: 24_000, maxPortfolioPages: 40, pagesPerCall: 2, renderPx: 200, jpegQuality: 50, timeoutMs: 5_000, pauseMs: 0, retryWaitMs: 0, batchTries: 3 },
+};
+
+describe('portfolio reading on a flaky gateway', () => {
+  const six = tinyPdf(['p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
+
+  it('retries a failed batch and gives the still-failed ones a last pass', async () => {
+    const gw = fakeGateway({ failPages: { '3-4': 2, '5-6': Infinity } });
+    const result = await buildProfile({ portfolio: six }, { cfg: portfolioCfg, fetchImpl: gw.fetchImpl });
+    assert.deepEqual(result.pages.map((p) => p.page), [1, 2, 3, 4]);
+    assert.equal(gw.calls.filter((c) => c === '3-4').length, 3, 'two failures, then success');
+    assert.equal(gw.calls.filter((c) => c === '5-6').length, 4, 'three tries, then the last pass');
+    assert.ok(result.warnings.some((w) => /Pages 5-6 could not be read/.test(w)), result.warnings.join('; '));
+    assert.equal(result.profile.portfolio.read_pages, 4);
+  });
+
+  it('reads only the pages a previous run missed', async () => {
+    const gw = fakeGateway();
+    const known = [1, 2, 3, 4].map((page) => ({ page, project: null, typology: 'residential', scale: 'small', drawings: ['plan'], software: ['Revit'], process: false, technical: true, quality: 4, role: null, note: 'ok' }));
+    const result = await buildProfile({ portfolio: six }, { cfg: portfolioCfg, fetchImpl: gw.fetchImpl, knownPages: known });
+    assert.deepEqual(gw.calls, ['5-6']);
+    assert.deepEqual(result.pages.map((p) => p.page), [1, 2, 3, 4, 5, 6]);
+    assert.equal(result.warnings.length, 0);
+  });
+
+  it('hands back the pages it did read when too few could be', async () => {
+    const gw = fakeGateway({ failPages: { '3-4': Infinity, '5-6': Infinity } });
+    await assert.rejects(buildProfile({ portfolio: six }, { cfg: portfolioCfg, fetchImpl: gw.fetchImpl }), (err) => {
+      assert.match(err.message, /Only 2 of 6/);
+      assert.deepEqual(err.pages.map((p) => p.page), [1, 2]);
+      return true;
+    });
+  });
 });

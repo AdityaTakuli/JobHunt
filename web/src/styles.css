@@ -4402,6 +4402,9 @@ a.co-open:hover {
 }
 .profile-warnings {
   margin: 6px 0 10px;
+}
+.profile-warnings ul {
+  margin: 6px 0 10px;
   padding-left: 18px;
 }
 .profile-section {

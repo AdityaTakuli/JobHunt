@@ -6,12 +6,13 @@ import express, { Router } from 'express';
 import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
 import { dbUsageStore } from '../lib/aiBudget.js';
+import { fillFields, FILL_VERSION, sanitizeFields } from '../lib/fill.js';
 import { gapSummary, scoreFit } from '../lib/fit.js';
 import { factsFor } from '../lib/fitCache.js';
 import { LlmError } from '../lib/llm.js';
 import { openPdf, PdfError } from '../lib/pdf.js';
 import { applyProfileEdits, PROFILE_VERSION } from '../lib/profile.js';
-import { buildProfile, profileAvailable } from '../lib/profileBuild.js';
+import { askJson, buildProfile, profileAvailable } from '../lib/profileBuild.js';
 import { getRow, invalidate, PROFILE_KINDS, readFile, removeFile, saveFile, upsertRow } from '../lib/profileStore.js';
 import { STILL_OPEN } from '../lib/deadline.js';
 import { istDateString } from '../lib/time.js';
@@ -38,15 +39,21 @@ function serialize(row, uid) {
     model: row?.model || null,
     warnings: parseJson(row?.warnings, []),
     limits: { resumeMb: config.profile.maxResumeMb, portfolioMb: config.profile.maxPortfolioMb, portfolioPages: config.profile.maxPortfolioPages, buildsPerDay: config.profile.dailyBuilds },
-    builds_today: row?.builds_on === istDateString() || (row?.builds_on instanceof Date && istDateString(row.builds_on) === istDateString()) ? Number(row.builds_count || 0) : 0,
+    builds_today: countToday(row, 'builds'),
+    fills_today: countToday(row, 'fills'),
+    fills_per_day: config.profile.dailyFills,
   };
 }
 
-async function buildsToday(row) {
+// How many of today's (IST) builds or fills the row has counted.
+function countToday(row, kind) {
   const today = istDateString();
-  const on = row?.builds_on ? (row.builds_on instanceof Date ? istDateString(row.builds_on) : String(row.builds_on).slice(0, 10)) : null;
-  return on === today ? Number(row.builds_count || 0) : 0;
+  const raw = row?.[`${kind}_on`];
+  const on = raw ? (raw instanceof Date ? istDateString(raw) : String(raw).slice(0, 10)) : null;
+  return on === today ? Number(row[`${kind}_count`] || 0) : 0;
 }
+const buildsToday = async (row) => countToday(row, 'builds');
+const fillsToday = (row) => countToday(row, 'fills');
 
 // Reads whatever files are stored and replaces the profile. Runs in the background; GET /profile
 // reports the step while it runs.
@@ -59,10 +66,14 @@ function startBuild(uid) {
     const today = istDateString();
     const count = (await buildsToday(row)) + 1;
     await upsertRow(uid, { status: 'building', error: null, builds_on: today, builds_count: count });
+    // Page notes stored from an earlier read of this same portfolio file (an upload clears them):
+    // a re-read only sends the pages that failed last time.
+    const knownPages = portfolio ? parseJson(row?.pages, null) : null;
     try {
       const result = await buildProfile(
         { resume, portfolio },
         {
+          knownPages: Array.isArray(knownPages) ? knownPages : null,
           onProgress: (step) => (state.step = step),
           onUsage: (provider, tokens) => (provider === 'freellm' && tokens ? dbUsageStore.add('freellm', today, tokens).catch(() => {}) : null),
         },
@@ -72,6 +83,7 @@ function startBuild(uid) {
         error: null,
         profile: JSON.stringify(result.profile),
         pages: result.pages ? JSON.stringify(result.pages) : null,
+        resume_text: result.resumeText || null,
         warnings: JSON.stringify(result.warnings),
         model: result.models.join(', ').slice(0, 120),
         tokens: result.tokens,
@@ -81,7 +93,8 @@ function startBuild(uid) {
     } catch (err) {
       const message = err instanceof LlmError || err instanceof PdfError ? err.message : 'The profile could not be built. Try again in a few minutes.';
       if (!(err instanceof LlmError) && !(err instanceof PdfError)) console.error(`Profile build for user ${uid} failed:`, err);
-      await upsertRow(uid, { status: 'error', error: message.slice(0, 300) });
+      // Pages that were read before the failure are kept for the next try.
+      await upsertRow(uid, { status: 'error', error: message.slice(0, 300), ...(Array.isArray(err.pages) && err.pages.length ? { pages: JSON.stringify(err.pages) } : {}) });
     } finally {
       building.delete(uid);
       invalidate(uid);
@@ -126,7 +139,14 @@ profileRouter.put('/:kind', express.raw({ type: ['application/pdf', 'application
   }
   const name = rawName.replace(/[^\p{L}\p{N} .()_-]+/gu, '_').slice(0, 200) || `${kind}.pdf`;
   await saveFile(uid, kind, buffer);
-  await upsertRow(uid, { [`${kind}_name`]: name, [`${kind}_size`]: buffer.length, [`${kind}_pages`]: Math.min(pages, 65_000), [`${kind}_uploaded_at`]: new Date() });
+  await upsertRow(uid, {
+    [`${kind}_name`]: name,
+    [`${kind}_size`]: buffer.length,
+    [`${kind}_pages`]: Math.min(pages, 65_000),
+    [`${kind}_uploaded_at`]: new Date(),
+    // Page notes belong to the old file.
+    ...(kind === 'portfolio' ? { pages: null } : {}),
+  });
   startBuild(uid).catch(() => {});
   res.status(202).json(serialize(await getRow(uid), uid));
 });
@@ -156,6 +176,7 @@ profileRouter.delete('/:kind', async (req, res) => {
     [`${kind}_size`]: null,
     [`${kind}_pages`]: null,
     [`${kind}_uploaded_at`]: null,
+    ...(kind === 'resume' ? { resume_text: null } : {}),
     ...(other ? {} : { status: 'empty', profile: null, pages: null, warnings: null, error: null, built_at: null }),
   });
   // What is left is read again so the profile matches the files.
@@ -171,6 +192,81 @@ profileRouter.patch('/', async (req, res) => {
   const profile = applyProfileEdits(parseJson(row.profile, {}), req.body || {});
   await upsertRow(uid, { profile: JSON.stringify(profile) });
   res.json(serialize(await getRow(uid), uid));
+});
+
+// ---- ARCH in Chrome (extension/) ----
+
+const fileLabel = (kind) => (kind === 'resume' ? 'CV' : 'portfolio');
+
+// What the extension shows in its popup: who is signed in and whether there is a profile to fill from.
+profileRouter.get('/extension', async (req, res) => {
+  const row = await getRow(req.user.id);
+  const ready = row?.status === 'ready' && Boolean(row.profile);
+  res.json({
+    version: FILL_VERSION,
+    user: { name: req.user.name, email: req.user.email },
+    ready,
+    status: building.has(req.user.id) ? 'building' : row?.status || 'empty',
+    resume: Boolean(row?.resume_uploaded_at),
+    portfolio: Boolean(row?.portfolio_uploaded_at),
+    ai: profileAvailable(),
+    fills: { today: fillsToday(row), limit: config.profile.dailyFills },
+  });
+});
+
+// The stored PDF, so the extension can drop it into a form's upload box.
+profileRouter.get('/file/:kind', async (req, res) => {
+  const { kind } = req.params;
+  if (!PROFILE_KINDS.includes(kind)) return res.status(404).json({ error: 'Not found.' });
+  const row = await getRow(req.user.id);
+  const buffer = row?.[`${kind}_uploaded_at`] ? await readFile(req.user.id, kind) : null;
+  if (!buffer) return res.status(404).json({ error: `No ${fileLabel(kind)} uploaded.` });
+  const name = String(row[`${kind}_name`] || `${kind}.pdf`).replace(/["\r\n]/g, '');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(buffer);
+});
+
+// Answers for the fields of an application form. Body: { page: { url, title, text }, fields: [...],
+// ai: bool }. Rule answers are free; the AI call counts against the daily limit.
+profileRouter.post('/fill', async (req, res) => {
+  const uid = req.user.id;
+  const row = await getRow(uid);
+  const profile = row?.status === 'ready' ? parseJson(row.profile, null) : null;
+  if (!profile) return res.status(400).json({ error: 'Upload your CV in ArchJobs first, so there is something to fill from.' });
+  const fields = sanitizeFields(req.body?.fields);
+  if (!fields.length) return res.status(400).json({ error: 'No fields to fill.' });
+  const str = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+  const page = { url: str(req.body?.page?.url, 500), title: str(req.body?.page?.title, 200), text: str(req.body?.page?.text, 4_000) };
+  const wantAi = req.body?.ai !== false && profileAvailable();
+  const used = fillsToday(row);
+  const aiAllowed = wantAi && used < config.profile.dailyFills;
+  const today = istDateString();
+  let aiUsed = false;
+  const result = await fillFields({
+    profile,
+    account: { name: req.user.name, email: req.user.email },
+    resumeText: row.resume_text ? String(row.resume_text).slice(0, 8_000) : null,
+    page,
+    fields,
+    files: { resume: Boolean(row.resume_uploaded_at), portfolio: Boolean(row.portfolio_uploaded_at) },
+    useAi: aiAllowed,
+    ask: async (call) => {
+      aiUsed = true;
+      return askJson({
+        ...call,
+        cfg: { ...config, profile: { ...config.profile, timeoutMs: config.profile.fillTimeoutMs } },
+        onUsage: (provider, tokens) => (provider === 'freellm' && tokens ? dbUsageStore.add('freellm', today, tokens).catch(() => {}) : null),
+      });
+    },
+  });
+  if (aiUsed) await upsertRow(uid, { fills_on: today, fills_count: used + 1 });
+  res.json({
+    ...result,
+    ai: { ...result.ai, used: aiUsed, limited: wantAi && !aiAllowed, today: used + (aiUsed ? 1 : 0), limit: config.profile.dailyFills },
+    files: { resume: Boolean(row.resume_uploaded_at), portfolio: Boolean(row.portfolio_uploaded_at) },
+  });
 });
 
 // What the open roles most often ask for that the profile lacks: what to fix first.

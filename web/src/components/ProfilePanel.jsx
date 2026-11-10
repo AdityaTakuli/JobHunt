@@ -232,11 +232,21 @@ export default function ProfilePanel() {
         </p>
       )}
       {state.warnings?.length > 0 && !building && (
-        <ul className="small muted profile-warnings">
-          {state.warnings.map((w) => (
-            <li key={w}>{w}</li>
-          ))}
-        </ul>
+        <div className="profile-warnings">
+          <ul className="small muted">
+            {state.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+          {state.warnings.some((w) => /could not be read/.test(w)) && state.status !== 'error' && (
+            <p className="small">
+              The AI gateway was busy. Pages already read are kept, so reading again only sends the missing ones.{' '}
+              <button type="button" className="btn btn-sm" onClick={rebuild} disabled={!state.available}>
+                Read the missing pages
+              </button>
+            </p>
+          )}
+        </div>
       )}
 
       {profile && edits && (
