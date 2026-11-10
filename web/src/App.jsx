@@ -4,10 +4,11 @@ import { api, setUnauthorizedHandler } from './api.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Logo, { LogoMark } from './components/Logo.jsx';
 import { LoadingQuote } from './components/Skeleton.jsx';
-import { IconBriefcase, IconBuilding, IconColumns, IconGlobe, IconMonitor, IconMoon, IconSettings, IconSun } from './icons.jsx';
+import { IconBriefcase, IconBuilding, IconColumns, IconFileUser, IconGlobe, IconMonitor, IconMoon, IconSettings, IconSun } from './icons.jsx';
 import CompaniesPage from './pages/CompaniesPage.jsx';
 import FirmsPage from './pages/FirmsPage.jsx';
 import JobsPage from './pages/JobsPage.jsx';
+import ProfilePage from './pages/ProfilePage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import TrackerPage from './pages/TrackerPage.jsx';
 
@@ -20,6 +21,7 @@ const Welcome = lazy(() => import('./components/Welcome.jsx'));
 const ROUTES = [
   { path: 'jobs', label: 'Jobs', Icon: IconBriefcase, Page: JobsPage },
   { path: 'tracker', label: 'Tracker', Icon: IconColumns, Page: TrackerPage },
+  { path: 'profile', label: 'Profile', Icon: IconFileUser, Page: ProfilePage },
   { path: 'companies', label: 'Companies', Icon: IconGlobe, Page: CompaniesPage },
   { path: 'firms', label: 'Firms', Icon: IconBuilding, Page: FirmsPage },
   { path: 'settings', label: 'Settings', Icon: IconSettings, Page: SettingsPage },

@@ -6,6 +6,7 @@ import { normalizeCity } from '../lib/normalize.js';
 import { getUserSettings } from '../lib/settings.js';
 import { scoreFit } from '../lib/fit.js';
 import { getProfile } from '../lib/profileStore.js';
+import { factsFor } from '../lib/fitCache.js';
 import { STILL_OPEN } from '../lib/deadline.js';
 import { DAY_MS, startOfIstDay } from '../lib/time.js';
 import { localSearchesThisMonth } from '../tasks/fetchJobs.js';
@@ -167,25 +168,56 @@ jobsRouter.get('/', async (req, res) => {
   const limit = intParam(req.query.limit, 50, { min: 1, max: 200 });
   const offset = intParam(req.query.offset, 0, { min: 0 });
   const fitSort = req.query.sort === 'fit' && Boolean(profile);
-  const [rows, [{ total }], estimates] = await Promise.all([
-    query(
-      `SELECT ${LIST_COLUMNS}${profile ? ', j.description' : ''} FROM jobs j ${trackerJoin(req.user.id)}
-        WHERE ${where}
-        ORDER BY ${orderBy(req.query.sort, ids)} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
-        LIMIT ? OFFSET ?`,
-      fitSort ? [...params, FIT_SORT_POOL, 0] : [...params, limit, offset],
-    ),
-    query(`SELECT COUNT(*) AS total FROM jobs j ${trackerJoin(req.user.id)} WHERE ${where}`, params),
-    getEstimates(),
-  ]);
-  let jobs = rows.map((r) => {
+  const order = `${orderBy(req.query.sort, ids)} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC`;
+  const countQuery = query(`SELECT COUNT(*) AS total FROM jobs j ${trackerJoin(req.user.id)} WHERE ${where}`, params);
+
+  let rows;
+  let total;
+  const fits = new Map();
+  if (fitSort) {
+    // Best fit: score the pool with a few light columns, then load full cards for this page only.
+    const [pool, [count]] = await Promise.all([
+      query(
+        `SELECT j.id, j.updated_at, j.title, j.city, j.software, j.role_type, j.is_bim, j.exp_min, j.exp_max FROM jobs j ${trackerJoin(req.user.id)}
+          WHERE ${where} ORDER BY ${order} LIMIT ?`,
+        [...params, FIT_SORT_POOL],
+      ),
+      countQuery,
+    ]);
+    const facts = await factsFor(pool);
+    for (const r of pool) fits.set(r.id, briefFit(scoreFit(profile, { ...r, software: parseJson(r.software, []) }, null, facts.get(r.id))));
+    // Stable: equal scores keep the newest-first order of the pool.
+    const pageIds = pool
+      .map((r, i) => ({ id: r.id, i, score: fits.get(r.id).score }))
+      .sort((a, b) => b.score - a.score || a.i - b.i)
+      .slice(offset, offset + limit)
+      .map((r) => r.id);
+    const full = pageIds.length ? await query(`SELECT ${LIST_COLUMNS} FROM jobs j ${trackerJoin(req.user.id)} WHERE j.id IN (?)`, [pageIds]) : [];
+    const byId = new Map(full.map((r) => [r.id, r]));
+    rows = pageIds.map((id) => byId.get(id)).filter(Boolean);
+    total = Math.min(Number(count.total), FIT_SORT_POOL);
+  } else {
+    const [page, [count]] = await Promise.all([
+      query(`SELECT ${LIST_COLUMNS}, j.updated_at FROM jobs j ${trackerJoin(req.user.id)} WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]),
+      countQuery,
+    ]);
+    rows = page;
+    total = Number(count.total);
+    if (profile) {
+      // What each posting asks for is cached per job, so only new jobs have their text scanned.
+      const facts = await factsFor(rows);
+      for (const r of rows) fits.set(r.id, briefFit(scoreFit(profile, { ...r, software: parseJson(r.software, []) }, null, facts.get(r.id))));
+    }
+  }
+
+  const estimates = await getEstimates();
+  const jobs = rows.map((r) => {
     const job = serializeJob(r, estimates);
-    if (profile) job.fit = briefFit(scoreFit(profile, { ...r, software: job.software }));
-    delete job.description;
+    delete job.updated_at;
+    if (fits.has(r.id)) job.fit = fits.get(r.id);
     return job;
   });
-  if (fitSort) jobs = jobs.sort((a, b) => b.fit.score - a.fit.score).slice(offset, offset + limit);
-  res.json({ jobs, total: fitSort ? Math.min(Number(total), FIT_SORT_POOL) : Number(total), limit, offset });
+  res.json({ jobs, total, limit, offset });
 });
 
 // Filter options and the top-of-page counter.

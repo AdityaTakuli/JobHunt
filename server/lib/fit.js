@@ -110,13 +110,23 @@ function levelFit(profile, job) {
   return 0.7; // not labelled: assume a junior role
 }
 
+// What a posting asks for and what kind of work it is. This is the slow part (dozens of patterns
+// over the description) and the same for everyone, so the feed caches it per job (lib/fitCache.js).
+export function jobFacts(job, analysis = null) {
+  return {
+    reqs: jobRequirements(job, analysis),
+    jobTypes: findTypologies(`${job.title}\n${(job.description || '').slice(0, 3000)}`).filter((t) => t !== 'BIM' && t !== 'Sustainability'),
+  };
+}
+
 /**
  * @param profile from profile.js mergeProfile
  * @param job a feed row with title, description, software, role_type, exp_min, exp_max, city, location_text
  * @param analysis optional stored job analysis (must_have, nice_to_have, level)
+ * @param facts optional jobFacts(job) worked out earlier; then job.description is not needed
  */
-export function scoreFit(profile, job, analysis = null) {
-  const reqs = jobRequirements(job, analysis);
+export function scoreFit(profile, job, analysis = null, facts = null) {
+  const { reqs, jobTypes } = facts || jobFacts(job, analysis);
   const required = reqs.filter((r) => r.required);
   const preferred = reqs.filter((r) => !r.required);
   const matched = [];
@@ -137,7 +147,6 @@ export function scoreFit(profile, job, analysis = null) {
     : 0.6;
 
   // What kind of work the role is about vs what the portfolio shows.
-  const jobTypes = findTypologies(`${job.title}\n${(job.description || '').slice(0, 3000)}`).filter((t) => t !== 'BIM' && t !== 'Sustainability');
   const mine = new Set(profile.typologies || []);
   let portfolioScore;
   if (!profile.portfolio) portfolioScore = 0.45;

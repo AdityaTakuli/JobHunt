@@ -58,7 +58,7 @@ function UploadCard({ kind, title, hint, file, limitMb, busy, onUpload, onRemove
       </div>
       {file ? (
         <p className="small upload-file">
-          <strong>{decodeURIComponent(file.name || '')}</strong> · {mb(file.size)} · {file.pages} page{file.pages === 1 ? '' : 's'} · uploaded {formatDateTime(file.uploaded_at)}
+          <strong>{file.name}</strong> · {mb(file.size)} · {file.pages} page{file.pages === 1 ? '' : 's'} · uploaded {formatDateTime(file.uploaded_at)}
         </p>
       ) : (
         <p className="small muted">No file yet.</p>

@@ -21,7 +21,7 @@ export function FitSection({ fit }) {
       <section className="detail-section">
         <h3>Your fit</h3>
         <p className="small muted" style={{ margin: 0 }}>
-          Upload your CV or portfolio in <a href="#/settings?tab=profile">Settings → Profile</a> to see how well each role fits you.
+          Upload your CV or portfolio in <a href="#/profile">Profile</a> to see how well each role fits you.
         </p>
       </section>
     );

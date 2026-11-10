@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
 import { dbUsageStore } from '../lib/aiBudget.js';
 import { gapSummary, scoreFit } from '../lib/fit.js';
+import { factsFor } from '../lib/fitCache.js';
 import { LlmError } from '../lib/llm.js';
 import { openPdf, PdfError } from '../lib/pdf.js';
 import { applyProfileEdits, PROFILE_VERSION } from '../lib/profile.js';
@@ -116,9 +117,14 @@ profileRouter.put('/:kind', express.raw({ type: ['application/pdf', 'application
   if ((await buildsToday(row)) >= config.profile.dailyBuilds) {
     return res.status(429).json({ error: `You have used today's ${config.profile.dailyBuilds} profile reads. More tomorrow.` });
   }
-  const name = String(req.get('x-file-name') || `${kind}.pdf`)
-    .replace(/[^\w .()-]+/g, '_')
-    .slice(0, 200);
+  // The browser sends the name URI-encoded (headers are ASCII); decode it, then keep it plain.
+  let rawName = String(req.get('x-file-name') || `${kind}.pdf`);
+  try {
+    rawName = decodeURIComponent(rawName);
+  } catch {
+    // not encoded, or a stray %: keep as sent
+  }
+  const name = rawName.replace(/[^\p{L}\p{N} .()_-]+/gu, '_').slice(0, 200) || `${kind}.pdf`;
   await saveFile(uid, kind, buffer);
   await upsertRow(uid, { [`${kind}_name`]: name, [`${kind}_size`]: buffer.length, [`${kind}_pages`]: Math.min(pages, 65_000), [`${kind}_uploaded_at`]: new Date() });
   startBuild(uid).catch(() => {});
@@ -174,14 +180,15 @@ profileRouter.get('/gaps', async (req, res) => {
   const profile = row?.status === 'ready' ? parseJson(row.profile, null) : null;
   if (!profile) return res.json({ gaps: [], jobs: 0 });
   const jobs = await query(
-    `SELECT j.id, j.title, j.company, j.city, j.description, j.software, j.role_type, j.is_bim, j.exp_min, j.exp_max FROM jobs j
+    `SELECT j.id, j.title, j.company, j.city, j.software, j.role_type, j.is_bim, j.exp_min, j.exp_max, j.updated_at FROM jobs j
       WHERE j.is_archived = 0 AND ${STILL_OPEN} AND j.is_relevant = 1 AND (j.role_type IS NULL OR j.role_type <> 'experienced')
         AND NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ?)
       ORDER BY COALESCE(j.posted_at, j.created_at) DESC LIMIT 300`,
     [uid],
   );
   const rows = jobs.map((j) => ({ ...j, software: parseJson(j.software, []) }));
-  const fits = rows.map((j) => scoreFit(profile, j));
+  const facts = await factsFor(rows);
+  const fits = rows.map((j) => scoreFit(profile, j, null, facts.get(j.id)));
   const verdicts = { strong: 0, possible: 0, stretch: 0 };
   for (const f of fits) verdicts[f.verdict] += 1;
   res.json({ jobs: rows.length, verdicts, gaps: gapSummary(fits, rows) });

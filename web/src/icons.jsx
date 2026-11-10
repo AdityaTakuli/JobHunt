@@ -21,6 +21,15 @@ function Icon({ children, size = 20, label, ...rest }) {
   );
 }
 
+// A document with an upward arrow: the CV / portfolio page.
+export const IconFileUser = (p) => (
+  <Icon {...p}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5" />
+    <path d="M12 17v-6M9.5 13.5 12 11l2.5 2.5" />
+  </Icon>
+);
+
 export const IconBriefcase = (p) => (
   <Icon {...p}>
     <rect x="3" y="7" width="18" height="13" rx="2" />
