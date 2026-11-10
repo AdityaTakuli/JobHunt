@@ -106,7 +106,7 @@ profileRouter.put('/:kind', express.raw({ type: ['application/pdf', 'application
   if (buffer.length > limits()[kind]) return res.status(413).json({ error: `The ${kind === 'resume' ? 'CV' : 'portfolio'} must be under ${config.profile[kind === 'resume' ? 'maxResumeMb' : 'maxPortfolioMb']} MB. Export a smaller PDF.` });
   let pages;
   try {
-    const pdf = openPdf(buffer);
+    const pdf = await openPdf(buffer);
     pages = pdf.pages;
     pdf.close();
   } catch (err) {

@@ -2,7 +2,10 @@
 // so it runs on Hostinger's shared hosting. Gives the page count, each page's text, and each page
 // rendered as a JPEG small enough to send to a vision model.
 
-import * as mupdf from 'mupdf';
+// Loaded on first use, never at import: mupdf uses top-level await, and Hostinger's Node host
+// loads server/index.js with require(), which cannot load a module graph containing one.
+let mupdfPromise = null;
+const loadMupdf = () => (mupdfPromise ??= import('mupdf'));
 
 const MAX_TEXT_PER_PAGE = 20_000;
 
@@ -12,10 +15,11 @@ export class PdfError extends Error {}
  * @param {Buffer} buffer
  * @returns {{ pages: number, text(i): string, render(i, { maxPx, quality }): Buffer, close() }}
  */
-export function openPdf(buffer) {
+export async function openPdf(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 5 || buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
     throw new PdfError('This file is not a PDF.');
   }
+  const mupdf = await loadMupdf();
   let doc;
   try {
     doc = mupdf.Document.openDocument(buffer, 'application/pdf');
@@ -66,8 +70,8 @@ export function openPdf(buffer) {
 }
 
 // All the text of a PDF, pages separated, for a CV.
-export function pdfText(buffer, { maxPages = 10 } = {}) {
-  const pdf = openPdf(buffer);
+export async function pdfText(buffer, { maxPages = 10 } = {}) {
+  const pdf = await openPdf(buffer);
   try {
     const parts = [];
     for (let i = 0; i < Math.min(pdf.pages, maxPages); i++) parts.push(pdf.text(i));

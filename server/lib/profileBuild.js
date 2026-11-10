@@ -104,7 +104,7 @@ export async function buildProfile(files, { cfg = config, fetchImpl = fetch, onU
 
   if (files.resume) {
     onProgress?.('Reading the CV');
-    const { text, pages: n } = pdfText(files.resume, { maxPages: cfg.profile.maxResumePages });
+    const { text, pages: n } = await pdfText(files.resume, { maxPages: cfg.profile.maxResumePages });
     if (text.length < 80) throw new LlmError('The CV has no readable text (a scanned image?). Export it as a text PDF.', 'invalid_input');
     resume = await ask({
       ...common,
@@ -117,7 +117,7 @@ export async function buildProfile(files, { cfg = config, fetchImpl = fetch, onU
   }
 
   if (files.portfolio) {
-    const pdf = openPdf(files.portfolio);
+    const pdf = await openPdf(files.portfolio);
     try {
       totalPages = pdf.pages;
       const toRead = Math.min(pdf.pages, cfg.profile.maxPortfolioPages);

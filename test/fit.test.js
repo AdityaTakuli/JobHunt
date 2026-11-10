@@ -215,20 +215,20 @@ function tinyPdf(pageTexts) {
 }
 
 describe('PDF reading', () => {
-  it('counts pages, extracts text and renders a page image', () => {
-    const pdf = openPdf(tinyPdf(['Revit AutoCAD working drawings', 'Housing project']));
+  it('counts pages, extracts text and renders a page image', async () => {
+    const pdf = await openPdf(tinyPdf(['Revit AutoCAD working drawings', 'Housing project']));
     assert.equal(pdf.pages, 2);
     assert.equal(pdf.text(0), 'Revit AutoCAD working drawings');
     const jpeg = pdf.render(1, { maxPx: 300 });
     assert.ok(jpeg.length > 500);
     assert.deepEqual([...jpeg.subarray(0, 3)], [0xff, 0xd8, 0xff], 'JPEG magic');
     pdf.close();
-    assert.equal(pdfText(tinyPdf(['a', 'b'])).text, 'a\n\nb');
+    assert.equal((await pdfText(tinyPdf(['a', 'b']))).text, 'a\n\nb');
   });
 
-  it('refuses things that are not PDFs', () => {
-    assert.throws(() => openPdf(Buffer.from('hello')), /not a PDF/);
-    assert.throws(() => openPdf(Buffer.from('%PDF-1.4 garbage')), /Could not open/);
+  it('refuses things that are not PDFs', async () => {
+    await assert.rejects(() => openPdf(Buffer.from('hello')), /not a PDF/);
+    await assert.rejects(() => openPdf(Buffer.from('%PDF-1.4 garbage')), /Could not open/);
   });
 });
 

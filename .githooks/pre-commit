@@ -3,6 +3,12 @@
 # so the deployed build (Hostinger cannot run Vite) never lags behind the code.
 # Enabled once per clone with: git config core.hooksPath .githooks
 
+# Hostinger starts the app with require(); a dependency using top-level await takes the site down.
+if git diff --cached --name-only | grep -qE '^(server/|shared/|package(-lock)?\.json)'; then
+  echo "pre-commit: checking the server loads the way Hostinger starts it…"
+  node --test test/hostingLoad.test.js >/dev/null 2>&1 || { node --test test/hostingLoad.test.js; echo "pre-commit: the server would not start on Hostinger (see above), commit aborted"; exit 1; }
+fi
+
 if git diff --cached --name-only | grep -qE '^(web/(src|public|index\.html)|shared/|vite\.config\.js|package(-lock)?\.json)'; then
   echo "pre-commit: checking React effects…"
   node --test test/webEffects.test.js >/dev/null 2>&1 || { node --test test/webEffects.test.js; echo "pre-commit: an effect can crash the app (see above), commit aborted"; exit 1; }
