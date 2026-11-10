@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createApp } from './app.js';
 import { config, ROOT_DIR } from './config.js';
-import { closePool } from './db/pool.js';
+import { closePool, query } from './db/pool.js';
 import { migrate } from './db/migrate.js';
 import { anyAiConfigured } from './lib/classify.js';
 import { startScheduler } from './scheduler.js';
@@ -36,6 +36,9 @@ async function ensureWebBuild() {
 async function main() {
   // Tables are created with IF NOT EXISTS, so running this on every boot is safe.
   await migrate();
+  // A profile read runs inside this process; one cut short by a restart would otherwise show
+  // "building" forever.
+  await query("UPDATE profiles SET status = 'error', error = ? WHERE status = 'building'", ['The server restarted while your files were being read. Press "Read again".']);
   await ensureWebBuild();
   const app = createApp();
   const server = app.listen(config.port, () => {

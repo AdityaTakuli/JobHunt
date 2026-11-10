@@ -4,6 +4,8 @@ import { parseJson, query } from '../db/pool.js';
 import { getEstimates } from '../lib/estimate.js';
 import { normalizeCity } from '../lib/normalize.js';
 import { getUserSettings } from '../lib/settings.js';
+import { scoreFit } from '../lib/fit.js';
+import { getProfile } from '../lib/profileStore.js';
 import { STILL_OPEN } from '../lib/deadline.js';
 import { DAY_MS, startOfIstDay } from '../lib/time.js';
 import { localSearchesThisMonth } from '../tasks/fetchJobs.js';
@@ -149,23 +151,41 @@ const SORTS = { match: 'j.match_score DESC,', direct: 'j.apply_url_rank DESC,' }
 // `ids` are integers checked by idList, so they can sit in the SQL.
 const orderBy = (sort, ids) => (sort === 'relevance' && ids.length ? `j.is_relevant DESC, FIELD(j.id, ${ids.join(',')}),` : (Object.hasOwn(SORTS, String(sort)) ? SORTS[sort] : ''));
 
+// The fit score the list shows on each card (the full breakdown comes with the job's details).
+const briefFit = (fit) => ({ score: fit.score, verdict: fit.verdict });
+
+// Scored in this process, not in SQL, so "best fit" sorts this many of the newest matching
+// roles; older ones are not ranked.
+const FIT_SORT_POOL = 400;
+
 jobsRouter.get('/', async (req, res) => {
-  const myCities = req.query.city === 'mine' ? (await getUserSettings(req.user.id)).cities : [];
+  const [myCities, profile] = await Promise.all([
+    req.query.city === 'mine' ? getUserSettings(req.user.id).then((s) => s.cities) : [],
+    getProfile(req.user.id),
+  ]);
   const { where, params, ids } = feedFilters(req.query, new Date(), myCities, req.user.id);
   const limit = intParam(req.query.limit, 50, { min: 1, max: 200 });
   const offset = intParam(req.query.offset, 0, { min: 0 });
+  const fitSort = req.query.sort === 'fit' && Boolean(profile);
   const [rows, [{ total }], estimates] = await Promise.all([
     query(
-      `SELECT ${LIST_COLUMNS} FROM jobs j ${trackerJoin(req.user.id)}
+      `SELECT ${LIST_COLUMNS}${profile ? ', j.description' : ''} FROM jobs j ${trackerJoin(req.user.id)}
         WHERE ${where}
         ORDER BY ${orderBy(req.query.sort, ids)} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC
         LIMIT ? OFFSET ?`,
-      [...params, limit, offset],
+      fitSort ? [...params, FIT_SORT_POOL, 0] : [...params, limit, offset],
     ),
     query(`SELECT COUNT(*) AS total FROM jobs j ${trackerJoin(req.user.id)} WHERE ${where}`, params),
     getEstimates(),
   ]);
-  res.json({ jobs: rows.map((r) => serializeJob(r, estimates)), total: Number(total), limit, offset });
+  let jobs = rows.map((r) => {
+    const job = serializeJob(r, estimates);
+    if (profile) job.fit = briefFit(scoreFit(profile, { ...r, software: job.software }));
+    delete job.description;
+    return job;
+  });
+  if (fitSort) jobs = jobs.sort((a, b) => b.fit.score - a.fit.score).slice(offset, offset + limit);
+  res.json({ jobs, total: fitSort ? Math.min(Number(total), FIT_SORT_POOL) : Number(total), limit, offset });
 });
 
 // Filter options and the top-of-page counter.
@@ -201,6 +221,7 @@ jobsRouter.get('/meta', async (req, res) => {
     newToday: Number(counts.new_today || 0),
     activeJobs: Number(counts.active || 0),
     followUpsDue: Number(followUps.due || 0),
+    profile: { ready: Boolean(await getProfile(uid)) },
   });
 });
 
@@ -238,7 +259,14 @@ async function findJob(id, uid) {
 jobsRouter.get('/:id', async (req, res) => {
   const row = await findJob(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'Job not found.' });
-  res.json({ job: serializeJob(row, await getEstimates()) });
+  const [estimates, profile] = await Promise.all([getEstimates(), getProfile(req.user.id)]);
+  const job = serializeJob(row, estimates);
+  if (profile) {
+    // The stored AI analysis, when there is one, says which requirements are must-haves.
+    const [analysis] = await query('SELECT analysis FROM job_analyses WHERE job_id = ?', [job.id]);
+    job.fit = scoreFit(profile, { ...row, software: job.software }, analysis ? parseJson(analysis.analysis, null) : null);
+  }
+  res.json({ job });
 });
 
 // F10: hide + log the reason, so false positives can be turned into exclude keywords. Hidden for

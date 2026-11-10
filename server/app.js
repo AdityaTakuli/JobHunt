@@ -6,6 +6,7 @@ import { googleCallback, googleStart, login, logout, me, requireAuth, requireCro
 import { config, ROOT_DIR } from './config.js';
 import { accountRouter } from './routes/account.js';
 import { analysisRouter } from './routes/analysis.js';
+import { profileRouter } from './routes/profile.js';
 import { applicationsRouter } from './routes/applications.js';
 import { companiesRouter } from './routes/companies.js';
 import { firmsRouter } from './routes/firms.js';
@@ -85,6 +86,7 @@ export function createApp() {
   app.use('/api/applications', applicationsRouter);
   app.use('/api/firms', firmsRouter);
   app.use('/api/companies', companiesRouter);
+  app.use('/api/profile', profileRouter);
   app.use('/api', accountRouter);
   app.use('/api', settingsRouter);
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));

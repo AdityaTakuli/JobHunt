@@ -228,3 +228,29 @@ CREATE TABLE IF NOT EXISTS job_analyses (
   KEY idx_analyses_user (created_by, created_at),
   CONSTRAINT fk_analyses_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Each person's CV + portfolio as read by the AI (lib/profile.js), for the fit score on every job.
+-- The PDFs themselves live on disk under DATA_DIR/profiles/<user id>/.
+CREATE TABLE IF NOT EXISTS profiles (
+  user_id INT UNSIGNED NOT NULL PRIMARY KEY,
+  resume_name VARCHAR(200) NULL,
+  resume_size INT UNSIGNED NULL,
+  resume_pages SMALLINT UNSIGNED NULL,
+  resume_uploaded_at DATETIME NULL,
+  portfolio_name VARCHAR(200) NULL,
+  portfolio_size INT UNSIGNED NULL,
+  portfolio_pages SMALLINT UNSIGNED NULL,
+  portfolio_uploaded_at DATETIME NULL,
+  profile JSON NULL,                         -- merged profile (lib/profile.js)
+  pages JSON NULL,                           -- the vision model's note on each portfolio page
+  warnings JSON NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'empty', -- empty / building / ready / error
+  error VARCHAR(300) NULL,
+  model VARCHAR(120) NULL,
+  tokens INT UNSIGNED NULL,
+  version SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  builds_on DATE NULL,                       -- IST day of the builds counted in builds_count
+  builds_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  built_at DATETIME NULL,
+  updated_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

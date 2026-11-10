@@ -205,3 +205,26 @@ The MVP costs ₹0 a month on top of the existing Hostinger plan. The main risk 
 - [ ] Week 2: Groq classifier, tracker, firms list, daily digest
 - [ ] Week 3: UI polish, mobile testing with her, fix false positives
 - [ ] Later: Greenhouse/Lever polling, salary estimates, then public version
+
+## Fit: scoring a job against the CV and portfolio
+
+Added 2026-11-10. The student uploads a CV and/or a portfolio PDF once; every job in the feed then gets a fit score, so the roles she has the best chance at rise to the top and each one says what to fix.
+
+**What the research says the score should copy.** Hiring systems do not auto-reject on a score: they parse the CV into fields, apply knockout questions (location, licence, years of experience), then rank by coverage of the posting's *required* skills (weighted well above nice-to-haves), level fit, recency and education; modern ones match synonyms, not exact words. For architecture the portfolio is the gate: reviewers look for range (kinds and sizes of project), process (not only renders), technical drawings (plans, sections, details, working drawings), evidence of the tools they use, a concise layout (~20-35 pages) and honest roles on team projects.
+
+**Profile** (`server/lib/profile.js`, built by `profileBuild.js`): CV text → a text model → stage, experience months, education, software, skills, projects, cities, COA. Portfolio pages → images → a vision model, a few pages per call → per-page notes (project, typology, scale, drawing types, software evident, process shown, technical, graphic quality 1-5). Merged: software seen in the portfolio is `shown`, a CV line is `listed`; drawings prove skills (a detail page → Detailing). A rubric is worked out from the notes, the same way for everyone (not asked of the model); one more text call writes the review (strengths, weaknesses, improvements, best-for roles).
+
+**Score** (`server/lib/fit.js`, deterministic, 0-100):
+
+| Part | Weight | How |
+| --- | --- | --- |
+| Required coverage | 40 | share of the posting's required items the profile has (tools named are required; a skill is required when its sentence says must/required/proficient…; the stored AI analysis' must-haves override) |
+| Tools | 20 | per tool named: shown 1.0, listed 0.7, missing 0|
+| Level | 15 | internship/fresher/experienced vs student/graduate/experienced |
+| Portfolio relevance | 15 | overlap of the role's kinds of project with what the portfolio shows (0.45 with no portfolio) |
+| Nice-to-haves | 10 | share of preferred items present |
+| Knockouts | − | years asked above hers (−15/−25/−35), COA asked and missing (−10), city not hers (−5) |
+
+Verdict: ≥70 strong, ≥45 possible, else stretch. Each score carries matched items (with evidence), missing items (required or preferred), notes (the knockouts) and improvement tips keyed by item (e.g. Revit → "model one project in Revit and show a sheet…"). `gapSummary` adds the missing items up across the open feed for the Profile tab.
+
+**Limits and privacy.** PDF only; CV ≤ 10 MB, portfolio ≤ 60 MB and the first 40 pages; 6 reads per person per IST day; one read at a time per person; files under `DATA_DIR` outside the web root, deletable from the page; tokens counted on the FreeLLMAPI budget; Gemini Flash for images (the gateway has no Groq vision model). A read cut short by a restart is marked as an error on boot so the page offers "Read again".

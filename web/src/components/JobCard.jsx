@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { ROLE_LABELS } from '../format.js';
 import { IconBookmark, IconBookmarkFilled, IconEyeOff } from '../icons.jsx';
+import { FitBadge } from './FitBadge.jsx';
 import { ApplyBadge, CompanyAvatar, ExperienceBadge, Salary, shortAge } from './JobBits.jsx';
 
 // A compact result in the list (Glassdoor-style): company, title, place, pay, experience and age.
@@ -56,6 +57,7 @@ export default function JobCard({ ref, job, order = 0, selected, onOpen, actions
 
       <div className="jc-foot">
         <div className="badges">
+          <FitBadge fit={job.fit} compact />
           <ExperienceBadge job={job} />
           <ApplyBadge job={job} />
           {job.role_type === 'internship' && <span className="badge">{ROLE_LABELS.internship}</span>}

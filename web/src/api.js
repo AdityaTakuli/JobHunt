@@ -35,6 +35,31 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   return data;
 }
 
+// Sends a PDF as the request body (the server reads it straight from the body, no form).
+export async function uploadPdf(path, file, { onProgress } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', `/api${path}`);
+    xhr.setRequestHeader('Content-Type', 'application/pdf');
+    xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name || 'file.pdf'));
+    xhr.withCredentials = true;
+    if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onerror = () => reject(new ApiError('Could not reach the server. Check your connection.', 0));
+    xhr.onload = () => {
+      let data = null;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        // not JSON
+      }
+      if (xhr.status === 401) onUnauthorized();
+      if (xhr.status < 200 || xhr.status >= 300) return reject(new ApiError(data?.error || `Upload failed (${xhr.status})`, xhr.status));
+      resolve(data);
+    };
+    xhr.send(file);
+  });
+}
+
 export function toQuery(params) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {

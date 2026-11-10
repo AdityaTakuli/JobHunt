@@ -571,6 +571,7 @@ export default function JobsPage() {
                 ) : (
                   <select className="select select-sm" value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}>
                     <option value="recent">Most recent</option>
+                    {meta?.profile?.ready && <option value="fit">Best fit for me</option>}
                     <option value="match">Best match</option>
                     <option value="direct">Direct apply first</option>
                   </select>

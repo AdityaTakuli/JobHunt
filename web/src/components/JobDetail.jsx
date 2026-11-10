@@ -6,6 +6,7 @@ import { APP_STATUSES, formatDate, formatDateTime, ROLE_LABELS, STATUS_LABELS } 
 import { IconAlert, IconBookmark, IconBookmarkFilled, IconExternal, IconX } from '../icons.jsx';
 import { APPLY_KIND_LABELS, CompanyAvatar, experience, JobBadges, postedLabel, Salary } from './JobBits.jsx';
 import { extractKeywords, highlightParts } from '../keywords.js';
+import { FitSection } from './FitBadge.jsx';
 import JobAnalysis from './JobAnalysis.jsx';
 import { DetailSkeleton } from './Skeleton.jsx';
 
@@ -200,6 +201,9 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
         </p>
       )}
       <JobBadges job={job} showSources={false} />
+
+      {/* The list row carries a brief fit; the full one arrives with the job's details. */}
+      {(job.fit?.parts || !job.fit) && <FitSection fit={job.fit?.parts ? job.fit : null} />}
 
       <JobAnalysis jobId={job.id} />
 

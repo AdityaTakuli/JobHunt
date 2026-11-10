@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useMeta } from '../App.jsx';
 import ChipInput from '../components/ChipInput.jsx';
+import ProfilePanel from '../components/ProfilePanel.jsx';
 import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDateTime, SOURCE_LABELS } from '../format.js';
@@ -11,6 +12,7 @@ import { formatDateTime, SOURCE_LABELS } from '../format.js';
 const ALL_TABS = [
   { id: 'account', label: 'Account' },
   { id: 'preferences', label: 'Preferences' },
+  { id: 'profile', label: 'Profile' },
   { id: 'connections', label: 'Connections', admin: true },
   { id: 'activity', label: 'Activity', admin: true },
   { id: 'people', label: 'People', admin: true },
@@ -843,6 +845,7 @@ export default function SettingsPage() {
     account: <AccountPanel onLogout={logout} />,
     people: isAdmin ? <PeoplePanel /> : null,
     preferences: <PreferencesPanel />,
+    profile: <ProfilePanel />,
     connections: <ConnectionsPanel system={system} onRan={loadSystem} />,
     activity: <ActivityPanel system={system} onRefresh={loadSystem} />,
     review: <ReviewPanel />,

@@ -148,6 +148,32 @@ export const config = {
     dailyPerPerson: num(env.AI_ANALYSIS_DAILY_LIMIT, 20),
   },
 
+  // CV and portfolio reading (lib/profileBuild.js). The portfolio goes to a vision model as page
+  // images; the CV and the review are text calls.
+  profile: {
+    // Uploaded PDFs live here, outside the web root. Default: ~/.archjobs/data.
+    dataDir: env.DATA_DIR || `${env.HOME || env.USERPROFILE || '.'}/.archjobs/data`,
+    textModels: env.PROFILE_TEXT_MODELS ?? 'gpt-oss-120b,gemini-3.5-flash-lite,gpt-oss-20b',
+    // Gemini Flash models accept images; the gateway lists no Groq vision model. 2026-11-10 test:
+    // flash-lite read a page in ~60 s, 3.5-flash failed upstream, 2.5-flash was gone.
+    visionModels: env.PROFILE_VISION_MODELS ?? 'gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.7-flash',
+    omnirouteModels: env.OMNIROUTE_PROFILE_MODELS ?? '',
+    maxResumeMb: num(env.PROFILE_RESUME_MAX_MB, 10),
+    maxPortfolioMb: num(env.PROFILE_PORTFOLIO_MAX_MB, 60),
+    maxResumePages: 10,
+    maxResumeChars: 24_000,
+    maxPortfolioPages: num(env.PROFILE_PORTFOLIO_MAX_PAGES, 40),
+    pagesPerCall: num(env.PROFILE_PAGES_PER_CALL, 4),
+    renderPx: num(env.PROFILE_RENDER_PX, 1024),
+    jpegQuality: 78,
+    timeoutMs: num(env.PROFILE_TIMEOUT_MS, 150_000),
+    // Between page batches, and before one retry when the vision model is rate-limited.
+    pauseMs: num(env.PROFILE_PAUSE_MS, 4_000),
+    retryWaitMs: num(env.PROFILE_RETRY_WAIT_MS, 35_000),
+    // Profile reads one person may start per IST day (each upload or re-read is one).
+    dailyBuilds: num(env.PROFILE_DAILY_BUILDS, 6),
+  },
+
   groq: {
     apiKey: env.GROQ_API_KEY || '',
     model: env.GROQ_MODEL || 'qwen/qwen3.8-27b',

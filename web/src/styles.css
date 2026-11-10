@@ -4270,3 +4270,255 @@ a.co-open:hover {
 .ai-foot .small {
   flex: 1 1 260px;
 }
+
+/* ---- Fit score (CV + portfolio vs a job) ---- */
+.fit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, var(--surface));
+}
+.fit-badge strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fit-badge.is-strong {
+  color: var(--ok, #1b7f4b);
+  border-color: color-mix(in srgb, var(--ok, #1b7f4b) 40%, transparent);
+  background: color-mix(in srgb, var(--ok, #1b7f4b) 10%, transparent);
+}
+.fit-badge.is-possible {
+  color: var(--amber-text);
+  border-color: color-mix(in srgb, var(--amber-text) 40%, transparent);
+  background: color-mix(in srgb, var(--amber-text) 10%, transparent);
+}
+.fit-badge.is-stretch {
+  color: var(--muted);
+}
+.fit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 8px;
+}
+.fit-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.fit-notes {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+.fit-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 6px 10px;
+  align-items: start;
+  margin-bottom: 6px;
+}
+@media (max-width: 520px) {
+  .fit-row {
+    grid-template-columns: 1fr;
+  }
+}
+.fit-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fit-chip {
+  font-size: 12px;
+  line-height: 18px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.fit-chip small {
+  opacity: 0.75;
+}
+.fit-chip.is-have {
+  border-color: color-mix(in srgb, var(--ok, #1b7f4b) 40%, transparent);
+  background: color-mix(in srgb, var(--ok, #1b7f4b) 8%, transparent);
+}
+.fit-chip.is-shown {
+  border-style: solid;
+  border-width: 2px;
+}
+.fit-chip.is-missing {
+  border-color: color-mix(in srgb, var(--red-text) 40%, transparent);
+  background: color-mix(in srgb, var(--red-text) 8%, transparent);
+}
+.fit-chip.is-preferred {
+  border-style: dashed;
+}
+.fit-improve ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* ---- Settings → Profile ---- */
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.upload-card h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+.upload-card .small {
+  margin: 0;
+}
+.upload-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.upload-file {
+  margin: 0 0 6px;
+  word-break: break-word;
+}
+.upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.profile-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.profile-warnings {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+}
+.profile-section {
+  margin-top: 12px;
+}
+.profile-section h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.profile-section h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.profile-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.profile-section-head .btn {
+  margin-left: 6px;
+}
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+.field-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  align-self: end;
+}
+.rubric {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px 18px;
+}
+.rubric li {
+  display: grid;
+  grid-template-columns: 120px 1fr 32px;
+  align-items: center;
+  gap: 8px;
+}
+.rubric .meter {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.rubric .meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.rubric .meter > span.is-good {
+  background: var(--ok, #1b7f4b);
+}
+.rubric .meter > span.is-mid {
+  background: var(--amber-text);
+}
+.rubric .meter > span.is-low {
+  background: var(--red-text);
+}
+.rubric-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 18px;
+}
+.review-grid ul,
+.review-grid ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.gap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.gap-list li {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.gap-list p {
+  margin: 2px 0 0;
+}
+.gap-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.upload-card .meter,
+.profile-panel > .meter {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  margin: 6px 0;
+}
+.upload-card .meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
