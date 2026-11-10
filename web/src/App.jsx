@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState } from 'react';
 import { api, setUnauthorizedHandler } from './api.js';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Logo, { LogoMark } from './components/Logo.jsx';
 import { LoadingQuote } from './components/Skeleton.jsx';
 import { IconBriefcase, IconBuilding, IconColumns, IconGlobe, IconMonitor, IconMoon, IconSettings, IconSun } from './icons.jsx';
@@ -265,7 +266,9 @@ function Shell() {
             animate={{ opacity: 1, y: 0, transition: { duration: 0.28, ease: PAGE_EASE } }}
             exit={{ opacity: 0, y: -4, transition: { duration: 0.14, ease: 'easeIn' } }}
           >
-            <Page />
+            <ErrorBoundary key={route.path}>
+              <Page />
+            </ErrorBoundary>
           </motion.div>
         </AnimatePresence>
       </main>

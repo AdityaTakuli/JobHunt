@@ -4,6 +4,8 @@
 # Enabled once per clone with: git config core.hooksPath .githooks
 
 if git diff --cached --name-only | grep -qE '^(web/(src|public|index\.html)|shared/|vite\.config\.js|package(-lock)?\.json)'; then
+  echo "pre-commit: checking React effects…"
+  node --test test/webEffects.test.js >/dev/null 2>&1 || { node --test test/webEffects.test.js; echo "pre-commit: an effect can crash the app (see above), commit aborted"; exit 1; }
   echo "pre-commit: building web/dist…"
   npm run build --silent || { echo "pre-commit: web build failed, commit aborted"; exit 1; }
   git add -A web/dist
