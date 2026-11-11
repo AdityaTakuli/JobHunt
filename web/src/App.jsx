@@ -22,9 +22,10 @@ const ROUTES = [
   { path: 'jobs', label: 'Jobs', Icon: IconBriefcase, Page: JobsPage },
   { path: 'tracker', label: 'Tracker', Icon: IconColumns, Page: TrackerPage },
   { path: 'profile', label: 'Profile', Icon: IconFileUser, Page: ProfilePage },
-  // Both firm pages are one place in the menus ("Firms"), with a switch at the top of each.
-  { path: 'companies', label: 'Companies', Icon: IconGlobe, Page: CompaniesPage, nav: false },
-  { path: 'firms', label: 'Firms', Icon: IconBuilding, Page: FirmsPage, also: ['companies'] },
+  // Both firm pages are one place in the menus ("Companies", the MNC tracker first), with a
+  // switch at the top of each to her own firm list.
+  { path: 'companies', label: 'Companies', Icon: IconGlobe, Page: CompaniesPage, also: ['firms'] },
+  { path: 'firms', label: 'Firms', Icon: IconBuilding, Page: FirmsPage, nav: false },
   { path: 'settings', label: 'Settings', Icon: IconSettings, Page: SettingsPage },
 ];
 

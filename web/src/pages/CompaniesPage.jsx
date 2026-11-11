@@ -187,7 +187,7 @@ export default function CompaniesPage() {
     <div>
       <FirmsTabs current="companies" />
       <div className="page-head">
-        <h1>Hiring companies</h1>
+        <h1>Companies</h1>
         {tracked > 0 && (
           <button type="button" className="btn btn-sm" onClick={() => check(null)} disabled={busy}>
             <IconRefresh size={16} className={busy ? 'is-spinning' : undefined} />
