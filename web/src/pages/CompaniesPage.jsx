@@ -5,6 +5,7 @@ import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDate, ROLE_LABELS, timeAgo } from '../format.js';
 import { IconExternal, IconRefresh } from '../icons.jsx';
+import FirmsTabs from '../components/FirmsTabs.jsx';
 
 // Global firms with India offices that take architecture interns and freshers. The ones with a
 // careers feed are read every morning, and on request with "Check now"; for the rest, the button
@@ -184,8 +185,9 @@ export default function CompaniesPage() {
   const busy = checking.length > 0;
   return (
     <div>
+      <FirmsTabs current="companies" />
       <div className="page-head">
-        <h1>Companies</h1>
+        <h1>Hiring companies</h1>
         {tracked > 0 && (
           <button type="button" className="btn btn-sm" onClick={() => check(null)} disabled={busy}>
             <IconRefresh size={16} className={busy ? 'is-spinning' : undefined} />

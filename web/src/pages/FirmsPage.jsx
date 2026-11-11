@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast.jsx';
 import { firmsFromCsv } from '../csv.js';
 import { FIRM_STATUSES, FIRM_TYPES, formatDate } from '../format.js';
 import { IconEdit, IconMail, IconPlus, IconSearch } from '../icons.jsx';
+import FirmsTabs from '../components/FirmsTabs.jsx';
 
 const EMPTY = { name: '', city: '', type: 'design studio', website: '', contact_email: '', status: 'not contacted', notes: '' };
 
@@ -243,8 +244,9 @@ export default function FirmsPage() {
 
   return (
     <div>
+      <FirmsTabs current="firms" />
       <div className="page-head">
-        <h1>Firms</h1>
+        <h1>My firm list</h1>
         <button type="button" className="btn btn-sm" onClick={() => setImporting(true)}>
           Import CSV
         </button>

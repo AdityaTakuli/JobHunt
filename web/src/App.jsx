@@ -22,8 +22,9 @@ const ROUTES = [
   { path: 'jobs', label: 'Jobs', Icon: IconBriefcase, Page: JobsPage },
   { path: 'tracker', label: 'Tracker', Icon: IconColumns, Page: TrackerPage },
   { path: 'profile', label: 'Profile', Icon: IconFileUser, Page: ProfilePage },
-  { path: 'companies', label: 'Companies', Icon: IconGlobe, Page: CompaniesPage },
-  { path: 'firms', label: 'Firms', Icon: IconBuilding, Page: FirmsPage },
+  // Both firm pages are one place in the menus ("Firms"), with a switch at the top of each.
+  { path: 'companies', label: 'Companies', Icon: IconGlobe, Page: CompaniesPage, nav: false },
+  { path: 'firms', label: 'Firms', Icon: IconBuilding, Page: FirmsPage, also: ['companies'] },
   { path: 'settings', label: 'Settings', Icon: IconSettings, Page: SettingsPage },
 ];
 
@@ -31,6 +32,8 @@ const MetaContext = createContext({ meta: null, refreshMeta: () => {}, me: null,
 export const useMeta = () => useContext(MetaContext);
 
 const APP_PATHS = new Set(ROUTES.map((r) => r.path));
+const NAV = ROUTES.filter((r) => r.nav !== false);
+const isCurrent = (item, path) => item.path === path || Boolean(item.also?.includes(path));
 
 // The hash without its leading "#/" and query: 'jobs', 'signin', or '' for the front page.
 const hashPath = () => window.location.hash.replace(/^#\/?/, '').split('?')[0];
@@ -242,15 +245,19 @@ function Shell() {
             <Logo width={46} />
           </a>
           <nav className="top-nav" aria-label="Main">
-            {ROUTES.map(({ path, label, Icon }) => (
-              <a key={path} href={`#/${path}`} aria-current={route.path === path ? 'page' : undefined}>
-                {route.path === path && (
+            {NAV.map((item) => {
+              const { path, label, Icon } = item;
+              const current = isCurrent(item, route.path);
+              return (
+              <a key={path} href={`#/${path}`} aria-current={current ? 'page' : undefined}>
+                {current && (
                   <motion.span layoutId="top-nav-pill" className="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
                 )}
                 <Icon size={18} />
                 {label}
               </a>
-            ))}
+              );
+            })}
           </nav>
           <Counter meta={meta} />
           <AccountButton me={me} />
@@ -276,15 +283,19 @@ function Shell() {
       </main>
 
       <nav className="bottom-nav" aria-label="Main">
-        {ROUTES.map(({ path, label, Icon }) => (
-          <a key={path} href={`#/${path}`} aria-current={route.path === path ? 'page' : undefined}>
-            {route.path === path && (
+        {NAV.map((item) => {
+          const { path, label, Icon } = item;
+          const current = isCurrent(item, route.path);
+          return (
+          <a key={path} href={`#/${path}`} aria-current={current ? 'page' : undefined}>
+            {current && (
               <motion.span layoutId="bottom-nav-pill" className="bottom-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
             )}
             <Icon size={22} />
             {label}
           </a>
-        ))}
+          );
+        })}
       </nav>
 
       <AnimatePresence>

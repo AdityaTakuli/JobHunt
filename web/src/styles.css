@@ -7,7 +7,11 @@
   --border-strong: #cbd1d9;
   --text: #11141a;
   --text-2: #4a5160;
-  --text-3: #667085;
+  --text-3: #5b6476;
+  --line: var(--border);
+  --muted: var(--text-3);
+  --ok: #157347;
+  --ok-bg: #e3f4ea;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-contrast: #ffffff;
@@ -43,7 +47,9 @@
     --border-strong: #333333;
     --text: #ededed;
     --text-2: #a8a8a8;
-    --text-3: #7c7c7c;
+    --text-3: #8f8f8f;
+    --ok: #5fd08f;
+    --ok-bg: #0f2a1b;
     --accent: #4f8cff;
     --accent-hover: #72a3ff;
     --accent-contrast: #030b1f;
@@ -71,7 +77,9 @@
   --border-strong: #333333;
   --text: #ededed;
   --text-2: #a8a8a8;
-  --text-3: #7c7c7c;
+  --text-3: #8f8f8f;
+  --ok: #5fd08f;
+  --ok-bg: #0f2a1b;
   --accent: #4f8cff;
   --accent-hover: #72a3ff;
   --accent-contrast: #030b1f;
@@ -374,7 +382,7 @@ main:focus {
   inset: auto 0 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--surface);
@@ -1861,7 +1869,7 @@ dialog.dialog::backdrop {
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3456,7 +3464,7 @@ dialog.dialog::backdrop {
 
 .facts dt {
   color: var(--text-3);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -3529,7 +3537,7 @@ dialog.dialog::backdrop {
   border-radius: 99px;
   background: var(--surface-2);
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -3848,7 +3856,7 @@ a.co-open:hover {
 .co-roles-label {
   margin: 0;
   color: var(--text-3);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -3902,7 +3910,7 @@ a.co-open:hover {
   border-radius: 999px;
   background: color-mix(in srgb, var(--brand-ink) 12%, var(--surface));
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -4194,7 +4202,7 @@ a.co-open:hover {
   justify-content: space-between;
   margin-top: 4px;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -4288,9 +4296,9 @@ a.co-open:hover {
   font-variant-numeric: tabular-nums;
 }
 .fit-badge.is-strong {
-  color: var(--ok, #1b7f4b);
-  border-color: color-mix(in srgb, var(--ok, #1b7f4b) 40%, transparent);
-  background: color-mix(in srgb, var(--ok, #1b7f4b) 10%, transparent);
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
 }
 .fit-badge.is-possible {
   color: var(--amber-text);
@@ -4344,8 +4352,8 @@ a.co-open:hover {
   opacity: 0.75;
 }
 .fit-chip.is-have {
-  border-color: color-mix(in srgb, var(--ok, #1b7f4b) 40%, transparent);
-  background: color-mix(in srgb, var(--ok, #1b7f4b) 8%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
 }
 .fit-chip.is-shown {
   border-style: solid;
@@ -4468,7 +4476,7 @@ a.co-open:hover {
   background: var(--accent);
 }
 .rubric .meter > span.is-good {
-  background: var(--ok, #1b7f4b);
+  background: var(--ok);
 }
 .rubric .meter > span.is-mid {
   background: var(--amber-text);
@@ -4568,7 +4576,7 @@ a.co-open:hover {
 }
 /* Six items in the bottom bar: smaller labels so they fit a phone. */
 .bottom-nav a {
-  font-size: 11px;
+  font-size: 12px;
   min-width: 0;
 }
 
@@ -4703,7 +4711,7 @@ a.co-open:hover {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   background: var(--accent-soft);
@@ -4739,5 +4747,154 @@ a.co-open:hover {
   }
   .chip-static {
     margin-left: 48px;
+  }
+}
+
+/* =====================================================================
+   UI/UX pass (ui-ux-pro-max checklist, 2026-11-11)
+   ===================================================================== */
+
+/* Five places in the bottom bar: full-size labels again. */
+.bottom-nav a {
+  font-size: 12px;
+}
+
+/* Firms: "Hiring companies" / "My firm list". */
+.firms-tabs {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 14px;
+}
+.firms-tabs a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+.firms-tabs a[aria-current='page'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* Avatar letter at text contrast. */
+.person-avatar {
+  color: var(--accent-text);
+}
+
+/* Readable minimum: nothing under 12px. */
+.fit-chip small {
+  font-size: 12px;
+}
+
+/* Phones: the header counter does not fit; the Jobs page shows the same numbers. */
+@media (max-width: 520px) {
+  .counter {
+    display: none;
+  }
+}
+
+/* Phones: filters in one row that scrolls sideways (the page itself never does), so the jobs
+   start near the top instead of after four rows of filters. */
+@media (max-width: 640px) {
+  .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 2px 16px 6px;
+    scroll-padding-inline: 16px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 24px), transparent);
+  }
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .filter-bar > * {
+    flex: none;
+  }
+}
+
+/* Touch screens: every control at least 44px tall (WCAG 2.5.5 / platform guidance). Desktop
+   keeps its compact sizes. */
+@media (pointer: coarse) {
+  .btn,
+  .btn-sm,
+  .pill,
+  .select,
+  .select-sm,
+  .input,
+  .segmented button,
+  .firms-tabs a,
+  .role-switch button {
+    min-height: 44px;
+  }
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .result-line .sort .select-sm,
+  .exp-switch,
+  .exp-pill .pill,
+  .tabs [role="tab"] {
+    min-height: 44px;
+  }
+  .account-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .chip-input input {
+    min-height: 40px;
+  }
+  /* The chip's ✕ stays small to look at, with a 44px area to tap. */
+  .chip button {
+    position: relative;
+  }
+  .chip button::after {
+    content: '';
+    position: absolute;
+    inset: -11px;
+  }
+  .gmail-bar a,
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* Reduce motion: the system setting turns off CSS animation and smooth scrolling too
+   (Motion components already follow it through MotionConfig). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* Account initial at text contrast; file names on the Profile easy to tap on phones. */
+.account-btn {
+  color: var(--accent-text);
+}
+@media (pointer: coarse) {
+  .doc-name,
+  .upload-file strong {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }
