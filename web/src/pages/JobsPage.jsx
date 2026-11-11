@@ -31,6 +31,7 @@ const DEFAULT_FILTERS = {
   exp: 1,
   role: '',
   within: '',
+  pay: '',
   software: [],
   bim: false,
   source: '',
@@ -231,6 +232,7 @@ export default function JobsPage() {
       role: filters.role,
       software: filters.software,
       within: filters.within,
+      pay: filters.pay,
       source: filters.source,
       apply: filters.apply,
       linkedin: filters.linkedin,
@@ -370,7 +372,7 @@ export default function JobsPage() {
   }, [meta, filters.city]);
 
   const otherFilters =
-    filters.role || filters.software.length || filters.within || filters.source || filters.apply || filters.linkedin || filters.bim || filters.hideApplied;
+    filters.role || filters.software.length || filters.within || filters.pay || filters.source || filters.apply || filters.linkedin || filters.bim || filters.hideApplied;
   const pickedCity = !search && !['mine', 'all'].includes(filters.city) ? filters.city : null;
   const closeDetail = useCallback(() => setSelectedId(null), []);
   const selectedJob = jobs.find((j) => j.id === selectedId);
@@ -579,12 +581,16 @@ export default function JobsPage() {
                 {search ? (
                   <select className="select select-sm" value={searchSort} onChange={(e) => setSearchSort(e.target.value)}>
                     <option value="relevance">Most relevant</option>
-                    <option value="recent">Most recent</option>
+                    <option value="recent">Newest first</option>
+                    <option value="pay_high">Highest pay</option>
                     <option value="direct">Direct apply first</option>
                   </select>
                 ) : (
                   <select className="select select-sm" value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}>
-                    <option value="recent">Most recent</option>
+                    <option value="recent">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="pay_high">Highest pay</option>
+                    <option value="pay_low">Lowest pay</option>
                     {meta?.profile?.ready && <option value="fit">Best fit for me</option>}
                     <option value="match">Best match</option>
                     <option value="direct">Direct apply first</option>

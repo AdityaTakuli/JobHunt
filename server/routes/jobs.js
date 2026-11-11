@@ -121,6 +121,15 @@ export function feedFilters(q, now = new Date(), myCities = [], uid = 1) {
     params.push(String(q.source));
   }
   if (q.bim === '1') where.push('j.is_bim = 1');
+  // Pay: 'listed' = any pay shown; a number = at least that many rupees a month.
+  if (q.pay === 'listed') where.push(PAY_LISTED);
+  else {
+    const minPay = intParam(q.pay, 0, { min: 0, max: 10_000_000 });
+    if (minPay) {
+      where.push(`${PAY_LISTED} AND ${MONTHLY_PAY} >= ?`);
+      params.push(minPay);
+    }
+  }
   // LinkedIn jobs: from the LinkedIn alert emails, or with a LinkedIn apply link from Google.
   if (q.linkedin === '1') {
     where.push(
@@ -146,7 +155,19 @@ export function feedFilters(q, now = new Date(), myCities = [], uid = 1) {
   return { where: where.join(' AND '), params, ids };
 }
 
-const SORTS = { match: 'j.match_score DESC,', direct: 'j.apply_url_rank DESC,' };
+// Pay as rupees a month, so a yearly CTC and a monthly stipend compare fairly. The top of the
+// range counts ("₹10k-15k" sorts as 15k); guesses the app made itself (salary_is_estimate) don't.
+export const MONTHLY_PAY = `(COALESCE(j.salary_max, j.salary_min) * CASE j.salary_period
+    WHEN 'year' THEN 1 / 12 WHEN 'week' THEN 4.33 WHEN 'day' THEN 22 WHEN 'hour' THEN 176 ELSE 1 END)`;
+const PAY_LISTED = '(j.salary_min IS NOT NULL AND j.salary_is_estimate = 0)';
+
+// Roles with no pay listed go last in both pay sorts.
+const SORTS = {
+  match: 'j.match_score DESC,',
+  direct: 'j.apply_url_rank DESC,',
+  pay_high: `${PAY_LISTED} DESC, ${MONTHLY_PAY} DESC,`,
+  pay_low: `${PAY_LISTED} DESC, ${MONTHLY_PAY} ASC,`,
+};
 
 // Search results sorted by relevance: roles judged relevant first, each group in Google's order.
 // `ids` are integers checked by idList, so they can sit in the SQL.
@@ -168,7 +189,9 @@ jobsRouter.get('/', async (req, res) => {
   const limit = intParam(req.query.limit, 50, { min: 1, max: 200 });
   const offset = intParam(req.query.offset, 0, { min: 0 });
   const fitSort = req.query.sort === 'fit' && Boolean(profile);
-  const order = `${orderBy(req.query.sort, ids)} COALESCE(j.posted_at, j.created_at) DESC, j.id DESC`;
+  // Newest first unless asked for oldest; every other sort uses it to break ties.
+  const posted = req.query.sort === 'oldest' ? 'COALESCE(j.posted_at, j.created_at) ASC, j.id ASC' : 'COALESCE(j.posted_at, j.created_at) DESC, j.id DESC';
+  const order = `${orderBy(req.query.sort, ids)} ${posted}`;
   const countQuery = query(`SELECT COUNT(*) AS total FROM jobs j ${trackerJoin(req.user.id)} WHERE ${where}`, params);
 
   let rows;

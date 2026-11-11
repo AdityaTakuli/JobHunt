@@ -14,10 +14,22 @@ export const EXPERIENCE_LEVELS = [
 
 const POSTED = [
   { value: '', label: 'Any time' },
+  { value: '6', label: 'Last 6 hours' },
   { value: '24', label: 'Last 24 hours' },
   { value: '72', label: 'Last 3 days' },
   { value: '168', label: 'Last 7 days' },
   { value: '720', label: 'Last 30 days' },
+];
+
+// Monthly pay; yearly salaries are divided by 12 on the server.
+const PAY = [
+  { value: '', label: 'Any pay', short: 'Pay' },
+  { value: 'listed', label: 'Pay listed', short: 'Pay listed' },
+  { value: '5000', label: '₹5,000+ a month', short: '₹5k+' },
+  { value: '10000', label: '₹10,000+ a month', short: '₹10k+' },
+  { value: '15000', label: '₹15,000+ a month', short: '₹15k+' },
+  { value: '25000', label: '₹25,000+ a month', short: '₹25k+' },
+  { value: '50000', label: '₹50,000+ a month', short: '₹50k+' },
 ];
 
 const SOURCES = [
@@ -127,7 +139,7 @@ export default function JobFilters({ filters, setFilters, cityOptions, cityCount
   const cityLabel = filters.city === 'mine' ? 'My cities' : filters.city === 'all' ? 'All cities' : filters.city;
   const softwareCount = filters.software.length + (filters.bim ? 1 : 0);
   const anyActive =
-    filters.within || softwareCount || filters.source || filters.apply || filters.hideApplied || (!searchMode && filters.city !== 'mine');
+    filters.within || filters.pay || softwareCount || filters.source || filters.apply || filters.hideApplied || (!searchMode && filters.city !== 'mine');
 
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
@@ -172,6 +184,16 @@ export default function JobFilters({ filters, setFilters, cityOptions, cityCount
         )}
       </FilterPill>
 
+      <FilterPill label={PAY.find((o) => o.value === (filters.pay || ''))?.short || 'Pay'} active={Boolean(filters.pay)} panelLabel="Pay">
+        {(close) => (
+          <div>
+            <p className="panel-title">Monthly pay</p>
+            <OptionList label="Pay" options={PAY} value={filters.pay || ''} onChange={set('pay')} onDone={close} />
+            <p className="panel-note">Yearly salaries count as a twelfth a month. Roles that don't list pay are left out once you pick an amount.</p>
+          </div>
+        )}
+      </FilterPill>
+
       <FilterPill label={filters.within ? labelOf(POSTED, filters.within) : 'Date posted'} active={Boolean(filters.within)} panelLabel="Date posted">
         {(close) => <OptionList label="Date posted" options={POSTED} value={filters.within} onChange={set('within')} onDone={close} />}
       </FilterPill>
@@ -194,7 +216,7 @@ export default function JobFilters({ filters, setFilters, cityOptions, cityCount
         <button
           type="button"
           className="btn btn-ghost btn-sm clear-filters"
-          onClick={() => setFilters((f) => ({ ...f, city: 'mine', within: '', software: [], bim: false, source: '', apply: '', hideApplied: false }))}
+          onClick={() => setFilters((f) => ({ ...f, city: 'mine', within: '', pay: '', software: [], bim: false, source: '', apply: '', hideApplied: false }))}
         >
           Clear
         </button>
