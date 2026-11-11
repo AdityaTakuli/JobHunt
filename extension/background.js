@@ -66,8 +66,22 @@ async function status() {
 // A PDF for an upload box, as base64: the stored CV/portfolio, or the tailored CV / letter.
 async function file(kind, tailoredId) {
   const base = await serverUrl();
-  const path =
-    tailoredId && kind === 'resume' ? `/tailor/${tailoredId}/cv.pdf` : tailoredId && kind === 'letter' ? `/tailor/${tailoredId}/letter.pdf` : kind === 'letter' ? null : `/profile/file/${kind}`;
+  // kind: resume / portfolio / letter (tailored versions when this tab has them), doc:<id> for a
+  // library file, or tailored-cv / tailored-letter picked by hand.
+  const docId = String(kind).startsWith('doc:') ? String(kind).slice(4) : null;
+  const path = docId
+    ? `/documents/${encodeURIComponent(docId)}/file`
+    : kind === 'tailored-cv' && tailoredId
+      ? `/tailor/${tailoredId}/cv.pdf`
+      : kind === 'tailored-letter' && tailoredId
+        ? `/tailor/${tailoredId}/letter.pdf`
+        : tailoredId && kind === 'resume'
+          ? `/tailor/${tailoredId}/cv.pdf`
+          : tailoredId && kind === 'letter'
+            ? `/tailor/${tailoredId}/letter.pdf`
+            : kind === 'letter'
+              ? null
+              : `/profile/file/${kind}`;
   if (!path) return { error: 'Tailor your CV for this job first: that writes the cover letter.' };
   let res;
   try {
@@ -85,7 +99,7 @@ async function file(kind, tailoredId) {
   const view = new Uint8Array(bytes);
   let binary = '';
   for (let i = 0; i < view.length; i += 0x8000) binary += String.fromCharCode.apply(null, view.subarray(i, i + 0x8000));
-  return { name, base64: btoa(binary) };
+  return { name, base64: btoa(binary), mime: (res.headers.get('content-type') || 'application/pdf').split(';')[0] };
 }
 
 async function fillTab(tabId) {
@@ -132,6 +146,20 @@ async function onMessage(message, sender) {
     case 'file': {
       const state = tabId != null ? await tabState(tabId) : {};
       return file(message.kind, state.tailoredId);
+    }
+    // Everything she can attach, for the "Attach from ArchJobs" picker: this job's tailored CV and
+    // letter first, then her library (CV and portfolio from the Profile page, and the rest).
+    case 'documents': {
+      const state = tabId != null ? await tabState(tabId) : {};
+      const r = await api('/documents');
+      if (!r.ok) return r;
+      const tailored = state.tailoredId
+        ? [
+            { id: 'tailored-cv', kind: 'resume', name: `CV tailored to ${state.tailored?.company || 'this job'}`, mime: 'application/pdf', tailored: true },
+            { id: 'tailored-letter', kind: 'cover_letter', name: `Cover letter for ${state.tailored?.company || 'this job'}`, mime: 'application/pdf', tailored: true },
+          ]
+        : [];
+      return { ok: true, data: { documents: [...tailored, ...r.data.documents] } };
     }
     case 'tailor': {
       const state = tabId != null ? await tabState(tabId) : {};

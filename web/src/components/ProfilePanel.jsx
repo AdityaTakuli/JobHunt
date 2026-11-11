@@ -4,6 +4,7 @@ import { useMeta } from '../App.jsx';
 import { formatDateTime } from '../format.js';
 import { IconAlert, IconRefresh, IconX } from '../icons.jsx';
 import ChipInput from './ChipInput.jsx';
+import DocumentsCard from './DocumentsCard.jsx';
 import { ContactCard, ExtensionCard } from './ExtensionCards.jsx';
 import { RowsSkeleton } from './Skeleton.jsx';
 import { useToast } from './Toast.jsx';
@@ -218,6 +219,8 @@ export default function ProfilePanel() {
           onRemove={remove}
         />
       </div>
+
+      <DocumentsCard refreshKey={`${state.resume?.uploaded_at || ''}${state.portfolio?.uploaded_at || ''}`} />
 
       {building && (
         <p className="profile-status" role="status" aria-live="polite">

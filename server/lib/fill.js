@@ -207,9 +207,16 @@ export function matchFields(fields, facts, files = { resume: false, portfolio: f
       continue;
     }
     if (field.tag === 'file') {
+      // A box for something in her library (a certificate, work samples): that file.
+      const libraryKind = /certificate|marksheet|mark sheet|transcript|registration|\bcoa\b/.test(sig) ? 'certificate' : /work sample|samples? of (your )?work|drawing samples|sample drawings/.test(sig) ? 'work_sample' : null;
+      const fromLibrary = libraryKind && (files.library || []).find((d) => d.kind === libraryKind);
+      if (fromLibrary) {
+        answers.push({ key: field.key, file: `doc:${fromLibrary.id}`, source: 'file' });
+        continue;
+      }
       const kind = /cover ?letter|covering letter|motivation letter|letter of motivation/.test(sig)
         ? 'letter'
-        : /portfolio|work sample|samples of work/.test(sig)
+        : /portfolio|work samples?|samples? of (your )?work|drawing samples|sample drawings/.test(sig)
           ? 'portfolio'
           : /resume|\bcv\b|curriculum|upload/.test(sig)
             ? 'resume'

@@ -368,13 +368,13 @@
     return codeBox || tight ? national : value;
   }
 
-  function attach(entry, { name, base64 }) {
+  function attach(entry, { name, base64, mime = 'application/pdf' }) {
     const el = entry.el;
     const bin = atob(base64);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const dt = new DataTransfer();
-    dt.items.add(new File([bytes], name, { type: 'application/pdf' }));
+    dt.items.add(new File([bytes], name, { type: mime }));
     try {
       el.files = dt.files;
     } catch {
@@ -470,8 +470,8 @@
     checkbox: 'Tick it yourself',
     never: 'Yours to answer (pay, personal, password)',
     unknown: 'Not on your CV',
-    file: 'Attach the file yourself',
-    no_file: 'Not in ArchJobs yet',
+    file: 'Pick one with “Attach from ArchJobs” below it',
+    no_file: 'Not in your ArchJobs files yet: use “Attach from ArchJobs” or add it on your Profile',
     ai_off: 'AI help is off',
     no_ai: 'No AI on the server',
     ai_failed: 'The AI did not answer; try again',
@@ -534,6 +534,7 @@
       sessionActive = true;
       busy = false;
       // Next step by itself, or stop and call the person (never the final submit).
+      addPickers();
       nextStep(problems);
     } catch (err) {
       if (!auto) report({ error: err?.message || String(err), fields: 0 });
@@ -573,6 +574,7 @@
       clearTimeout(pending);
       pending = setTimeout(() => {
         if (collect({ onlyNew: true }).length) run({ auto: true });
+        if (sessionActive) addPickers();
         checkOtp();
         checkConfirmation();
       }, 1200);
@@ -620,7 +622,7 @@
         continue;
       }
       if (el.type === 'file') {
-        if (!el.files?.length) out.push(labelFor(el) || 'A file upload');
+        if (!el.files?.length) out.push(`${labelFor(el) || 'A file upload'} (use “Attach from ArchJobs”)`);
         continue;
       }
       const empty = el.tagName === 'SELECT' ? el.selectedIndex <= 0 && !el.value : !String(el.value ?? el.textContent ?? '').trim();
@@ -695,6 +697,96 @@
       notify('Page filled', 'ARCH filled this page. Check it before you continue.');
     } finally {
       stepping = false;
+    }
+  }
+
+  // ---- "Attach from ArchJobs": pick a saved file for any upload box ----
+  // A small button beside every upload box opens her saved files (this job's tailored CV and
+  // letter, the CV and portfolio from her Profile, and her other documents). One click attaches it.
+
+  const pickerFor = new WeakMap(); // file input -> its button host
+  const DOC_LABEL = { resume: 'CV', portfolio: 'Portfolio', cover_letter: 'Cover letter', certificate: 'Certificate', work_sample: 'Work sample', other: 'Document' };
+
+  // Does the box take this kind of file? (accept=".pdf,.doc" or "image/*")
+  function accepts(input, doc) {
+    const accept = (input.getAttribute('accept') || '').toLowerCase().split(',').map((a) => a.trim()).filter(Boolean);
+    if (!accept.length) return true;
+    const ext = { 'application/pdf': '.pdf', 'image/png': '.png', 'image/jpeg': '.jpg', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx' }[doc.mime] || '';
+    return accept.some((a) => a === doc.mime || a === ext || (ext === '.jpg' && a === '.jpeg') || (a.endsWith('/*') && doc.mime.startsWith(a.slice(0, -1))));
+  }
+
+  // Where the button goes: after the visible part of the upload box.
+  const uploadBox = (input) => (visible(input) ? input : input.closest('label') || input.closest('[class*="upload" i], [class*="drop" i], [class*="file" i]') || input.parentElement);
+
+  function addPickers() {
+    for (const input of document.querySelectorAll('input[type="file"]')) {
+      if (input.disabled || pickerFor.has(input) || input.closest('arch-in-chrome, arch-attach')) continue;
+      const box = uploadBox(input);
+      if (!box || !visible(box)) continue;
+      const hostEl = document.createElement('arch-attach');
+      hostEl.style.cssText = 'all: initial; display: inline-block; position: relative; margin: 6px 0 2px; z-index: 2147483000;';
+      const shadow = hostEl.attachShadow({ mode: 'open' });
+      shadow.innerHTML = `<style>
+        * { box-sizing: border-box; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+        .open { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #c7d2fe; background: #eef2ff; color: #1d4ed8; border-radius: 8px; padding: 5px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+        .open:hover { background: #e0e7ff; }
+        .mark { width: 16px; height: 16px; border-radius: 4px; background: #2563eb; color: #fff; display: inline-grid; place-items: center; font-weight: 800; font-size: 10px; }
+        .menu { position: absolute; left: 0; top: calc(100% + 4px); width: 300px; max-height: 300px; overflow: auto; background: #fff; color: #11141a; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.2); padding: 4px; }
+        .menu[hidden] { display: none; }
+        .item { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 7px 8px; border-radius: 7px; cursor: pointer; font-size: 13px; color: inherit; }
+        .item:hover, .item:focus { background: #f1f5f9; outline: none; }
+        .item b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 230px; }
+        .tag { font-size: 11px; color: #6b7280; }
+        .tag.t { color: #1d4ed8; font-weight: 600; }
+        .msg { padding: 8px; font-size: 12.5px; color: #6b7280; }
+        @media (prefers-color-scheme: dark) { .menu { background: #141414; color: #ededed; border-color: #2a2a2a; } .item:hover, .item:focus { background: #222; } .tag { color: #a3a3a3; } .open { background: #111827; border-color: #1e3a8a; color: #8ab4ff; } }
+      </style><button class="open" type="button" aria-haspopup="menu" aria-expanded="false"><span class="mark">A</span>Attach from ArchJobs</button><div class="menu" role="menu" hidden></div>`;
+      const button = shadow.querySelector('.open');
+      const menu = shadow.querySelector('.menu');
+      const close = () => {
+        menu.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+      };
+      button.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!menu.hidden) return close();
+        menu.hidden = false;
+        button.setAttribute('aria-expanded', 'true');
+        menu.innerHTML = '<div class="msg">Loading your files…</div>';
+        const r = await send({ type: 'documents' });
+        if (!r?.ok) {
+          menu.innerHTML = `<div class="msg">${esc(r?.data?.error || 'Could not load your files.')}</div>`;
+          return;
+        }
+        const docs = r.data.documents.filter((d) => accepts(input, d));
+        if (!docs.length) {
+          menu.innerHTML = '<div class="msg">None of your saved files fit this box. Add files on your ArchJobs Profile page.</div>';
+          return;
+        }
+        menu.innerHTML = docs
+          .map(
+            (d) =>
+              `<button class="item" role="menuitem" type="button" data-id="${esc(d.id)}" data-tailored="${d.tailored ? 1 : ''}"><span><b title="${esc(d.name)}">${esc(d.name)}</b><span class="tag ${d.tailored ? 't' : ''}">${d.tailored ? 'Tailored to this job' : esc(DOC_LABEL[d.kind] || 'Document')}${d.main ? ' · from your Profile' : ''}</span></span></button>`,
+          )
+          .join('');
+        menu.querySelectorAll('.item').forEach((item) =>
+          item.addEventListener('click', async () => {
+            const kind = item.dataset.tailored ? item.dataset.id : `doc:${item.dataset.id}`;
+            menu.innerHTML = '<div class="msg">Attaching…</div>';
+            const fileData = await send({ type: 'file', kind });
+            close();
+            if (fileData?.base64 && attach({ el: input }, fileData)) {
+              button.innerHTML = `<span class="mark">A</span>Attached: ${esc(fileData.name).slice(0, 40)} · change`;
+            } else {
+              button.innerHTML = `<span class="mark">A</span>${esc(fileData?.error || 'Could not attach it')} · try again`;
+            }
+          }),
+        );
+      });
+      document.addEventListener('click', (e) => !hostEl.contains(e.target) && close(), true);
+      box.insertAdjacentElement('afterend', hostEl);
+      pickerFor.set(input, hostEl);
     }
   }
 
@@ -1127,6 +1219,7 @@
     }
     const count = looksLikeApplication();
     if (!count) return;
+    addPickers();
     // Filling automatically (the default): no button to press.
     const { autoFill } = await chrome.storage.sync.get({ autoFill: true });
     if (autoFill) {

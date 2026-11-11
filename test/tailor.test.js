@@ -163,3 +163,33 @@ describe('dates split over boxes, and custom dropdowns', () => {
     assert.deepEqual(answers.find((a) => a.key === 'e').alts.slice(0, 2), ['Fresher', 'No experience']);
   });
 });
+
+describe('saved files for upload boxes', () => {
+  it('knows a file by its first bytes, not its name', async () => {
+    const { sniff } = await import('../server/routes/documents.js');
+    assert.equal(sniff(Buffer.from('%PDF-1.7 rest')).ext, '.pdf');
+    assert.equal(sniff(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0])).ext, '.png');
+    assert.equal(sniff(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])).ext, '.jpg');
+    assert.equal(sniff(Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from('....word/document.xml')])).ext, '.docx');
+    assert.equal(sniff(Buffer.from('MZ executable')), null);
+    assert.equal(sniff(Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from('some other zip')])), null);
+  });
+
+  it('puts a saved certificate or work sample into a box asking for one', () => {
+    const fields = sanitizeFields([
+      { key: 'c', tag: 'file', label: 'COA registration certificate' },
+      { key: 'w', tag: 'file', label: 'Samples of your work (PDF)' },
+      { key: 'a', tag: 'file', label: 'Additional attachments' },
+    ]);
+    const library = [
+      { id: 7, kind: 'certificate' },
+      { id: 9, kind: 'work_sample' },
+    ];
+    const { answers, skipped } = matchFields(fields, facts, { resume: true, portfolio: true, library });
+    assert.equal(answers.find((a) => a.key === 'c').file, 'doc:7');
+    assert.equal(answers.find((a) => a.key === 'w').file, 'doc:9');
+    assert.ok(skipped.some((s) => s.key === 'a' && s.reason === 'file'), 'an unclear box is left for the picker');
+    const noLibrary = matchFields(fields, facts, { resume: true, portfolio: true, library: [] });
+    assert.equal(noLibrary.answers.find((a) => a.key === 'w').file, 'portfolio', 'no work sample saved: the portfolio goes');
+  });
+});

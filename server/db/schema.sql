@@ -229,6 +229,19 @@ CREATE TABLE IF NOT EXISTS job_analyses (
   CONSTRAINT fk_analyses_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Her document library for upload boxes (routes/documents.js). Files on disk under
+-- DATA_DIR/profiles/<user id>/docs/<id>.<ext>; the CV and portfolio stay in profiles.
+CREATE TABLE IF NOT EXISTS user_documents (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  kind VARCHAR(16) NOT NULL DEFAULT 'other', -- portfolio / resume / cover_letter / certificate / work_sample / other
+  name VARCHAR(200) NOT NULL,
+  size INT UNSIGNED NOT NULL,
+  mime VARCHAR(80) NOT NULL,
+  uploaded_at DATETIME NOT NULL,
+  KEY idx_docs_user (user_id, uploaded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- CVs and cover letters tailored to one posting (lib/tailor.js). PDFs are drawn on request.
 CREATE TABLE IF NOT EXISTS tailored_docs (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

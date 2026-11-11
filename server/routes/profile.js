@@ -258,7 +258,12 @@ profileRouter.post('/fill', async (req, res) => {
     resumeText: row.resume_text ? String(row.resume_text).slice(0, 8_000) : null,
     page,
     fields,
-    files: { resume: Boolean(row.resume_uploaded_at) || Boolean(tailored), portfolio: Boolean(row.portfolio_uploaded_at), letter: Boolean(tailored?.cover_letter) },
+    files: {
+      resume: Boolean(row.resume_uploaded_at) || Boolean(tailored),
+      portfolio: Boolean(row.portfolio_uploaded_at),
+      letter: Boolean(tailored?.cover_letter),
+      library: await query('SELECT id, kind FROM user_documents WHERE user_id = ? ORDER BY uploaded_at DESC', [uid]),
+    },
     coverLetter: tailored?.cover_letter ? [tailored.cover_letter.greeting, ...tailored.cover_letter.paragraphs, tailored.cover_letter.sign_off].join('\n\n') : null,
     useAi: aiAllowed,
     ask: async (call) => {

@@ -36,12 +36,16 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
 }
 
 // Sends a PDF as the request body (the server reads it straight from the body, no form).
-export async function uploadPdf(path, file, { onProgress } = {}) {
+export const uploadPdf = (path, file, options = {}) => uploadFile(path, file, { ...options, type: 'application/pdf' });
+
+// Any file as the request body; extra headers (X-Doc-Kind) as given.
+export async function uploadFile(path, file, { onProgress, type, headers = {} } = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', `/api${path}`);
-    xhr.setRequestHeader('Content-Type', 'application/pdf');
-    xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name || 'file.pdf'));
+    xhr.setRequestHeader('Content-Type', type || file.type || 'application/octet-stream');
+    xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name || 'file'));
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     xhr.withCredentials = true;
     if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
     xhr.onerror = () => reject(new ApiError('Could not reach the server. Check your connection.', 0));
