@@ -9,7 +9,10 @@ import { safeFetch } from './safeFetch.js';
 
 const MAX_BYTES = 3 * 1024 * 1024;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36';
-export const MIN_USEFUL = 300; // shorter than this is a teaser, not a posting
+// Page text shorter than this is a teaser or a menu, not a posting. A posting in schema.org data is
+// the posting itself even when short (small firms write a few lines), so it only needs MIN_POSTING.
+export const MIN_USEFUL = 300;
+export const MIN_POSTING = 80;
 
 // HTML (or text with entities) to plain text, one line per paragraph or list item.
 function plain(html) {
@@ -52,7 +55,7 @@ export function postingFromJsonLd(blocks) {
     }
     for (const p of postingsIn(data)) {
       const description = plain(p.description);
-      if (description.length < MIN_USEFUL) continue;
+      if (description.length < MIN_POSTING) continue;
       const org = p.hiringOrganization || {};
       return {
         description: description.slice(0, 20_000),

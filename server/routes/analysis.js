@@ -5,7 +5,7 @@ import { dbUsageStore } from '../lib/aiBudget.js';
 import { forgetJob } from '../lib/fitCache.js';
 import { ANALYSIS_VERSION, analyseJob, analysisGateways } from '../lib/jobAnalysis.js';
 import { COMPANIES } from '../lib/companies.js';
-import { findPosting, jobUrlPatterns, MIN_USEFUL, postingFromJsonLd } from '../lib/jobPage.js';
+import { findPosting, jobUrlPatterns, MIN_POSTING, MIN_USEFUL, postingFromJsonLd } from '../lib/jobPage.js';
 import { LlmError } from '../lib/llm.js';
 import { hostOf } from '../lib/normalize.js';
 import { getUserSettings } from '../lib/settings.js';
@@ -69,7 +69,7 @@ async function postingContext(job) {
   }
   const known = knownFirm(job.company);
   const firm = known || about ? { name: known?.name || job.company, kind: known?.kind || null, note: known?.note || null, about } : null;
-  return { job: { ...job, description }, firm, source: description.length >= MIN_USEFUL ? 'posting' : 'none', sourceHost };
+  return { job: { ...job, description }, firm, source: description.length >= MIN_POSTING ? 'posting' : 'none', sourceHost };
 }
 
 async function usedToday(userId) {

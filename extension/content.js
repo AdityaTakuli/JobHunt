@@ -181,8 +181,9 @@
 
   const fire = (el, names) => names.forEach((n) => el.dispatchEvent(new Event(n, { bubbles: true })));
 
-  function remember(el, prev) {
-    undo.push({ el, prev, classes: el.className, title: el.getAttribute('title') });
+  // `shown` is the element that gets the outline (a radio button's label, an upload box's wrapper).
+  function remember(el, prev, shown = el) {
+    undo.push({ el, prev, shown, classes: shown.className, title: shown.getAttribute('title') });
   }
 
   function mark(el, ai, note) {
@@ -200,9 +201,10 @@
       const target = items.find((it) => (entry.inputs ? optionLabel(it) : ariaOption(it)).toLowerCase() === want);
       if (!target) return false;
       const prev = entry.inputs ? items.find((it) => it.checked) : items.find((it) => it.getAttribute('aria-checked') === 'true');
-      remember(target, prev || null);
+      const shown = entry.inputs ? target.closest('label') || target : target;
+      remember(target, prev || null, shown);
       target.click();
-      mark(entry.inputs ? target.closest('label') || target : target, ai, answer.note);
+      mark(shown, ai, answer.note);
       return true;
     }
     if (field.tag === 'select') {
@@ -250,29 +252,30 @@
       return false;
     }
     fire(el, ['input', 'change']);
-    const shown = visible(el) ? el : el.closest('label') || el.parentElement;
-    if (shown) {
-      remember(shown, null);
-      mark(shown, false);
-    }
+    const shown = (visible(el) ? el : el.closest('label') || el.parentElement) || el;
+    remember(el, null, shown);
+    mark(shown, false);
     return true;
   }
 
   function undoAll() {
     while (undo.length) {
-      const { el, prev, classes, title } = undo.pop();
+      const { el, prev, shown, classes, title } = undo.pop();
       try {
         if (el.type === 'radio' || el.getAttribute?.('role') === 'radio') {
           if (prev) prev.click();
           else if (el.type === 'radio') el.checked = false;
+        } else if (el.type === 'file') {
+          el.value = '';
+          fire(el, ['input', 'change']);
         } else if (el.isContentEditable) el.innerHTML = prev ?? '';
-        else if (prev != null && 'value' in el && el.type !== 'file') {
+        else if (prev != null && 'value' in el) {
           setNative(el, prev);
           fire(el, ['input', 'change']);
         }
-        el.className = classes;
-        if (title == null) el.removeAttribute('title');
-        else el.setAttribute('title', title);
+        shown.className = classes;
+        if (title == null) shown.removeAttribute('title');
+        else shown.setAttribute('title', title);
       } catch {
         // the page may have replaced the element
       }

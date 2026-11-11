@@ -33,7 +33,9 @@ const yearsText = (months) => {
  */
 export function profileFacts(profile, account = {}) {
   const c = profile.contact || {};
-  const name = (profile.name || account.name || '').trim();
+  // CVs often set the name in capitals ("ASHA RAO"); forms want "Asha Rao".
+  const rawName = (profile.name || account.name || '').trim().replace(/\s+/g, ' ');
+  const name = rawName && !/[a-z]/.test(rawName) ? rawName.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase()) : rawName;
   const parts = name.split(/\s+/).filter(Boolean);
   const edu = profile.education?.[0] || null;
   const exp = profile.experience?.[0] || null;

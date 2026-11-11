@@ -88,6 +88,13 @@ describe('filling forms from the profile, without AI', () => {
     assert.ok(skipped.some((s) => s.key === 'f7' && s.reason === 'unknown'), 'no website on the CV: left for her, not guessed');
   });
 
+  it('writes a capitalised CV name the way forms expect', () => {
+    const f = profileFacts({ ...profile, name: "ASHA D'SOUZA-RAO" }, {});
+    assert.equal(f.name, "Asha D'Souza-Rao");
+    assert.equal(f.first_name, 'Asha');
+    assert.equal(profileFacts({ ...profile, name: 'Asha van Rao' }, {}).name, 'Asha van Rao', 'mixed case is left as written');
+  });
+
   it("does not put her name in someone else's name field", () => {
     assert.equal(answerOf(answers, 'f20'), undefined);
     assert.notEqual(value('f21'), 'Asha Kumar');
