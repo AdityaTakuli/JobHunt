@@ -1,0 +1,14 @@
+/* ARCH in Chrome: marks on the page's own fields. The panel itself lives in a shadow root. */
+.arch-filled,
+.arch-filled-ai {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 1px !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15) !important;
+}
+.arch-filled-ai {
+  outline-color: #d97706 !important;
+  box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.18) !important;
+}
+.arch-focus {
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.4) !important;
+}

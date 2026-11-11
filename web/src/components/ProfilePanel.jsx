@@ -4,6 +4,7 @@ import { useMeta } from '../App.jsx';
 import { formatDateTime } from '../format.js';
 import { IconAlert, IconRefresh, IconX } from '../icons.jsx';
 import ChipInput from './ChipInput.jsx';
+import { ContactCard, ExtensionCard } from './ExtensionCards.jsx';
 import { RowsSkeleton } from './Skeleton.jsx';
 import { useToast } from './Toast.jsx';
 
@@ -328,6 +329,8 @@ export default function ProfilePanel() {
             </div>
           </section>
 
+          <ContactCard profile={profile} onSaved={setState} />
+
           {profile.portfolio && (
             <section className="card profile-section">
               <h3>Portfolio review</h3>
@@ -413,6 +416,8 @@ export default function ProfilePanel() {
           )}
         </>
       )}
+
+      <ExtensionCard fillsToday={state.fills_today} fillsPerDay={state.fills_per_day} />
     </div>
   );
 }

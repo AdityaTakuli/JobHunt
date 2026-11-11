@@ -56,22 +56,35 @@ function CoverNote({ text }) {
 }
 
 // What the analysis was written from, so a thin one is never mistaken for a full one.
-function Basis({ basedOn }) {
+function Basis({ basedOn, applyUrl }) {
   if (!basedOn) return null;
   if (basedOn.posting) {
     return <p className="small muted ai-basis">Written from the posting{basedOn.host ? ` on ${basedOn.host}` : ''}{basedOn.firm ? ' and what is known about the firm' : ''}.</p>;
   }
   return (
-    <p className="ai-basis is-thin" role="note">
-      The job site would not let ArchJobs read this posting, so this is based on the title{basedOn.firm ? ' and the firm' : ''} only. Open the posting for the real requirements.
-    </p>
+    <div className="ai-basis is-thin" role="note">
+      <p>
+        The job site would not let ArchJobs read this posting, so this is based on the title{basedOn.firm ? ' and the firm' : ''} only.
+      </p>
+      <p>
+        <strong>Fix it with ARCH in Chrome:</strong>{' '}
+        {applyUrl ? (
+          <a href={applyUrl} target="_blank" rel="noopener noreferrer">
+            open the posting
+          </a>
+        ) : (
+          'open the posting'
+        )}{' '}
+        with the extension installed. It reads the posting in your browser and sends it here, then analyse again. <a href="#/profile">Get the extension</a>
+      </p>
+    </div>
   );
 }
 
-function Result({ a, onRefresh, busy }) {
+function Result({ a, onRefresh, busy, applyUrl }) {
   return (
     <motion.div className="ai-result" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE }}>
-      <Basis basedOn={a.based_on} />
+      <Basis basedOn={a.based_on} applyUrl={applyUrl} />
       <p className="ai-summary">{a.summary}</p>
       {a.company && (
         <p className="ai-reason">
@@ -119,8 +132,25 @@ function Working() {
   );
 }
 
-export default function JobAnalysis({ jobId }) {
+export default function JobAnalysis({ jobId, applyUrl }) {
   const [state, setState] = useState({ loading: true });
+
+  // Back from the posting's tab: ARCH in Chrome may have sent the posting, which clears an
+  // analysis written without it. Look again so the "Analyse" button comes back.
+  const thin = state.analysis?.based_on && !state.analysis.based_on.posting;
+  useEffect(() => {
+    if (!thin) return undefined;
+    const check = () => {
+      if (document.visibilityState !== 'visible') return;
+      api(`/jobs/${jobId}/analysis`)
+        .then((d) => {
+          if (!d.analysis) setState((s) => ({ ...s, analysis: null, refreshed: true }));
+        })
+        .catch(() => {});
+    };
+    document.addEventListener('visibilitychange', check);
+    return () => document.removeEventListener('visibilitychange', check);
+  }, [thin, jobId]);
 
   useEffect(() => {
     let alive = true;
@@ -152,7 +182,11 @@ export default function JobAnalysis({ jobId }) {
       </h3>
       {!state.analysis && !state.busy && (
         <div className="ai-start">
-          <p>Read this posting and firm with AI: what they really ask for, what to lead with in your CV and portfolio for them, and a cover-note opening. Your fit score is above.</p>
+          <p>
+            {state.refreshed
+              ? 'ARCH in Chrome sent the full posting. Analyse again to read the real requirements.'
+              : 'Read this posting and firm with AI: what they really ask for, what to lead with in your CV and portfolio for them, and a cover-note opening. Your fit score is above.'}
+          </p>
           <button type="button" className="btn btn-primary btn-sm" onClick={() => run(false)}>
             <IconSparkle size={16} /> Analyse this job
           </button>
@@ -164,7 +198,7 @@ export default function JobAnalysis({ jobId }) {
           {state.error}
         </p>
       )}
-      {state.analysis && !state.busy && <Result a={state.analysis} busy={state.busy} onRefresh={() => run(true)} />}
+      {state.analysis && !state.busy && <Result a={state.analysis} busy={state.busy} onRefresh={() => run(true)} applyUrl={applyUrl} />}
     </section>
   );
 }

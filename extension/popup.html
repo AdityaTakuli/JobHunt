@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ARCH in Chrome</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; width: 320px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #11141a; background: #fff; }
+      .head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #e5e7eb; }
+      .mark { width: 28px; height: 28px; border-radius: 8px; background: #2563eb; color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 15px; flex: none; }
+      .head b { font-size: 15px; display: block; }
+      main { padding: 12px 14px; display: grid; gap: 10px; }
+      .muted { color: #6b7280; font-size: 12px; }
+      .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; }
+      .card p { margin: 0; }
+      .line { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+      .ok { color: #1b7f4b; font-weight: 700; }
+      .no { color: #b45309; font-weight: 700; }
+      .btn { display: block; width: 100%; border: 1px solid #d1d5db; background: #fff; color: #11141a; border-radius: 8px; padding: 9px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+      .btn.p { background: #2563eb; color: #fff; border-color: #2563eb; }
+      .btn:disabled { opacity: 0.55; cursor: default; }
+      kbd { border: 1px solid #d1d5db; border-radius: 4px; padding: 0 4px; font: inherit; font-size: 11px; }
+      details summary { cursor: pointer; font-size: 12px; color: #6b7280; }
+      input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 7px 9px; font: inherit; margin: 6px 0; background: inherit; color: inherit; }
+      .err { color: #b91c1c; }
+      .legend { display: flex; gap: 12px; flex-wrap: wrap; }
+      .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+      @media (prefers-color-scheme: dark) {
+        body { color: #ededed; background: #141414; }
+        .head, .card { border-color: #2a2a2a; }
+        .muted, details summary { color: #a3a3a3; }
+        .btn { background: #1f1f1f; color: #ededed; border-color: #333; }
+        .btn.p { background: #2563eb; color: #fff; border-color: #2563eb; }
+        input { border-color: #333; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <span class="mark">A</span>
+      <div><b>ARCH in Chrome</b><span class="muted">Fills applications from your ArchJobs profile</span></div>
+    </div>
+    <main>
+      <div id="status" class="card"><span class="muted">Checking ArchJobs…</span></div>
+      <button id="fill" class="btn p" type="button" disabled>Fill this page</button>
+      <p id="fillError" class="err" hidden></p>
+      <div class="muted">
+        <p style="margin: 0 0 6px">Or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> on any application form. Nothing is ever submitted for you.</p>
+        <div class="legend">
+          <span><span class="sw" style="background: #2563eb"></span>From your CV</span>
+          <span><span class="sw" style="background: #d97706"></span>Written by AI, read it</span>
+        </div>
+      </div>
+      <button id="open" class="btn" type="button">Open my ArchJobs profile</button>
+      <details>
+        <summary>Server</summary>
+        <input id="server" type="url" placeholder="https://archjobs.velocitytechnologies.in" spellcheck="false" />
+        <button id="save" class="btn" type="button">Save</button>
+      </details>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

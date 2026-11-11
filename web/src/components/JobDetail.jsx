@@ -205,7 +205,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
       {/* The list row carries a brief fit; the full one arrives with the job's details. */}
       {(job.fit?.parts || !job.fit) && <FitSection fit={job.fit?.parts ? job.fit : null} />}
 
-      <JobAnalysis jobId={job.id} />
+      <JobAnalysis jobId={job.id} applyUrl={job.apply_url} />
 
       <FocusKeywords keywords={keywords} />
 

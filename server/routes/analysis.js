@@ -5,7 +5,7 @@ import { dbUsageStore } from '../lib/aiBudget.js';
 import { forgetJob } from '../lib/fitCache.js';
 import { ANALYSIS_VERSION, analyseJob, analysisGateways } from '../lib/jobAnalysis.js';
 import { COMPANIES } from '../lib/companies.js';
-import { findPosting, MIN_USEFUL } from '../lib/jobPage.js';
+import { findPosting, jobUrlPatterns, MIN_USEFUL, postingFromJsonLd } from '../lib/jobPage.js';
 import { LlmError } from '../lib/llm.js';
 import { hostOf } from '../lib/normalize.js';
 import { getUserSettings } from '../lib/settings.js';
@@ -76,6 +76,36 @@ async function usedToday(userId) {
   const [{ n }] = await query('SELECT COUNT(*) AS n FROM job_analyses WHERE created_by = ? AND created_at >= ?', [userId, startOfIstDay()]);
   return Number(n);
 }
+
+// ARCH in Chrome reads the posting in the person's own browser, where job sites that block servers
+// (Glassdoor) show it normally, and sends it here. Body: { url, jsonld: string[], text }.
+// The posting is saved on the job whose link it is, so "Analyse" and the fit score can use it.
+// Only text is accepted, and only for a job already in ArchJobs.
+analysisRouter.post('/posting', async (req, res) => {
+  const url = typeof req.body?.url === 'string' ? req.body.url.slice(0, 2000) : '';
+  const patterns = jobUrlPatterns(url);
+  if (!patterns.length) return res.status(400).json({ error: 'Send the address of a job page.' });
+  const where = patterns.map(() => "(j.apply_url LIKE ? OR JSON_SEARCH(j.apply_options, 'one', ?, NULL, '$[*].url') IS NOT NULL)").join(' OR ');
+  const jobs = await query(`SELECT j.id, j.description FROM jobs j WHERE ${where} ORDER BY j.id DESC LIMIT 3`, patterns.flatMap((p) => [p, p]));
+  if (!jobs.length) return res.json({ matched: false });
+
+  const blocks = Array.isArray(req.body?.jsonld) ? req.body.jsonld.filter((b) => typeof b === 'string').slice(0, 10).map((b) => b.slice(0, 200_000)) : [];
+  const fromData = postingFromJsonLd(blocks);
+  const pageText = typeof req.body?.text === 'string' ? req.body.text.replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20_000) : '';
+  const description = fromData?.description || (pageText.length >= MIN_USEFUL ? pageText : '');
+  if (!description) return res.json({ matched: true, saved: false, reason: 'No posting text on that page.' });
+
+  const saved = [];
+  for (const job of jobs) {
+    if (String(job.description || '').length >= description.length) continue;
+    await query('UPDATE jobs SET description = ?, updated_at = ? WHERE id = ?', [description, new Date(), job.id]);
+    // An analysis written without the posting is dropped, so the next one reads the real thing.
+    await query("DELETE FROM job_analyses WHERE job_id = ? AND JSON_EXTRACT(analysis, '$.based_on.posting') = false", [job.id]);
+    forgetJob(job.id);
+    saved.push(job.id);
+  }
+  res.json({ matched: true, saved: saved.length > 0, jobs: jobs.map((j) => j.id), chars: description.length });
+});
 
 analysisRouter.get('/:id/analysis', async (req, res) => {
   const [row] = await query('SELECT * FROM job_analyses WHERE job_id = ? AND version = ?', [req.params.id, ANALYSIS_VERSION]);

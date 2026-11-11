@@ -39,15 +39,14 @@ function postingsIn(node, out = []) {
 }
 
 /**
- * The posting in a page's HTML.
- * @returns {{ description, title, company, companyAbout, source: 'jobposting' | 'page' } | null}
+ * The posting in a page's schema.org data (the text of its ld+json scripts), or null.
+ * @param {string[]} blocks
  */
-export function postingFromHtml(html) {
-  const $ = cheerio.load(String(html || ''));
-  for (const el of $('script[type="application/ld+json"]').toArray()) {
+export function postingFromJsonLd(blocks) {
+  for (const block of blocks || []) {
     let data;
     try {
-      data = JSON.parse($(el).contents().text());
+      data = JSON.parse(String(block));
     } catch {
       continue;
     }
@@ -56,7 +55,7 @@ export function postingFromHtml(html) {
       if (description.length < MIN_USEFUL) continue;
       const org = p.hiringOrganization || {};
       return {
-        description,
+        description: description.slice(0, 20_000),
         title: typeof p.title === 'string' ? p.title.trim() : null,
         company: typeof org.name === 'string' ? org.name.trim() : null,
         companyAbout: typeof org.description === 'string' ? plain(org.description).slice(0, 1500) : null,
@@ -64,6 +63,50 @@ export function postingFromHtml(html) {
       };
     }
   }
+  return null;
+}
+
+/**
+ * LIKE patterns that find a stored job from the address of its page. Matches on the page's
+ * address without the query string, and on the listing ids job sites use (Glassdoor ?jl=,
+ * jobListingId=, LinkedIn /jobs/view/<id>), so a link with different tracking still matches.
+ */
+export function jobUrlPatterns(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return [];
+  }
+  if (!/^https?:$/.test(u.protocol)) return [];
+  const like = (s) => s.replace(/[\\%_]/g, '\\$&');
+  const out = new Set();
+  const path = u.pathname.replace(/\/+$/, '');
+  // A bare site root ("https://x.com/") says nothing about which job it is.
+  if (path.length > 1) out.add(`${like(`${u.host}${path}`)}%`);
+  const host = u.hostname.replace(/^www\./, '');
+  if (/(^|\.)glassdoor\./.test(host)) {
+    const id = u.searchParams.get('jl') || u.searchParams.get('jobListingId');
+    if (/^\d{6,}$/.test(id || '')) {
+      out.add(`%glassdoor.%jl=${id}%`);
+      out.add(`%glassdoor.%jobListingId=${id}%`);
+    }
+  }
+  if (/(^|\.)linkedin\.com$/.test(host)) {
+    const id = u.pathname.match(/\/jobs\/view\/(?:[^/]*-)?(\d{6,})/)?.[1] || u.searchParams.get('currentJobId');
+    if (/^\d{6,}$/.test(id || '')) out.add(`%linkedin.com%/jobs/view/%${id}%`);
+  }
+  return [...out].map((p) => (p.startsWith('%') ? p : `%${p}`));
+}
+
+/**
+ * The posting in a page's HTML.
+ * @returns {{ description, title, company, companyAbout, source: 'jobposting' | 'page' } | null}
+ */
+export function postingFromHtml(html) {
+  const $ = cheerio.load(String(html || ''));
+  const fromData = postingFromJsonLd($('script[type="application/ld+json"]').toArray().map((el) => $(el).contents().text()));
+  if (fromData) return fromData;
   // No structured data: the main text of the page, without navigation and footers.
   $('script, style, noscript, nav, header, footer, form, svg, iframe, [role="navigation"], [aria-hidden="true"]').remove();
   const main = $('main, article, [class*="job-description" i], [class*="jobDescription" i], [id*="job-description" i], [class*="description" i]').first();

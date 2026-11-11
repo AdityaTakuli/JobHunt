@@ -4599,3 +4599,57 @@ a.co-open:hover {
     width: 100%;
   }
 }
+.ai-basis.is-thin p {
+  margin: 0;
+}
+.ai-basis.is-thin p + p {
+  margin-top: 6px;
+}
+.ai-basis.is-thin a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Profile: details for application forms, and the ARCH in Chrome card. */
+.contact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.extension-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.extension-head h3 {
+  margin: 0 0 2px;
+}
+.extension-mark {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 800;
+  font-size: 18px;
+}
+.extension-points,
+.extension-steps {
+  margin: 8px 0 10px;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+.extension-steps .btn {
+  display: inline-flex;
+  vertical-align: middle;
+}
+.extension-card code,
+.extension-card kbd {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-2);
+}
