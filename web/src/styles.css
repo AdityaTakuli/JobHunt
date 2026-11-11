@@ -4571,3 +4571,31 @@ a.co-open:hover {
   font-size: 11px;
   min-width: 0;
 }
+
+/* What an AI analysis was written from. */
+.ai-basis {
+  margin: 0 0 8px;
+}
+.ai-basis.is-thin {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--amber-soft, rgba(217, 119, 6, 0.12));
+  color: var(--amber-text);
+  font-size: 13px;
+}
+
+/* Internships / Jobs switch above the filters. */
+.role-switch {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  margin: 4px 0 10px;
+}
+.role-switch button {
+  flex: 1 1 auto;
+}
+@media (max-width: 480px) {
+  .role-switch {
+    width: 100%;
+  }
+}

@@ -18,6 +18,12 @@ const Blueprint = lazy(() => import('../components/Blueprint.jsx'));
 
 const PAGE = 30;
 const STORAGE_KEY = 'aj-job-filters-v2';
+// The switch at the top of the list: internships, full-time jobs, or both.
+const ROLE_SWITCH = [
+  ['', 'All'],
+  ['internship', 'Internships'],
+  ['job', 'Jobs'],
+];
 // Experience filter on by default at "up to 1 year": the point of the app is entry-level roles.
 const DEFAULT_FILTERS = {
   city: 'mine',
@@ -488,6 +494,14 @@ export default function JobsPage() {
       </p>
 
       <GmailBar onSynced={reload} />
+
+      <div className="segmented role-switch" role="group" aria-label="Internships or jobs">
+        {ROLE_SWITCH.map(([value, label]) => (
+          <button key={value || 'all'} type="button" aria-pressed={filters.role === value} onClick={() => setFilters((f) => ({ ...f, role: value }))}>
+            {label}
+          </button>
+        ))}
+      </div>
 
       <JobFilters filters={filters} setFilters={setFilters} cityOptions={cityOptions} cityCounts={meta?.cities || []} searchMode={Boolean(search)} />
 

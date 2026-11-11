@@ -4,43 +4,15 @@ import { api } from '../api.js';
 import { formatDateTime } from '../format.js';
 import { IconCheck, IconRefresh, IconSparkle } from '../icons.jsx';
 
-// "Analyse with AI" in the job details: what the posting asks for, how well a B.Arch student
-// fits, and what to lead with. Stored per job on the server, so the second person to open it
-// gets it instantly. The keyword list above stays as the non-AI version of the same help.
+// "Analyse with AI" in the job details: what this posting asks for and what to lead with at this
+// firm, written from the posting itself (the server reads it from the job page when needed). It has
+// no score of its own: "Your fit" above is the one score. Stored per job on the server, so the
+// second person to open it gets it instantly.
 
 const EASE = [0.22, 1, 0.36, 1];
 
 // What the model is doing, in order, so the wait reads as work rather than a stall.
-const STEPS = ['Reading the requirements', 'Checking what a B.Arch student can show', 'Picking what to lead with', 'Drafting a cover-note opening'];
-
-const VERDICT_TONE = { 'good fit': 'is-good', stretch: 'is-stretch', 'long shot': 'is-far' };
-
-// The fit score as an architect's scale bar: alternating blocks with ticks at 0, 25, 50, 75, 100.
-function FitScale({ score, verdict }) {
-  return (
-    <figure className={`fit ${VERDICT_TONE[verdict] || ''}`}>
-      <figcaption className="fit-head">
-        <span className="fit-verdict">{verdict[0].toUpperCase() + verdict.slice(1)}</span>
-        <span className="fit-score">{score}</span>
-      </figcaption>
-      <div className="fit-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-label={`Fit ${score} out of 100`}>
-        <span className="fit-blocks" aria-hidden="true">
-          {[0, 1, 2, 3].map((i) => (
-            <span key={i} />
-          ))}
-        </span>
-        <motion.span className="fit-marker" aria-hidden="true" initial={{ left: '0%' }} animate={{ left: `${score}%` }} transition={{ duration: 0.6, ease: EASE }} />
-      </div>
-      <div className="fit-ticks" aria-hidden="true">
-        <span>0</span>
-        <span>25</span>
-        <span>50</span>
-        <span>75</span>
-        <span>100</span>
-      </div>
-    </figure>
-  );
-}
+const STEPS = ['Reading the posting from the job page', 'Pulling out what this firm asks for', 'Matching it to what to lead with', 'Drafting a cover-note opening'];
 
 function List({ title, items, tone }) {
   if (!items?.length) return null;
@@ -83,15 +55,30 @@ function CoverNote({ text }) {
   );
 }
 
+// What the analysis was written from, so a thin one is never mistaken for a full one.
+function Basis({ basedOn }) {
+  if (!basedOn) return null;
+  if (basedOn.posting) {
+    return <p className="small muted ai-basis">Written from the posting{basedOn.host ? ` on ${basedOn.host}` : ''}{basedOn.firm ? ' and what is known about the firm' : ''}.</p>;
+  }
+  return (
+    <p className="ai-basis is-thin" role="note">
+      The job site would not let ArchJobs read this posting, so this is based on the title{basedOn.firm ? ' and the firm' : ''} only. Open the posting for the real requirements.
+    </p>
+  );
+}
+
 function Result({ a, onRefresh, busy }) {
   return (
     <motion.div className="ai-result" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE }}>
+      <Basis basedOn={a.based_on} />
       <p className="ai-summary">{a.summary}</p>
-      <FitScale score={a.fit_score} verdict={a.fit_verdict} />
-      <p className="ai-reason">
-        {a.fit_reason}
-        {a.experience ? <span className="muted"> Asks for {a.experience}.</span> : null}
-      </p>
+      {a.company && (
+        <p className="ai-reason">
+          <strong>The firm:</strong> {a.company}
+        </p>
+      )}
+      {a.experience && <p className="ai-reason muted">Asks for {a.experience}.</p>}
       {a.red_flags?.length > 0 && <List title="Watch out" items={a.red_flags} tone="is-warn" />}
       <div className="ai-columns">
         <List title="Must have" items={a.must_have} />
@@ -165,7 +152,7 @@ export default function JobAnalysis({ jobId }) {
       </h3>
       {!state.analysis && !state.busy && (
         <div className="ai-start">
-          <p>Get a plain reading of this posting: what it really asks for, how well you fit, what to lead with in your CV and portfolio, and a cover-note opening.</p>
+          <p>Read this posting and firm with AI: what they really ask for, what to lead with in your CV and portfolio for them, and a cover-note opening. Your fit score is above.</p>
           <button type="button" className="btn btn-primary btn-sm" onClick={() => run(false)}>
             <IconSparkle size={16} /> Analyse this job
           </button>

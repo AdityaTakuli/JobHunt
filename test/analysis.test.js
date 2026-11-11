@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { analyseJob, analysisGateways, parseAnalysis, validateAnalysis } from '../server/lib/jobAnalysis.js';
+import { analyseJob, analysisGateways, analysisPrompt, parseAnalysis, validateAnalysis } from '../server/lib/jobAnalysis.js';
+import { postingFromHtml } from '../server/lib/jobPage.js';
+import { jobFacts } from '../server/lib/fit.js';
 import { inIndia, isDesignRole } from '../server/sources/companyFeeds.js';
 import { normalizeCity } from '../server/lib/normalize.js';
 
@@ -8,13 +10,11 @@ const GOOD = {
   summary: 'Junior landscape role drawing plans and planting schemes.',
   level: 'junior',
   experience: '0-3 years',
-  fit_score: 62,
-  fit_verdict: 'Stretch',
-  fit_reason: 'Asks for a landscape masters, but takes 0 years.',
+  company: 'Landscape practice doing public parks.',
   must_have: ['AutoCAD', 'AutoCAD', 'Planting design'],
   nice_to_have: ['Revit'],
   software: ['AutoCAD', 'Lumion'],
-  highlight: ['Landscape studio project'],
+  highlight: ['Landscape studio project', 'Highlight your communication skills'],
   portfolio: ['Site plan with planting'],
   gaps: ['No masters: show landscape electives'],
   cover_note: 'I am a final-year B.Arch student…',
@@ -40,14 +40,16 @@ const reply = (status, content) => ({
 describe('job analysis', () => {
   it('validates and tidies an answer', () => {
     const a = validateAnalysis(GOOD);
-    assert.equal(a.fit_verdict, 'stretch');
+    assert.equal(a.company, 'Landscape practice doing public parks.');
     assert.deepEqual(a.must_have, ['AutoCAD', 'Planting design']);
-    assert.equal(validateAnalysis({ ...GOOD, fit_verdict: 'maybe' }), null);
+    assert.equal(a.fit_score, undefined, 'the analysis has no score of its own');
+    assert.deepEqual(a.highlight, ['Landscape studio project'], 'generic advice is dropped');
+    assert.equal(validateAnalysis({ ...GOOD, summary: '' }), null);
     assert.equal(validateAnalysis({ ...GOOD, must_have: 'AutoCAD' }), null);
   });
 
   it('reads JSON wrapped in a code fence', () => {
-    assert.equal(parseAnalysis('```json\n' + JSON.stringify(GOOD) + '\n```', 'm').fit_score, 62);
+    assert.equal(parseAnalysis('```json\n' + JSON.stringify(GOOD) + '\n```', 'm').level, 'junior');
     assert.throws(() => parseAnalysis('not json', 'm'), /invalid JSON/);
   });
 
@@ -101,5 +103,42 @@ describe('company feeds', () => {
   it('knows Hyderabad by its office districts', () => {
     assert.equal(normalizeCity('Madhapur, India'), 'Hyderabad');
     assert.equal(inIndia('HITEC City'), true);
+  });
+});
+
+describe('analysis is written from the posting and the firm', () => {
+  const job = { title: 'Senior Architect', company: 'WSP', city: 'Bengaluru', description: '' };
+
+  it('says when there is no posting text, instead of letting the model guess', () => {
+    const p = analysisPrompt(job, { source: 'none' });
+    assert.match(p, /NO POSTING TEXT/);
+    assert.doesNotMatch(p, /Posting text/);
+  });
+
+  it('gives the posting and what is known about the firm', () => {
+    const description = 'Lead healthcare projects in Revit. '.repeat(20);
+    const p = analysisPrompt({ ...job, description }, { source: 'posting', sourceHost: 'careers.wsp.com', firm: { name: 'WSP', kind: 'Engineering & design', note: 'BIM trainees', about: 'Global engineering consultancy.' } });
+    assert.match(p, /Posting text \(from careers\.wsp\.com\):\nLead healthcare/);
+    assert.match(p, /Firm: WSP \(Engineering & design\)/);
+    assert.match(p, /What the firm says about itself: Global engineering consultancy\./);
+  });
+
+  it('reads the posting from schema.org JobPosting data, escaped HTML included', () => {
+    const description = '&lt;p&gt;We need a &lt;b&gt;Senior Architect&lt;/b&gt;.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;8+ years&lt;/li&gt;&lt;li&gt;Revit&lt;/li&gt;&lt;/ul&gt;' + ' Healthcare and campus work in Bengaluru.'.repeat(10);
+    const html = `<script type="application/ld+json">${JSON.stringify({ '@graph': [{ '@type': 'JobPosting', title: 'Senior Architect', description, hiringOrganization: { name: 'WSP', description: 'Engineering consultancy.' } }] })}</script>`;
+    const p = postingFromHtml(html);
+    assert.equal(p.source, 'jobposting');
+    assert.equal(p.company, 'WSP');
+    assert.equal(p.companyAbout, 'Engineering consultancy.');
+    assert.match(p.description, /^We need a Senior Architect\.\n- 8\+ years\n- Revit\n/);
+    assert.equal(postingFromHtml('<p>Sign in</p>'), null, 'a page with no posting gives nothing');
+  });
+
+  it('counts the analysis must-haves in the fit facts (card and details use the same facts)', () => {
+    const row = { id: 1, title: 'Architect', software: ['Revit', 'AutoCAD'], description: 'Revit and AutoCAD.' };
+    const without = jobFacts(row);
+    const withAnalysis = jobFacts(row, { must_have: ['Revit'], nice_to_have: ['AutoCAD'] });
+    assert.notDeepEqual(without, withAnalysis);
+    assert.equal(withAnalysis.reqs.find((r) => r.label === 'AutoCAD').required, false);
   });
 });

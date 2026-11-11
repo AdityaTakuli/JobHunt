@@ -168,7 +168,7 @@ export function jobsFromEmail(found, { links, mail }) {
     out.push({
       source: SOURCE,
       title: cleanText(j.title, 300),
-      company: cleanText(j.company || '', 200),
+      company: cleanText(stripRating(j.company || ''), 200),
       locationText: cleanText(j.location || '', 200),
       city: normalizeCity(j.location || ''),
       description: '',
@@ -250,4 +250,53 @@ export function senderVerified(headerLines, fromAddress) {
   for (const m of text.matchAll(/\bdkim=pass\b[^;]*?\bheader\.(?:i=[^@\s;]*@|d=)([a-z0-9.-]+)/g)) if (aligned(m[1], domain)) return true;
   for (const m of text.matchAll(/\bspf=pass\b[^;]*?\bsmtp\.mailfrom=(?:[^@\s;]*@)?([a-z0-9.-]+)/g)) if (aligned(m[1], domain)) return true;
   return false;
+}
+
+// ---- Names from the job link itself ----
+// Glassdoor job links spell out the title and employer: /job-listing/senior-architect-wsp-JV_IC2940587_KO0,16_KE17,20.htm
+// means title = slug[0..16] ("senior-architect"), employer = slug[17..20] ("wsp"). Reading a busy
+// alert email, the AI can pair a title with the card next to it; the link can't be wrong.
+const slugOf = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const fromSlug = (s, { acronym = false } = {}) => {
+  const words = s.split('-').filter(Boolean);
+  if (acronym && words.length === 1 && words[0].length <= 4) return words[0].toUpperCase();
+  return words.map((w) => (/^(and|of|the|for|in|at)$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ').replace(/^./, (c) => c.toUpperCase());
+};
+
+/** { title, company } read from a Glassdoor job-listing URL (lowercase slugs), or null. */
+export function glassdoorListing(url) {
+  let path;
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)glassdoor\.[a-z.]+$/i.test(u.hostname)) return null;
+    path = decodeURIComponent(u.pathname);
+  } catch {
+    return null;
+  }
+  const m = path.match(/\/job-listing\/(.+?)-JV_[^/]*?KO(\d+),(\d+)(?:_KE(\d+),(\d+))?[^/]*\.htm$/i);
+  if (!m) return null;
+  const slug = m[1];
+  const title = slug.slice(Number(m[2]), Number(m[3])).replace(/^-+|-+$/g, '');
+  const company = m[4] != null ? slug.slice(Number(m[4]), Number(m[5])).replace(/^-+|-+$/g, '') : '';
+  return title ? { title, company: company || null } : null;
+}
+
+// Star ratings Glassdoor prints after the employer ("buildAhome 3.9 ★").
+// A bare number stays ("Studio 7"): only "3.9" or a number with a star is a rating.
+export const stripRating = (company) =>
+  String(company || '')
+    .replace(/\s+\d(?:\.\d)?\s*★\s*$|\s+\d\.\d\s*$|\s*★\s*$/, '')
+    .trim();
+
+/**
+ * Checks a job's title and company against what its link says, and corrects them when they
+ * disagree (keeping the email's capitalisation when they agree). Returns the job.
+ */
+export function namesFromLink(job) {
+  job.company = stripRating(job.company);
+  const listing = glassdoorListing(job.applyUrl);
+  if (!listing) return job;
+  if (slugOf(job.title) !== listing.title) job.title = fromSlug(listing.title);
+  if (listing.company && slugOf(job.company) !== listing.company) job.company = fromSlug(listing.company, { acronym: true });
+  return job;
 }

@@ -12,12 +12,6 @@ export const EXPERIENCE_LEVELS = [
   { value: 5, label: 'Up to 5 years', short: '0–5 yrs' },
 ];
 
-const JOB_TYPES = [
-  { value: '', label: 'Internships and jobs' },
-  { value: 'internship', label: 'Internships' },
-  { value: 'job', label: 'Full-time jobs' },
-];
-
 const POSTED = [
   { value: '', label: 'Any time' },
   { value: '24', label: 'Last 24 hours' },
@@ -133,7 +127,7 @@ export default function JobFilters({ filters, setFilters, cityOptions, cityCount
   const cityLabel = filters.city === 'mine' ? 'My cities' : filters.city === 'all' ? 'All cities' : filters.city;
   const softwareCount = filters.software.length + (filters.bim ? 1 : 0);
   const anyActive =
-    filters.role || filters.within || softwareCount || filters.source || filters.apply || filters.hideApplied || (!searchMode && filters.city !== 'mine');
+    filters.within || softwareCount || filters.source || filters.apply || filters.hideApplied || (!searchMode && filters.city !== 'mine');
 
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
@@ -178,10 +172,6 @@ export default function JobFilters({ filters, setFilters, cityOptions, cityCount
         )}
       </FilterPill>
 
-      <FilterPill label={filters.role ? labelOf(JOB_TYPES, filters.role) : 'Job type'} active={Boolean(filters.role)} panelLabel="Job type">
-        {(close) => <OptionList label="Job type" options={JOB_TYPES} value={filters.role} onChange={set('role')} onDone={close} />}
-      </FilterPill>
-
       <FilterPill label={filters.within ? labelOf(POSTED, filters.within) : 'Date posted'} active={Boolean(filters.within)} panelLabel="Date posted">
         {(close) => <OptionList label="Date posted" options={POSTED} value={filters.within} onChange={set('within')} onDone={close} />}
       </FilterPill>
@@ -204,7 +194,7 @@ export default function JobFilters({ filters, setFilters, cityOptions, cityCount
         <button
           type="button"
           className="btn btn-ghost btn-sm clear-filters"
-          onClick={() => setFilters((f) => ({ ...f, city: 'mine', role: '', within: '', software: [], bim: false, source: '', apply: '', hideApplied: false }))}
+          onClick={() => setFilters((f) => ({ ...f, city: 'mine', within: '', software: [], bim: false, source: '', apply: '', hideApplied: false }))}
         >
           Clear
         </button>

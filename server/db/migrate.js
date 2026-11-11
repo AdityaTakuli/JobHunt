@@ -6,6 +6,7 @@ import { parseDeadline } from '../lib/deadline.js';
 import { rankApplyOptions } from '../lib/normalize.js';
 import { COMPANIES } from '../lib/companies.js';
 import { parseExperience } from '../lib/rules.js';
+import { namesFromLink } from '../sources/jobEmail.js';
 import { isDesignRole } from '../sources/companyFeeds.js';
 import { closePool, parseJson, query } from './pool.js';
 
@@ -187,6 +188,18 @@ export function schemaStatements(sql) {
     .filter(Boolean);
 }
 
+// Jobs read from Glassdoor alert emails before titles and employers were checked against the
+// job link (2026-11-11: "Senior Architect" at WSP was stored under a neighbouring card's names).
+async function fixNamesFromLinks() {
+  const rows = await query("SELECT id, title, company, apply_url FROM jobs WHERE apply_url LIKE '%glassdoor.%/job-listing/%' OR company LIKE '%★%'");
+  for (const row of rows) {
+    const fixed = namesFromLink({ title: row.title, company: row.company, applyUrl: row.apply_url });
+    if (fixed.title !== row.title || fixed.company !== row.company) {
+      await query('UPDATE jobs SET title = ?, company = ?, updated_at = ? WHERE id = ?', [fixed.title.slice(0, 300), fixed.company.slice(0, 200), new Date(), row.id]);
+    }
+  }
+}
+
 export async function migrate() {
   const statements = schemaStatements(await fs.readFile(schemaPath, 'utf8'));
   for (const statement of statements) {
@@ -198,6 +211,7 @@ export async function migrate() {
   await backfillExperience();
   await backfillApplyOptions();
   await backfillDeadlines();
+  await fixNamesFromLinks();
   await syncCompanies();
   await requeueMislabeled();
   return statements.length;

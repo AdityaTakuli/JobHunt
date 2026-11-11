@@ -9,7 +9,7 @@ import { memoryUsageStore } from '../server/lib/aiBudget.js';
 import { JOB_EMAIL_QUERY } from '../server/lib/google.js';
 import { createMailTriage } from '../server/lib/mailTriage.js';
 import { parseSalary } from '../server/lib/salary.js';
-import { emailToText, jobsFromEmail, mightListJobs, publisherOf, resolveJobLink, stripTracking, validateJobList } from '../server/sources/jobEmail.js';
+import { emailToText, glassdoorListing, jobsFromEmail, mightListJobs, namesFromLink, publisherOf, resolveJobLink, stripRating, stripTracking, validateJobList } from '../server/sources/jobEmail.js';
 
 const html = readFileSync(new URL('./fixtures/glassdoor-alert.html', import.meta.url), 'utf8');
 const MAIL = {
@@ -185,5 +185,31 @@ describe('job email AI', () => {
     assert.equal(t.down, 'rate_limit');
     const off = createMailTriage({ freellm: { ...freellm, apiKey: '' }, fetchImpl: () => assert.fail('no call'), usageStore: memoryUsageStore() });
     assert.equal(await off.extractJobs(MAIL, 'text'), null);
+  });
+});
+
+// 2026-11-11: a Glassdoor alert's "Senior Architect" at WSP was stored under another card's names.
+describe('job names come from the job link when it spells them out', () => {
+  const url = 'https://www.glassdoor.co.in/job-listing/senior-architect-wsp-JV_IC2940587_KO0,16_KE17,20.htm?jl=1010322090580';
+
+  it('reads title and employer from a Glassdoor listing link', () => {
+    assert.deepEqual(glassdoorListing(url), { title: 'senior-architect', company: 'wsp' });
+    assert.equal(glassdoorListing('https://www.glassdoor.co.in/partner/jobListing.htm?jobListingId=1'), null);
+    assert.equal(glassdoorListing('https://evil.example/job-listing/a-b-JV_IC1_KO0,1_KE2,3.htm'), null);
+  });
+
+  it('corrects names that belong to the card next door', () => {
+    assert.deepEqual(namesFromLink({ title: 'Architect Designer', company: 'capstone Life', applyUrl: url }), { title: 'Senior Architect', company: 'WSP', applyUrl: url });
+  });
+
+  it("keeps the email's capitalisation when the link agrees", () => {
+    const u = 'https://www.glassdoor.co.in/job-listing/bim-modeller-l-and-t-construction-JV_IC1_KO0,12_KE13,33.htm';
+    assert.deepEqual(namesFromLink({ title: 'BIM Modeller', company: 'L&T Construction', applyUrl: u }), { title: 'BIM Modeller', company: 'L&T Construction', applyUrl: u });
+  });
+
+  it('drops star ratings from employer names', () => {
+    assert.equal(stripRating('buildAhome 3.9 ★'), 'buildAhome');
+    assert.equal(stripRating('WSP 4 ★'), 'WSP');
+    assert.equal(stripRating('Studio 7'), 'Studio 7');
   });
 });

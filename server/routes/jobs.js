@@ -279,7 +279,7 @@ jobsRouter.get('/review', async (req, res) => {
 
 async function findJob(id, uid) {
   const [row] = await query(
-    `SELECT ${LIST_COLUMNS}, j.description, h.reason AS hide_reason, h.job_id IS NOT NULL AS is_hidden FROM jobs j
+    `SELECT ${LIST_COLUMNS}, j.description, j.updated_at, h.reason AS hide_reason, h.job_id IS NOT NULL AS is_hidden FROM jobs j
        ${trackerJoin(uid)}
        LEFT JOIN job_hides h ON h.job_id = j.id AND h.user_id = ${userId(uid)}
       WHERE j.id = ?`,
@@ -294,9 +294,9 @@ jobsRouter.get('/:id', async (req, res) => {
   const [estimates, profile] = await Promise.all([getEstimates(), getProfile(req.user.id)]);
   const job = serializeJob(row, estimates);
   if (profile) {
-    // The stored AI analysis, when there is one, says which requirements are must-haves.
-    const [analysis] = await query('SELECT analysis FROM job_analyses WHERE job_id = ?', [job.id]);
-    job.fit = scoreFit(profile, { ...row, software: job.software }, analysis ? parseJson(analysis.analysis, null) : null);
+    // Same facts as the card in the list, so the score here is the score there.
+    const facts = await factsFor([row]);
+    job.fit = scoreFit(profile, { ...row, software: job.software }, null, facts.get(row.id));
   }
   res.json({ job });
 });

@@ -20,7 +20,7 @@ import { open } from '../lib/secretBox.js';
 import { classifierContext } from '../lib/settings.js';
 import { DAY_MS } from '../lib/time.js';
 import { applyMailEvent } from '../lib/tracker.js';
-import { emailToText, jobsFromEmail, mightListJobs, resolveJobLink, senderVerified } from '../sources/jobEmail.js';
+import { emailToText, jobsFromEmail, mightListJobs, namesFromLink, resolveJobLink, senderVerified } from '../sources/jobEmail.js';
 import { parseMessages } from '../sources/linkedinEmail.js';
 
 export const SOURCE = 'gmail';
@@ -205,6 +205,8 @@ export async function syncJobEmails(user, token, { triage, linkChecker, resolveL
       const urls = await mapLimit(rows, 4, (r) => resolveLink(r.applyUrl));
       rows.forEach((r, i) => {
         r.applyUrl = urls[i];
+        // The job page's own link names the role and employer; trust it over the email layout.
+        namesFromLink(r);
       });
       jobs.push(...rows);
     }
