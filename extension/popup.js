@@ -28,6 +28,14 @@ function show(s) {
 
 chrome.runtime.sendMessage({ type: 'status' }).then(show, (err) => show({ error: err.message }));
 
+// The two automatic behaviours, both on unless switched off.
+chrome.storage.sync.get({ autoFill: true, autoTailor: true, autoNext: true }).then((s) => {
+  $('autoFill').checked = s.autoFill;
+  $('autoTailor').checked = s.autoTailor;
+  $('autoNext').checked = s.autoNext;
+});
+for (const id of ['autoFill', 'autoTailor', 'autoNext']) $(id).addEventListener('change', (e) => chrome.storage.sync.set({ [id]: e.target.checked }));
+
 $('fill').addEventListener('click', async () => {
   $('fill').textContent = 'Filling…';
   const r = await chrome.runtime.sendMessage({ type: 'fill-active-tab' });

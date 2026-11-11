@@ -24,6 +24,8 @@
       details summary { cursor: pointer; font-size: 12px; color: #6b7280; }
       input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 7px 9px; font: inherit; margin: 6px 0; background: inherit; color: inherit; }
       .err { color: #b91c1c; }
+      .toggle { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; cursor: pointer; }
+      .toggle input { margin-top: 3px; width: 16px; height: 16px; accent-color: #2563eb; flex: none; }
       .legend { display: flex; gap: 12px; flex-wrap: wrap; }
       .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
       @media (prefers-color-scheme: dark) {
@@ -51,6 +53,11 @@
           <span><span class="sw" style="background: #2563eb"></span>From your CV</span>
           <span><span class="sw" style="background: #d97706"></span>Written by AI, read it</span>
         </div>
+      </div>
+      <div class="card">
+        <label class="toggle"><input id="autoFill" type="checkbox" /> <span><b>Fill forms automatically</b><br /><span class="muted">On application pages, no button to press.</span></span></label>
+        <label class="toggle"><input id="autoTailor" type="checkbox" /> <span><b>Tailor my CV to each job first</b><br /><span class="muted">Made only from your CV, under a minute. Falls back to your uploaded CV.</span></span></label>
+        <label class="toggle"><input id="autoNext" type="checkbox" /> <span><b>Go to the next step by itself</b><br /><span class="muted">Presses Next / Continue. Never Submit: you get a notification to check and send.</span></span></label>
       </div>
       <button id="open" class="btn" type="button">Open my ArchJobs profile</button>
       <details>

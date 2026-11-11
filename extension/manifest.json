@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "ARCH in Chrome",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fills job application forms from the CV and portfolio you uploaded to ArchJobs. You check every field and press submit yourself.",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "notifications"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": {

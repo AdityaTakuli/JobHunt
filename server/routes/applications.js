@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { APP_STATUSES } from '../../shared/format.js';
 import { query } from '../db/pool.js';
+import { jobUrlPatterns } from '../lib/jobPage.js';
 import { applyStatusSideEffects } from '../lib/tracker.js';
 
 export const applicationsRouter = Router();
@@ -86,6 +87,44 @@ applicationsRouter.post('/', async (req, res) => {
   const fields = applyStatusSideEffects(readFields(body, { partial: false }), {}, now);
   const result = await query('INSERT INTO applications SET ?', [{ ...fields, user_id: uid, job_id: jobId, created_at: now, updated_at: now }]);
   res.status(201).json({ application: await findApplication(result.insertId, uid) });
+});
+
+// ARCH in Chrome, after she sends an application: { url, title, company }. The job in ArchJobs
+// with that link is marked applied; a role from elsewhere is added to the tracker as applied.
+applicationsRouter.post('/from-page', async (req, res) => {
+  const uid = req.user.id;
+  const now = new Date();
+  const url = typeof req.body?.url === 'string' ? req.body.url.slice(0, 1000) : '';
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Send the page address.' });
+  const text = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+  const patterns = jobUrlPatterns(url);
+  let job = null;
+  if (patterns.length) {
+    const where = patterns.map(() => "(apply_url LIKE ? OR JSON_SEARCH(apply_options, 'one', ?, NULL, '$[*].url') IS NOT NULL)").join(' OR ');
+    [job] = await query(`SELECT id, title, company FROM jobs WHERE ${where} ORDER BY id DESC LIMIT 1`, patterns.flatMap((p) => [p, p]));
+  }
+  let existing;
+  if (job) [existing] = await query('SELECT * FROM applications WHERE job_id = ? AND user_id = ?', [job.id, uid]);
+  else {
+    const origin = url.split(/[?#]/)[0];
+    [existing] = await query('SELECT * FROM applications WHERE user_id = ? AND job_id IS NULL AND apply_url LIKE ? ORDER BY id DESC LIMIT 1', [uid, `${origin.replace(/[\\%_]/g, (c) => `\\${c}`)}%`]);
+  }
+  if (existing) {
+    if (!['applied', 'interview', 'offer'].includes(existing.status)) {
+      const fields = applyStatusSideEffects({ status: 'applied' }, existing, now);
+      await query('UPDATE applications SET ?, updated_at = ? WHERE id = ?', [fields, now, existing.id]);
+    }
+    return res.json({ application: await findApplication(existing.id, uid), matched: Boolean(job), updated: true });
+  }
+  const title = text(req.body?.title, 300) || job?.title;
+  if (!job && !title) return res.status(400).json({ error: 'Add a role title.' });
+  const fields = applyStatusSideEffects(
+    { status: 'applied', ...(job ? {} : { title, company: text(req.body?.company, 200) || null, apply_url: url }), notes: 'Added by ARCH in Chrome when the application was sent.' },
+    {},
+    now,
+  );
+  const result = await query('INSERT INTO applications SET ?', [{ ...fields, user_id: uid, job_id: job?.id || null, created_at: now, updated_at: now }]);
+  res.status(201).json({ application: await findApplication(result.insertId, uid), matched: Boolean(job), updated: false });
 });
 
 applicationsRouter.patch('/:id', async (req, res) => {

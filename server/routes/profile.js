@@ -10,6 +10,8 @@ import { fillFields, FILL_VERSION, sanitizeFields } from '../lib/fill.js';
 import { gapSummary, scoreFit } from '../lib/fit.js';
 import { factsFor } from '../lib/fitCache.js';
 import { LlmError } from '../lib/llm.js';
+import { findOtp } from '../lib/otp.js';
+import { findUser } from '../lib/users.js';
 import { openPdf, PdfError } from '../lib/pdf.js';
 import { applyProfileEdits, PROFILE_VERSION } from '../lib/profile.js';
 import { askJson, buildProfile, profileAvailable } from '../lib/profileBuild.js';
@@ -244,13 +246,20 @@ profileRouter.post('/fill', async (req, res) => {
   const aiAllowed = wantAi && used < config.profile.dailyFills;
   const today = istDateString();
   let aiUsed = false;
+  // A CV tailored to this posting (ARCH's "Tailor" button) is attached instead of the stored one.
+  let tailored = null;
+  if (/^\d{1,10}$/.test(String(req.body?.tailoredId ?? ''))) {
+    const [t] = await query('SELECT id, cover_letter FROM tailored_docs WHERE id = ? AND user_id = ?', [Number(req.body.tailoredId), uid]);
+    if (t) tailored = { id: t.id, cover_letter: parseJson(t.cover_letter, null) };
+  }
   const result = await fillFields({
     profile,
     account: { name: req.user.name, email: req.user.email },
     resumeText: row.resume_text ? String(row.resume_text).slice(0, 8_000) : null,
     page,
     fields,
-    files: { resume: Boolean(row.resume_uploaded_at), portfolio: Boolean(row.portfolio_uploaded_at) },
+    files: { resume: Boolean(row.resume_uploaded_at) || Boolean(tailored), portfolio: Boolean(row.portfolio_uploaded_at), letter: Boolean(tailored?.cover_letter) },
+    coverLetter: tailored?.cover_letter ? [tailored.cover_letter.greeting, ...tailored.cover_letter.paragraphs, tailored.cover_letter.sign_off].join('\n\n') : null,
     useAi: aiAllowed,
     ask: async (call) => {
       aiUsed = true;
@@ -266,7 +275,27 @@ profileRouter.post('/fill', async (req, res) => {
     ...result,
     ai: { ...result.ai, used: aiUsed, limited: wantAi && !aiAllowed, today: used + (aiUsed ? 1 : 0), limit: config.profile.dailyFills },
     files: { resume: Boolean(row.resume_uploaded_at), portfolio: Boolean(row.portfolio_uploaded_at) },
+    tailoredId: tailored?.id || null,
   });
+});
+
+// "Get code from Gmail" in ARCH in Chrome: the one-time code a site just emailed (?host=the site).
+// Pressed by hand, mail from the last 15 minutes only, a few times an hour at most.
+const otpAsks = new Map(); // user id -> times asked in the last hour
+profileRouter.get('/otp', async (req, res) => {
+  const uid = req.user.id;
+  const recent = (otpAsks.get(uid) || []).filter((t) => Date.now() - t < 3_600_000);
+  if (recent.length >= 20) return res.status(429).json({ error: 'Too many code look-ups this hour. Open Gmail instead.' });
+  otpAsks.set(uid, [...recent, Date.now()]);
+  const host = typeof req.query.host === 'string' ? req.query.host.slice(0, 200) : '';
+  try {
+    const found = await findOtp(await findUser(uid), host);
+    if (found.error) return res.status(404).json({ error: found.error });
+    res.json(found);
+  } catch (err) {
+    console.warn(`Code look-up for user ${uid} failed: ${err.message}`);
+    res.status(502).json({ error: 'Gmail could not be read just now. Open Gmail instead.' });
+  }
 });
 
 // What the open roles most often ask for that the profile lacks: what to fix first.

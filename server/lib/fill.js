@@ -124,6 +124,8 @@ export const RULES = [
   { fact: 'title', test: /current (title|role|designation|position|job)|designation|job title|current profile|present role/ },
   { fact: 'experience_years', test: /experience|\bexp\b/, not: /describe|tell|explain|detail|relevant|about|internship|projects/ },
   { fact: 'skills', test: /\bskills?\b|software|tools|technical|proficien/, not: /describe|tell|explain|rate|level|how/ },
+  // Only when a tailored letter exists; otherwise the AI pass writes one for the field.
+  { fact: 'cover_letter', test: /cover ?letter|covering letter|motivation letter|letter of motivation/ },
   { fact: 'summary', test: /\bsummary\b|about (you|yourself|me)|brief intro|introduce yourself|profile summary|headline|bio\b/ },
 ];
 
@@ -154,12 +156,40 @@ function pickExperienceOption(options, months) {
   return null;
 }
 
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+// One part of a date split over day / month / year boxes. Month dropdowns get the option that
+// names the month ("Apr", "April", "04", "4").
+function datePart(iso, part, field) {
+  const m = String(iso || '').match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/);
+  if (!m) return null;
+  const [, year, month, day] = m;
+  if (part === 'year') return field.options?.length ? pickOption(field.options, year) : year;
+  if (part === 'day') return day ? (field.options?.length ? field.options.find((o) => Number(o) === Number(day)) ?? null : day) : null;
+  if (!month) return null;
+  if (!field.options?.length) return month;
+  const n = Number(month);
+  return field.options.find((o) => Number(o) === n) ?? field.options.find((o) => String(o).toLowerCase().startsWith(MONTHS[n - 1].slice(0, 3))) ?? null;
+}
+
 function factValue(fact, facts, field) {
   const v = facts[fact];
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) return null;
+  if (field.part && (fact === 'date_of_birth' || fact === 'graduation_year')) return datePart(String(v), field.part, field);
   if (fact === 'skills' || fact === 'cities') return v.join(', ');
   if (fact === 'experience_years' && field.type === 'number') return String(Math.round(facts.experience_months / 12));
   return String(v);
+}
+
+// Other ways a custom dropdown may word a value, tried in order.
+function altsFor(fact, value, facts) {
+  if (fact === 'experience_years') {
+    const y = facts.experience_months / 12;
+    return y < 1 ? ['Fresher', 'No experience', '0-1 years', 'Less than 1 year', '0 - 1 years', '0', 'Entry level'] : y < 2 ? ['1-2 years', '1 - 2 years', '1-3 years', '1+ years', '1'] : [`${Math.floor(y)}`, `${Math.floor(y)}+ years`];
+  }
+  if (fact === 'country') return ['India', 'IN', 'Republic of India'];
+  if (fact === 'degree') return [value, String(value).replace(/\./g, ''), 'Bachelor of Architecture', "Bachelor's Degree", 'Bachelors'];
+  return [value];
 }
 
 /**
@@ -177,7 +207,13 @@ export function matchFields(fields, facts, files = { resume: false, portfolio: f
       continue;
     }
     if (field.tag === 'file') {
-      const kind = /portfolio|work sample|samples of work/.test(sig) ? 'portfolio' : /resume|\bcv\b|curriculum|upload/.test(sig) ? 'resume' : null;
+      const kind = /cover ?letter|covering letter|motivation letter|letter of motivation/.test(sig)
+        ? 'letter'
+        : /portfolio|work sample|samples of work/.test(sig)
+          ? 'portfolio'
+          : /resume|\bcv\b|curriculum|upload/.test(sig)
+            ? 'resume'
+            : null;
       if (kind && files[kind]) answers.push({ key: field.key, file: kind, source: 'file' });
       else skipped.push({ key: field.key, reason: kind ? 'no_file' : 'file' });
       continue;
@@ -192,7 +228,13 @@ export function matchFields(fields, facts, files = { resume: false, portfolio: f
       continue;
     }
     let value = factValue(fact, facts, field);
-    if (value && (field.tag === 'select' || field.tag === 'radio')) {
+    // A custom dropdown (Workday, react-select) shows its options only when opened: the value goes
+    // as it is, with other ways of saying it, and the extension picks the matching option.
+    if (value && field.custom) {
+      answers.push({ key: field.key, value, fact, source: 'profile', alts: altsFor(fact, value, facts) });
+      continue;
+    }
+    if (value && !field.part && (field.tag === 'select' || field.tag === 'radio')) {
       const option = fact === 'experience_years' ? pickExperienceOption(field.options || [], facts.experience_months) : pickOption(field.options || [], value);
       if (!option && fact === 'country') value = pickOption(field.options || [], 'india');
       else value = option;
@@ -203,7 +245,11 @@ export function matchFields(fields, facts, files = { resume: false, portfolio: f
       }
     }
     if (value && field.maxLength > 0) value = value.slice(0, field.maxLength);
-    if (value) answers.push({ key: field.key, value, fact, source: 'profile' });
+    if (!value && fact === 'cover_letter') {
+      rest.push(field);
+      continue;
+    }
+    if (value) answers.push({ key: field.key, value, fact, source: fact === 'cover_letter' ? 'tailored' : 'profile' });
     // A fact the profile lacks (no phone on the CV) is not a question for the AI either.
     else skipped.push({ key: field.key, reason: 'unknown', fact });
   }
@@ -305,8 +351,8 @@ const AI_NEVER = /salary|\bctc\b|stipend|compensation|pay expectation|notice per
  * open questions remain and `useAi` is on.
  * @returns {{ answers, skipped, ai: { asked, answered, error } }}
  */
-export async function fillFields({ profile, account, resumeText, page, fields, files, useAi = true, ask }) {
-  const facts = profileFacts(profile, account);
+export async function fillFields({ profile, account, resumeText, page, fields, files, useAi = true, ask, coverLetter = null }) {
+  const facts = { ...profileFacts(profile, account), cover_letter: coverLetter };
   const { answers, rest, skipped } = matchFields(fields, facts, files);
   const ai = { asked: 0, answered: 0, error: null };
   const forAi = [];
@@ -367,6 +413,10 @@ export function sanitizeFields(input) {
       required: f.required === true,
       maxLength: Number.isInteger(f.maxLength) && f.maxLength > 0 ? Math.min(f.maxLength, 100_000) : null,
       options: Array.isArray(f.options) ? f.options.map((o) => str(o, 120)).filter(Boolean).slice(0, 60) : [],
+      // One box of a date split over day / month / year.
+      part: ['day', 'month', 'year'].includes(f.part) ? f.part : null,
+      // A dropdown that is not a <select> (its options appear only when opened).
+      custom: f.custom === true,
     });
   }
   return out;

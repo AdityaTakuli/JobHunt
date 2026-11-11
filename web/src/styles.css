@@ -4653,3 +4653,25 @@ a.co-open:hover {
   border-radius: 5px;
   background: var(--surface-2);
 }
+
+/* Job details: tailored CV and cover letter. */
+.tailor-match {
+  margin: 0 0 6px;
+}
+.tailor-summary {
+  margin: 6px 0;
+  font-style: italic;
+}
+.tailor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.tailor-dropped {
+  margin: 6px 0;
+}
+.tailor-dropped ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

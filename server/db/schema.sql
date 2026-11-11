@@ -229,6 +229,26 @@ CREATE TABLE IF NOT EXISTS job_analyses (
   CONSTRAINT fk_analyses_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- CVs and cover letters tailored to one posting (lib/tailor.js). PDFs are drawn on request.
+CREATE TABLE IF NOT EXISTS tailored_docs (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  job_id INT UNSIGNED NULL,                  -- the ArchJobs job, when the posting is one
+  page_key CHAR(40) NULL,                    -- sha1 of the posting page's host + path otherwise
+  title VARCHAR(200) NULL,
+  company VARCHAR(200) NULL,
+  resume JSON NOT NULL,
+  cover_letter JSON NULL,
+  match_info JSON NULL,                      -- keyword match before and after
+  dropped JSON NULL,                         -- what the checks removed, and why
+  version SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  KEY idx_tailored_user_job (user_id, job_id),
+  KEY idx_tailored_user_page (user_id, page_key),
+  KEY idx_tailored_user_day (user_id, created_at),
+  CONSTRAINT fk_tailored_job FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Each person's CV + portfolio as read by the AI (lib/profile.js), for the fit score on every job.
 -- The PDFs themselves live on disk under DATA_DIR/profiles/<user id>/.
 CREATE TABLE IF NOT EXISTS profiles (

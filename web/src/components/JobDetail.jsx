@@ -8,6 +8,7 @@ import { APPLY_KIND_LABELS, CompanyAvatar, experience, JobBadges, postedLabel, S
 import { extractKeywords, highlightParts } from '../keywords.js';
 import { FitSection } from './FitBadge.jsx';
 import JobAnalysis from './JobAnalysis.jsx';
+import TailorSection from './TailorSection.jsx';
 import { DetailSkeleton } from './Skeleton.jsx';
 
 const EASE = [0.22, 1, 0.36, 1];
@@ -206,6 +207,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
       {(job.fit?.parts || !job.fit) && <FitSection fit={job.fit?.parts ? job.fit : null} />}
 
       <JobAnalysis jobId={job.id} applyUrl={job.apply_url} />
+      <TailorSection jobId={job.id} />
 
       <FocusKeywords keywords={keywords} />
 

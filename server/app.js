@@ -8,6 +8,7 @@ import { zipDirectory } from './lib/zip.js';
 import { accountRouter } from './routes/account.js';
 import { analysisRouter } from './routes/analysis.js';
 import { profileRouter } from './routes/profile.js';
+import { tailorRouter } from './routes/tailor.js';
 import { applicationsRouter } from './routes/applications.js';
 import { companiesRouter } from './routes/companies.js';
 import { firmsRouter } from './routes/firms.js';
@@ -88,6 +89,7 @@ export function createApp() {
   app.use('/api/firms', firmsRouter);
   app.use('/api/companies', companiesRouter);
   app.use('/api/profile', profileRouter);
+  app.use('/api/tailor', tailorRouter);
   // ARCH in Chrome, zipped from extension/ (unzip, then chrome://extensions → Load unpacked).
   app.get('/api/extension.zip', async (req, res, next) => {
     try {

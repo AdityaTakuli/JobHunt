@@ -177,6 +177,9 @@ export const config = {
     // Application forms one person may have the AI help fill per IST day (ARCH in Chrome). Fields
     // the rules answer straight from the CV are not counted.
     dailyFills: num(env.PROFILE_DAILY_FILLS, 40),
+    // CVs and cover letters tailored to a posting, per person per IST day.
+    dailyTailors: num(env.PROFILE_DAILY_TAILORS, 15),
+    tailorTimeoutMs: num(env.PROFILE_TAILOR_TIMEOUT_MS, 90_000),
     fillTimeoutMs: num(env.PROFILE_FILL_TIMEOUT_MS, 60_000),
   },
 
