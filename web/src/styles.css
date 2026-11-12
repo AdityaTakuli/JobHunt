@@ -171,8 +171,14 @@ textarea {
   transform: none;
 }
 
+/* "Skip to content" moves focus here: no ring around the whole page, but a bar along its top shows
+   keyboard users where they landed (WCAG 2.4.7). */
 main:focus {
   outline: none;
+  box-shadow: inset 0 3px 0 var(--focus);
+}
+main:focus:not(:focus-visible) {
+  box-shadow: none;
 }
 
 /* ---------- App shell ---------- */

@@ -187,7 +187,7 @@ function Body({ job, actions, onHidden, headingId, actionsSlot }) {
       </header>
 
       {job.is_closed && (
-        <p className="closed-note" role="status">
+        <p className="closed-note" role="status" aria-live="polite">
           <IconAlert size={16} />
           {job.closed_reason === 'deadline'
             ? 'This posting has closed: its last date to apply has passed.'

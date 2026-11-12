@@ -98,7 +98,7 @@ export default function TailorSection({ jobId }) {
         </div>
       )}
       {state.error && (
-        <p className="form-error" role="alert">
+        <p className="form-error" role="alert" aria-live="assertive">
           {state.error}
         </p>
       )}

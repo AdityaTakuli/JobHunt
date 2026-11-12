@@ -212,7 +212,7 @@ export function ApplicationDetailsCard({ state, onOpen }) {
         </dl>
       )}
       {missing.length > 0 && (
-        <p className="small details-missing" role="status">
+        <p className="small details-missing" role="status" aria-live="polite">
           Still needed: {missing.map(label).join(', ')}.
         </p>
       )}

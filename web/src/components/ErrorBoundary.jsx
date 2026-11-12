@@ -22,7 +22,7 @@ export default class ErrorBoundary extends Component {
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <div className="card empty is-centered" role="alert">
+      <div className="card empty is-centered" role="alert" aria-live="assertive">
         <h2>This page hit a problem</h2>
         <p className="small">{String(error?.message || error)}</p>
         <div className="dialog-actions" style={{ justifyContent: 'center' }}>

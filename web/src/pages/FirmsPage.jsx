@@ -275,7 +275,7 @@ export default function FirmsPage() {
       </div>
 
       {error && (
-        <p className="form-error" role="alert">
+        <p className="form-error" role="alert" aria-live="assertive">
           {error}
         </p>
       )}
@@ -290,7 +290,7 @@ export default function FirmsPage() {
       {firms && firms.length > 0 && (
         <>
           <div className="card table-wrap only-desktop">
-            <table className="table">
+            <table className="table" aria-label="Your firms">
               <thead>
                 <tr>
                   <th>Firm</th>

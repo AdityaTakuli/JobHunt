@@ -395,7 +395,7 @@ export default function JobsPage() {
     list = <JobListSkeleton count={4} />;
   } else if (status === 'error') {
     list = (
-      <div className="card empty" role="alert">
+      <div className="card empty" role="alert" aria-live="assertive">
         <h2>Couldn't load jobs</h2>
         <p>{error}</p>
         <button type="button" className="btn" onClick={reload}>

@@ -217,7 +217,7 @@ export default function ProfilePanel() {
   return (
     <div className="profile-panel">
       {!state.available && (
-        <p className="form-error" role="alert">
+        <p className="form-error" role="alert" aria-live="assertive">
           Profile reading is not set up on this server: the AI gateway is not configured.
         </p>
       )}
@@ -232,7 +232,7 @@ export default function ProfilePanel() {
         </p>
       )}
       {state.status === 'error' && (
-        <p className="form-error" role="alert">
+        <p className="form-error" role="alert" aria-live="assertive">
           <IconAlert size={16} /> {state.error}{' '}
           <button type="button" className="btn btn-sm" onClick={rebuild} disabled={!state.available}>
             Read again

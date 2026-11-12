@@ -116,7 +116,7 @@ export default function LoginPage({ onLogin, google = false, passwordLogin = tru
               </div>
             </div>
             {error && (
-              <p className="form-error" role="alert">
+              <p className="form-error" role="alert" aria-live="assertive">
                 {error}
               </p>
             )}

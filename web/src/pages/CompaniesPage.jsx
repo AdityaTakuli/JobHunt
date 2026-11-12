@@ -110,7 +110,11 @@ function CompanyCard({ company, checking, busy, onCheck }) {
           </a>
         )}
       </div>
-      {company.note && <p className="co-note">{company.note}</p>}
+      {company.note && (
+        <p className="co-note" title={company.note}>
+          {company.note}
+        </p>
+      )}
       <RoleList company={company} />
       <div className="co-foot">
         {company.tracked && <FeedStatus company={company} checking={checking} />}
@@ -234,7 +238,7 @@ export default function CompaniesPage() {
         ))}
       </div>
       {error && (
-        <p className="form-error" role="alert">
+        <p className="form-error" role="alert" aria-live="assertive">
           {error}
         </p>
       )}

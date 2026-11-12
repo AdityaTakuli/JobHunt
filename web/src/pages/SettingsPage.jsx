@@ -154,7 +154,7 @@ function PreferencesPanel() {
 
   if (!form) {
     return error ? (
-      <p className="form-error" role="alert">
+      <p className="form-error" role="alert" aria-live="assertive">
         {error}
       </p>
     ) : (
@@ -250,7 +250,7 @@ function PreferencesPanel() {
             transition={{ duration: 0.25, ease: EASE }}
           >
             {error ? (
-              <p className="save-bar-error" role="alert">
+              <p className="save-bar-error" role="alert" aria-live="assertive">
                 {error}
               </p>
             ) : (
@@ -430,7 +430,7 @@ function ActivityPanel({ system, onRefresh }) {
         <p className="set-empty">Nothing has run yet. Runs appear here after the first scheduled fetch or a “Run now”.</p>
       ) : (
         <div className="table-wrap">
-          <table className="table run-table">
+          <table className="table run-table" aria-label="Recent source runs">
             <thead>
               <tr>
                 <th>When (IST)</th>
@@ -630,7 +630,7 @@ function AccountPanel({ onLogout }) {
               anything. Application emails are read by AI to update your Tracker.
             </p>
             {gmail.error && (
-              <p className="form-error" role="alert">
+              <p className="form-error" role="alert" aria-live="assertive">
                 {gmail.error}
               </p>
             )}
@@ -646,7 +646,7 @@ function AccountPanel({ onLogout }) {
         ) : (
           <>
             {gmail?.error && (
-              <p className="form-error" role="alert">
+              <p className="form-error" role="alert" aria-live="assertive">
                 {gmail.error}
               </p>
             )}

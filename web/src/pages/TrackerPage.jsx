@@ -129,7 +129,7 @@ function Board({ apps, onMove, onEdit }) {
 function Table({ apps, onMove, onEdit }) {
   return (
     <div className="card table-wrap">
-      <table className="table">
+      <table className="table" aria-label="Your applications">
         <thead>
           <tr>
             <th>Role</th>
@@ -414,7 +414,7 @@ export default function TrackerPage() {
       )}
 
       {error && (
-        <p className="form-error" role="alert">
+        <p className="form-error" role="alert" aria-live="assertive">
           {error}
         </p>
       )}

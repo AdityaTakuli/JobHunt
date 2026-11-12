@@ -37,7 +37,7 @@ export function Dialog({ open, title, onClose, onSubmit, children, actions, erro
             </button>
           </div>
           {error && (
-            <p className="form-error" role="alert">
+            <p className="form-error" role="alert" aria-live="assertive">
               {error}
             </p>
           )}
