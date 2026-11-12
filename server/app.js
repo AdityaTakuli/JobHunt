@@ -68,6 +68,11 @@ export function createApp() {
     next();
   });
   app.use(express.json({ limit: '1mb' }));
+  // API answers (job data, the extension zip) are never search results.
+  app.use('/api', (req, res, next) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    next();
+  });
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
   app.post('/api/login', login);
@@ -110,11 +115,20 @@ export function createApp() {
 
   // React app (built by `npm run build`).
   if (fs.existsSync(WEB_DIST)) {
+    // One address per page for search engines: the .html copies redirect to the clean URLs.
+    app.get('/index.html', (req, res) => res.redirect(301, '/'));
+    app.get('/privacy.html', (req, res) => res.redirect(301, '/privacy'));
     app.use(express.static(WEB_DIST, { index: false, maxAge: '1h' }));
     // Public, for Google's consent screen and anyone not signed in.
     app.get('/privacy', (req, res) => res.sendFile(path.join(WEB_DIST, 'privacy.html')));
+    // The app routes with #hashes, so `/` is its only real page. Any other path still shows the app
+    // (an old link keeps working) but answers 404 so search engines don't index endless copies.
     app.get('/{*splat}', (req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
+      if (req.path !== '/') {
+        res.status(404);
+        res.setHeader('X-Robots-Tag', 'noindex');
+      }
       res.sendFile(path.join(WEB_DIST, 'index.html'));
     });
   } else {

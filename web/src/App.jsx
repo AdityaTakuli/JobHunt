@@ -186,7 +186,7 @@ function Shell() {
   }, [auth, refreshMeta]);
 
   useEffect(() => {
-    document.title = auth === 'in' ? `${route.label} · ArchJobs` : 'ArchJobs · Architecture & BIM jobs and application tracker';
+    document.title = auth === 'in' ? `${route.label} · ArchJobs` : 'ArchJobs · Architecture, Interiors & BIM Internships and Fresher Jobs in India';
   }, [route, auth]);
 
   const boot = (
