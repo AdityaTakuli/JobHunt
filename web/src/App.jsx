@@ -205,22 +205,24 @@ function Shell() {
     // following a bookmarked app link, or coming back from Google with an error goes to the form.
     const wantsSignIn = path === 'signin' || APP_PATHS.has(path) || authError;
     return (
-      <Suspense fallback={boot}>
-        {wantsSignIn ? (
-          <LoginPage
-            google={login.google}
-            passwordLogin={login.passwordLogin}
-            onLogin={() => {
-              window.location.hash = '#/jobs';
-              setAuth('in');
-              setWelcome(true);
-              refreshMe();
-            }}
-          />
-        ) : (
-          <HomePage google={login.google} theme={theme} onCycleTheme={cycleTheme} />
-        )}
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={boot}>
+          {wantsSignIn ? (
+            <LoginPage
+              google={login.google}
+              passwordLogin={login.passwordLogin}
+              onLogin={() => {
+                window.location.hash = '#/jobs';
+                setAuth('in');
+                setWelcome(true);
+                refreshMe();
+              }}
+            />
+          ) : (
+            <HomePage google={login.google} theme={theme} onCycleTheme={cycleTheme} />
+          )}
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 
@@ -304,9 +306,12 @@ function Shell() {
 
       <AnimatePresence>
         {welcome && (
-          <Suspense key="welcome" fallback={null}>
-            <Welcome name={meta?.displayName} meta={meta} onClose={closeWelcome} />
-          </Suspense>
+          // If the welcome screen can't load, skip it (and unlock the app behind it) rather than crash.
+          <ErrorBoundary key="welcome" fallback={null} onError={closeWelcome}>
+            <Suspense fallback={null}>
+              <Welcome name={meta?.displayName} meta={meta} onClose={closeWelcome} />
+            </Suspense>
+          </ErrorBoundary>
         )}
       </AnimatePresence>
     </MetaContext.Provider>

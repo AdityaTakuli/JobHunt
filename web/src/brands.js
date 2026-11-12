@@ -18,7 +18,8 @@ const BRANDS = {
   cbre: { color: '#006a4d', domain: 'cbre.com' },
   'wework-india': { color: '#1c4dff', domain: 'wework.co.in' },
   benoy: { color: '#c8102e', domain: 'benoy.com' },
-  dar: { color: '#006b54', domain: 'dar.com' },
+  // dar.com has no favicon the logo service can find (404 on every visit): the monogram tile only.
+  dar: { color: '#006b54' },
   jacobs: { color: '#00338d', domain: 'jacobs.com' },
   arup: { color: '#d52b1e', domain: 'arup.com' },
   arcadis: { color: '#e76a25', domain: 'arcadis.com' },
@@ -56,7 +57,7 @@ export function brandOf({ slug, name }) {
     color: brand ? brand.color : `hsl(${hueFrom(slug)} 62% 45%)`,
     // DuckDuckGo serves the firm's own site icon, and 404s for anything it does not have, which
     // is what puts the monogram back on screen.
-    logo: brand ? `https://icons.duckduckgo.com/ip3/${brand.domain}.ico` : null,
+    logo: brand?.domain ? `https://icons.duckduckgo.com/ip3/${brand.domain}.ico` : null,
     monogram: monogram(name),
   };
 }

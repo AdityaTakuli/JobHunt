@@ -30,7 +30,56 @@
       .replace(/\(?\brequired\b\)?/i, '')
       .replace(/\s*[*:]+\s*$/, '')
       .trim();
-  const send = (message) => chrome.runtime.sendMessage(message).catch(() => null);
+  // When ARCH is updated or reloaded, tabs that were already open keep this old copy of the
+  // script, and every chrome.* call then throws "Extension context invalidated" (synchronously,
+  // so .catch() never sees it). The old copy notices, stops its watchers and removes its UI; the
+  // page itself is untouched. A page reload brings in the new copy.
+  let retired = false;
+  const cleanups = [];
+  const extAlive = () => {
+    try {
+      return Boolean(chrome.runtime?.id);
+    } catch {
+      return false;
+    }
+  };
+  function retire() {
+    if (retired) return;
+    retired = true;
+    for (const stop of cleanups.splice(0)) {
+      try {
+        stop();
+      } catch {
+        // already gone
+      }
+    }
+    document.querySelectorAll('arch-in-chrome').forEach((el) => el.remove());
+  }
+  const send = (message) => {
+    if (retired || !extAlive()) {
+      retire();
+      return Promise.resolve(null);
+    }
+    try {
+      return chrome.runtime.sendMessage(message).catch(() => null);
+    } catch {
+      retire();
+      return Promise.resolve(null);
+    }
+  };
+  // ARCH's switches from chrome.storage, or the defaults when this copy is retired.
+  const settingsOf = async (defaults) => {
+    if (retired || !extAlive()) {
+      retire();
+      return defaults;
+    }
+    try {
+      return await chrome.storage.sync.get(defaults);
+    } catch {
+      if (!extAlive()) retire();
+      return defaults;
+    }
+  };
 
   // ---- Finding fields ----
 
@@ -580,6 +629,7 @@
       }, 1200);
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
+    cleanups.push(() => observer.disconnect(), () => clearTimeout(pending));
   }
 
   // ---- Moving through the form, and stopping for the person ----
@@ -643,7 +693,7 @@
     if (stepping) return;
     stepping = true;
     try {
-      const settings = await chrome.storage.sync.get({ autoNext: true });
+      const settings = await settingsOf({ autoNext: true });
       await sleep(500);
       const missing = requiredEmpty();
       const reasons = [];
@@ -1140,7 +1190,7 @@
   // Before the first page of an application: a CV and letter tailored to the posting this tab
   // came from, when that setting is on. If it fails, the stored CV is used.
   async function tailorFirst() {
-    const { autoTailor } = await chrome.storage.sync.get({ autoTailor: true });
+    const { autoTailor } = await settingsOf({ autoTailor: true });
     if (!autoTailor) return;
     const state = (await send({ type: 'tab-state' })) || {};
     const posting = state.job?.posting || postingOnPage();
@@ -1219,7 +1269,7 @@
   }
 
   async function start() {
-    const { server } = await chrome.storage.sync.get('server').catch(() => ({}));
+    const { server } = await settingsOf({ server: '' });
     const own = String(server || 'https://archjobs.velocitytechnologies.in');
     if (location.href.startsWith(own) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(#|$|\?)/.test(location.href)) {
       if (isTop) {
@@ -1250,7 +1300,7 @@
     addPickers();
     // ARCH fills when asked: the chip, the popup's button or Alt+Shift+A. Filling by itself is an
     // opt-in switch (off by default), and even then only in a tab opened from an ArchJobs Apply link.
-    const { autoFillFromArch: autoFill } = await chrome.storage.sync.get({ autoFillFromArch: false });
+    const { autoFillFromArch: autoFill } = await settingsOf({ autoFillFromArch: false });
     if (autoFill && armed) {
       run();
       return;
@@ -1259,7 +1309,7 @@
     else send({ type: 'form-seen', count });
   }
 
-  chrome.runtime.onMessage.addListener((message) => {
+  if (extAlive()) chrome.runtime.onMessage.addListener((message) => {
     switch (message?.type) {
       case 'fill':
         if (isTop) frames.clear();
@@ -1293,7 +1343,8 @@
   // Job sites change the address without reloading (Glassdoor, LinkedIn): look again when it changes.
   if (isTop) {
     let lastUrl = location.href;
-    setInterval(() => {
+    const urlTimer = setInterval(() => {
+      if (retired || !extAlive()) return retire();
       if (location.href !== lastUrl) {
         lastUrl = location.href;
         setTimeout(() => {
@@ -1302,6 +1353,7 @@
         }, 1500);
       }
     }, 1000);
+    cleanups.push(() => clearInterval(urlTimer));
   }
 
   setTimeout(start, 800);

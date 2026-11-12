@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { isStaleBuildError, reloadForNewBuild } from '../staleBuild.js';
 
 // Catches a crash inside one page so the header and navigation keep working: the page shows
 // what went wrong with a "Try again" button instead of the whole app going blank until a reload.
@@ -15,12 +16,30 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
+    // The site was updated while this tab was open: load the new version instead of showing a crash.
+    if (isStaleBuildError(error) && reloadForNewBuild()) return;
     console.error('Page crashed:', error, info?.componentStack);
+    this.props.onError?.(error);
   }
 
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+    // Optional parts (the welcome screen) pass their own fallback, often nothing at all.
+    if (this.props.fallback !== undefined) return this.props.fallback;
+    if (isStaleBuildError(error)) {
+      return (
+        <div className="card empty is-centered" role="status" aria-live="polite">
+          <h2>ArchJobs was just updated</h2>
+          <p className="small">Loading the new version…</p>
+          <div className="dialog-actions" style={{ justifyContent: 'center' }}>
+            <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
+              Reload now
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="card empty is-centered" role="alert" aria-live="assertive">
         <h2>This page hit a problem</h2>

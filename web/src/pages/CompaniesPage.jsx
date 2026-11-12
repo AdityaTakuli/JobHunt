@@ -151,6 +151,7 @@ export default function CompaniesPage() {
     () =>
       api(`/companies${type ? `?type=${type}` : ''}`)
         .then((d) => {
+          setError(''); // a load that works clears an earlier failure's message
           setCompanies(d.companies);
           setTotals(d.totals || null);
           setChecking(d.checking || []);

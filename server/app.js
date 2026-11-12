@@ -115,10 +115,29 @@ export function createApp() {
 
   // React app (built by `npm run build`).
   if (fs.existsSync(WEB_DIST)) {
+    // Browsers ask for /favicon.ico on anything without an icon link (a CV PDF, robots.txt, an error
+    // page): the app icon, rather than a 404 in every such tab's console.
+    app.get('/favicon.ico', (req, res) => {
+      res.setHeader('Cache-Control', 'public, max-age=604800');
+      res.type('png').sendFile(path.join(WEB_DIST, 'icon-192.png'));
+    });
     // One address per page for search engines: the .html copies redirect to the clean URLs.
     app.get('/index.html', (req, res) => res.redirect(301, '/'));
     app.get('/privacy.html', (req, res) => res.redirect(301, '/privacy'));
-    app.use(express.static(WEB_DIST, { index: false, maxAge: '1h' }));
+    // Built files carry a content hash in their name, so they never change: cache them for a year.
+    // Everything else (icons, robots.txt) for an hour; index.html is never cached (below).
+    app.use(
+      express.static(WEB_DIST, {
+        index: false,
+        maxAge: '1h',
+        setHeaders: (res, filePath) => {
+          if (/[\\/]assets[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        },
+      }),
+    );
+    // A built file that isn't here is from an older deploy: a plain 404 (not the app's HTML), so
+    // the old tab's loader fails cleanly and reloads to the new build (web/src/staleBuild.js).
+    app.get('/assets/{*splat}', (req, res) => res.status(404).type('text').send('Not found.'));
     // Public, for Google's consent screen and anyone not signed in.
     app.get('/privacy', (req, res) => res.sendFile(path.join(WEB_DIST, 'privacy.html')));
     // The app routes with #hashes, so `/` is its only real page. Any other path still shows the app

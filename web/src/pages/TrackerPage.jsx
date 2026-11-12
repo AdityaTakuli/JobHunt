@@ -351,7 +351,10 @@ export default function TrackerPage() {
 
   const load = useCallback(() => {
     api('/applications')
-      .then((d) => setApps(d.applications))
+      .then((d) => {
+        setApps(d.applications);
+        setError(''); // a load that works clears an earlier failure's message
+      })
       .catch((err) => setError(err.message));
   }, []);
 

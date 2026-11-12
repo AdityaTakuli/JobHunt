@@ -7,6 +7,7 @@ import JobDetail, { JobDetailPane } from '../components/JobDetail.jsx';
 import GmailBar from '../components/GmailBar.jsx';
 import JobFilters from '../components/JobFilters.jsx';
 import SearchBar from '../components/SearchBar.jsx';
+import ErrorBoundary from '../components/ErrorBoundary.jsx';
 import { JobListSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { IconMapPin, IconSearch, IconX } from '../icons.jsx';
@@ -406,9 +407,12 @@ export default function JobsPage() {
   } else if (jobs.length === 0) {
     list = (
       <div className="card empty is-centered">
-        <Suspense fallback={null}>
-          <Blueprint className="empty-drawing" duration={1.4} />
-        </Suspense>
+        {/* Decoration only: if its file can't load, leave it out rather than fail the page. */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <Blueprint className="empty-drawing" duration={1.4} />
+          </Suspense>
+        </ErrorBoundary>
         {search ? (
           hiddenByFilters ? (
             <>
