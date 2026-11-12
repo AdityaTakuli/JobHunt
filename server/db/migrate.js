@@ -201,6 +201,29 @@ async function fixNamesFromLinks() {
   }
 }
 
+// The built-in ATS term list and CV playbook, mirrored into their tables so they can be seen and
+// extended in the database. Only 'seed' rows are overwritten; rows added by hand are left alone.
+async function seedAtsData() {
+  const { ATS_TERMS } = await import('../data/atsTerms.js');
+  const { CV_EXAMPLES } = await import('../data/cvPlaybook.js');
+  const now = new Date();
+  const keep = (col) => `${col} = IF(source = 'seed', VALUES(${col}), ${col})`;
+  if (ATS_TERMS.length) {
+    await query(
+      `INSERT INTO ats_terms (label, kind, disciplines, aliases, source, updated_at) VALUES ?
+       ON DUPLICATE KEY UPDATE ${['kind', 'disciplines', 'aliases', 'updated_at'].map(keep).join(', ')}`,
+      [ATS_TERMS.map((t) => [t.label, t.kind, JSON.stringify(t.disciplines), JSON.stringify(t.aliases), 'seed', now])],
+    );
+  }
+  if (CV_EXAMPLES.length) {
+    await query(
+      `INSERT INTO cv_examples (ex_key, kind, disciplines, tags, before_text, after_text, note, source, updated_at) VALUES ?
+       ON DUPLICATE KEY UPDATE ${['kind', 'disciplines', 'tags', 'before_text', 'after_text', 'note', 'updated_at'].map(keep).join(', ')}`,
+      [CV_EXAMPLES.map((e) => [e.key, e.kind, JSON.stringify(e.disciplines), JSON.stringify(e.tags), e.before, e.after, e.note || null, 'seed', now])],
+    );
+  }
+}
+
 export async function migrate() {
   const statements = schemaStatements(await fs.readFile(schemaPath, 'utf8'));
   for (const statement of statements) {
@@ -215,6 +238,7 @@ export async function migrate() {
   await fixNamesFromLinks();
   await syncCompanies();
   await requeueMislabeled();
+  await seedAtsData();
   return statements.length;
 }
 

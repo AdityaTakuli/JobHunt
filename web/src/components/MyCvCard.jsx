@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { formatDateTime } from '../format.js';
 import { IconRefresh, IconSparkle } from '../icons.jsx';
+import { AtsCheck } from './TailorSection.jsx';
 
 // Profile page: "My CV", a detailed, ATS-friendly CV written from her CV, portfolio and
 // application details (server lib/tailor.js with no posting). ARCH in Chrome attaches it when no
@@ -67,6 +68,7 @@ export default function MyCvCard({ hasResume, ready }) {
       {cv && !state.busy && (
         <>
           {cv.resume?.headline && <p className="small">{cv.resume.headline}</p>}
+          <AtsCheck quality={cv.match?.quality} />
           <div className="tailor-actions">
             <a className="btn btn-primary btn-sm" href={cv.cv_url} target="_blank" rel="noopener noreferrer">
               View CV (PDF)

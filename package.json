@@ -15,7 +15,8 @@
     "start": "node server/index.js",
     "migrate": "node server/db/migrate.js",
     "task": "node server/tasks/run.js",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "eval:ats": "node test/eval/atsEval.js"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",

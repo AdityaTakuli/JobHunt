@@ -11,6 +11,7 @@ import { jobUrlPatterns, MIN_POSTING, postingFromJsonLd } from '../lib/jobPage.j
 import { LlmError } from '../lib/llm.js';
 import { askJson, profileAvailable } from '../lib/profileBuild.js';
 import { getRow } from '../lib/profileStore.js';
+import { loadAtsData } from '../lib/atsKeywords.js';
 import { contactOf, GENERAL_KEY, renderPdf, tailor, TAILOR_VERSION } from '../lib/tailor.js';
 import { istDateString, startOfIstDay } from '../lib/time.js';
 
@@ -128,6 +129,7 @@ tailorRouter.post('/', async (req, res) => {
   if (!inFlight.has(flightKey)) {
     const today = istDateString();
     const run = (async () => {
+      await loadAtsData(query);
       const result = await tailor({
         profile,
         resumeText: profileRow.resume_text ? String(profileRow.resume_text) : '',

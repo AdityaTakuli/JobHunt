@@ -1,0 +1,75 @@
+{
+  "people": {
+    "arch": {
+      "resumeText": "MEERA NAIR | meera.sample@example.com | +91 90000 00001 | Pune. Final-year B.Arch student, Sample College of Architecture, Pune (2022-2027), aggregate 81.5% through Year IV. Experience: Architecture Intern, Studio Sample Associates, Pune, June-November 2025 (6 months): prepared working drawings and door and window schedules for a residential bungalow in Revit; built the Revit model and Revit families for furniture; attended site visits and recorded issues for the structural consultant; produced renders in Lumion for client presentations. Projects: Riverfront Library (Semester VII, individual): site analysis, zoning, plans, sections and a timber roof detail; drawings in AutoCAD and model in Revit. Mill Workers Housing (Semesters V-VI, group of three): cluster plans, unit plans and massing studies in SketchUp; renders in Enscape. Heritage documentation of a wada in Pune (Semester IV): measured drawings and photographic survey. Skills: Revit, AutoCAD, SketchUp, Lumion, Enscape, Photoshop, InDesign, BIM modelling, clash detection (basic, Navisworks course), working drawings, detailing, site analysis. Certifications: Autodesk Revit - Beginner to Advanced, Udemy, 2025.",
+      "profile": {
+        "name": "MEERA NAIR", "discipline": "Architecture", "stage": "student", "graduation_year": 2027, "experience_months": 6,
+        "education": [{ "degree": "B.Arch", "institution": "Sample College of Architecture, Pune", "year": 2027, "score": "81.5%" }],
+        "experience": [{ "role": "Architecture Intern", "firm": "Studio Sample Associates", "months": 6, "what": "Prepared working drawings and door and window schedules for a residential bungalow in Revit; built the Revit model and furniture families; site visits; Lumion renders for client presentations." }],
+        "software": [{ "name": "Revit", "level": "listed" }, { "name": "AutoCAD", "level": "listed" }, { "name": "SketchUp", "level": "listed" }, { "name": "Lumion", "level": "listed" }, { "name": "Enscape", "level": "listed" }, { "name": "Photoshop", "level": "listed" }, { "name": "InDesign", "level": "listed" }, { "name": "Navisworks", "level": "listed" }],
+        "skills": ["BIM modelling", "Clash detection", "Working drawings", "Detailing", "Site analysis"],
+        "projects": [{ "title": "Riverfront Library", "typology": "Institutional", "academic": true, "tools": ["AutoCAD", "Revit"], "what": "Site analysis, zoning, plans, sections and a timber roof detail." }, { "title": "Mill Workers Housing", "typology": "Residential", "academic": true, "tools": ["SketchUp", "Enscape"], "what": "Cluster plans, unit plans and massing studies." }],
+        "certifications": ["Autodesk Revit - Beginner to Advanced, Udemy, 2025"], "coa": false, "summary": "", "cities": ["Pune"]
+      },
+      "details": { "name": "Meera Nair", "email": "meera.sample@example.com", "city": "Pune", "discipline": "Architecture", "degree": "B.Arch", "institution": "Sample College of Architecture, Pune", "graduation_year": "2027", "score": "81.5%", "languages": "English, Hindi, Marathi" }
+    },
+    "interiors": {
+      "resumeText": "",
+      "profile": {
+        "name": "Sana Qureshi", "discipline": "Interior design", "stage": "graduate", "graduation_year": 2026, "experience_months": 0,
+        "education": [{ "degree": "B.Des Interior Design", "institution": "Sample Institute of Design, Delhi", "year": 2026 }],
+        "experience": [], "software": [{ "name": "SketchUp", "level": "shown" }, { "name": "AutoCAD", "level": "shown" }, { "name": "V-Ray", "level": "shown" }, { "name": "Photoshop", "level": "shown" }],
+        "skills": ["Rendering", "Detailing", "Space planning"], "projects": [], "certifications": [], "coa": false, "summary": "",
+        "portfolio": { "projects": ["Courtyard Cafe", "Two-bedroom Apartment", "Boutique Retail Store"] }
+      },
+      "pages": [
+        { "page": 2, "project": "Courtyard Cafe", "typology": "Hospitality", "scale": "small", "drawings": ["plan", "section", "render"], "software": ["SketchUp", "V-Ray"], "process": true, "technical": false, "role": "Individual project", "note": "Mood board of terrazzo and cane finishes; furniture layout for 40 covers" },
+        { "page": 3, "project": "Courtyard Cafe", "typology": "Hospitality", "scale": "small", "drawings": ["detail"], "software": ["AutoCAD"], "process": false, "technical": true, "role": null, "note": "Bar counter joinery detail with sections and material callouts" },
+        { "page": 5, "project": "Two-bedroom Apartment", "typology": "Residential", "scale": "small", "drawings": ["plan", "elevation", "render"], "software": ["SketchUp", "V-Ray", "Photoshop"], "process": true, "technical": true, "role": "Individual project", "note": "Wardrobe and kitchen elevations, material palette and lighting layout" },
+        { "page": 7, "project": "Boutique Retail Store", "typology": "Commercial", "scale": "small", "drawings": ["plan", "render"], "software": ["SketchUp"], "process": false, "technical": false, "role": "Team of two", "note": "Display fixture concept and customer circulation plan" }
+      ],
+      "details": { "name": "Sana Qureshi", "email": "sana.sample@example.com", "city": "Delhi", "discipline": "Interior design", "degree": "B.Des Interior Design", "institution": "Sample Institute of Design, Delhi", "graduation_year": "2026" }
+    },
+    "civil": {
+      "resumeText": "RAVI KUMAR | ravi.sample@example.com | Nagpur. B.Tech Civil Engineering, Sample Institute of Technology, Nagpur, 2026, CGPA 7.9. Internship: Site Engineer Intern, Sample Constructions Pvt Ltd, Nagpur, May-July 2025: supervised slab and column casting for a G+7 residential building; checked reinforcement against the bar bending schedule (BBS); maintained quality control records for concrete cube tests; took off concrete and steel quantities for RA bills. Academic project: Analysis and design of a G+4 school building - modelled and analysed the frame in STAAD.Pro for dead, live and seismic loads (IS 1893), designed beams, columns and isolated footings to IS 456, prepared structural drawings in AutoCAD. Mini project: road alignment survey with total station. Software: STAAD.Pro, AutoCAD, MS Excel, MS Project (basic). Skills: RCC design, site execution, quantity surveying, surveying.",
+      "profile": {
+        "name": "RAVI KUMAR", "discipline": "Civil engineering", "stage": "graduate", "graduation_year": 2026, "experience_months": 3,
+        "education": [{ "degree": "B.Tech Civil Engineering", "institution": "Sample Institute of Technology, Nagpur", "year": 2026, "score": "CGPA 7.9" }],
+        "experience": [{ "role": "Site Engineer Intern", "firm": "Sample Constructions Pvt Ltd", "months": 3, "what": "Supervised slab and column casting for a G+7 residential building; checked reinforcement against the BBS; quality control records for cube tests; quantity take-off for RA bills." }],
+        "software": [{ "name": "STAAD.Pro", "level": "listed" }, { "name": "AutoCAD", "level": "listed" }, { "name": "Excel", "level": "listed" }, { "name": "MS Project", "level": "listed" }],
+        "skills": ["RCC design", "Site execution", "Quantity surveying", "Surveying"],
+        "projects": [{ "title": "Analysis and design of a G+4 school building", "academic": true, "tools": ["STAAD.Pro", "AutoCAD"], "what": "Frame analysis for dead, live and seismic loads (IS 1893); beams, columns and isolated footings to IS 456; structural drawings." }, { "title": "Road alignment survey", "academic": true, "tools": [], "what": "Survey with total station." }],
+        "certifications": [], "coa": false, "summary": "", "cities": ["Nagpur"]
+      },
+      "details": { "name": "Ravi Kumar", "city": "Nagpur", "discipline": "Civil engineering", "degree": "B.Tech Civil Engineering", "institution": "Sample Institute of Technology, Nagpur", "graduation_year": "2026", "score": "CGPA 7.9" }
+    },
+    "mech": {
+      "resumeText": "ARJUN MEHTA | arjun.sample@example.com | Chennai. B.E. Mechanical Engineering, Sample Engineering College, Chennai, 2026, CGPA 8.3. Internship: Design Trainee, Sample Auto Components, Chennai, June-July 2025: modelled brackets and a pump housing in SolidWorks; prepared manufacturing drawings with GD&T; ran static FEA in ANSYS on a mounting bracket and suggested a fillet change. Final year project: Design of a solar-powered water pump (team of four) - 3D CAD modelling in SolidWorks, CFD of the impeller in ANSYS Fluent, prototype assembly. Skills: SolidWorks, AutoCAD, ANSYS, MATLAB (basic), GD&T, FEA, CFD, manufacturing drawings. Certification: Certified SolidWorks Associate (CSWA), 2025.",
+      "profile": {
+        "name": "ARJUN MEHTA", "discipline": "Mechanical engineering", "stage": "graduate", "graduation_year": 2026, "experience_months": 2,
+        "education": [{ "degree": "B.E. Mechanical Engineering", "institution": "Sample Engineering College, Chennai", "year": 2026, "score": "CGPA 8.3" }],
+        "experience": [{ "role": "Design Trainee", "firm": "Sample Auto Components", "months": 2, "what": "Modelled brackets and a pump housing in SolidWorks; manufacturing drawings with GD&T; static FEA in ANSYS on a mounting bracket." }],
+        "software": [{ "name": "SolidWorks", "level": "listed" }, { "name": "AutoCAD", "level": "listed" }, { "name": "ANSYS", "level": "listed" }, { "name": "MATLAB", "level": "listed" }],
+        "skills": ["GD&T", "FEA", "CFD"],
+        "projects": [{ "title": "Design of a solar-powered water pump", "academic": true, "tools": ["SolidWorks", "ANSYS Fluent"], "what": "3D CAD modelling, CFD of the impeller, prototype assembly. Team of four." }],
+        "certifications": ["Certified SolidWorks Associate (CSWA), 2025"], "coa": false, "summary": "", "cities": ["Chennai"]
+      },
+      "details": { "name": "Arjun Mehta", "city": "Chennai", "discipline": "Mechanical engineering", "degree": "B.E. Mechanical Engineering", "institution": "Sample Engineering College, Chennai", "graduation_year": "2026", "score": "CGPA 8.3" }
+    }
+  },
+  "postings": {
+    "bim-intern": { "title": "BIM Intern - Architecture", "company": "Sample Global Design", "description": "We are looking for a BIM Intern to join our Pune studio. Responsibilities: develop Building Information Modelling (BIM) models in Autodesk Revit to LOD 300; create and manage Revit families; support clash detection and coordination in Navisworks; prepare construction documentation and working drawings; assist with presentation renders. Requirements: final-year B.Arch student or recent graduate; proficiency in Revit and AutoCAD is required; working knowledge of Navisworks; familiarity with Dynamo is a plus; strong attention to detail and communication." },
+    "junior-architect": { "title": "Junior Architect", "company": "Sample Architects", "description": "Junior Architect for residential and institutional projects. You will prepare working drawings, GFC drawings and municipal approval drawings, coordinate with structural and MEP consultants, attend site visits, and produce 3D views and renders for client presentations. Must have B.Arch; proficiency in AutoCAD and SketchUp; Revit preferred; knowledge of building bye-laws; good presentation skills. 0-2 years of experience." },
+    "interior-designer": { "title": "Junior Interior Designer", "company": "Sample Interiors Studio", "description": "Hiring a Junior Interior Designer for cafe, retail and residential fit-outs. Responsibilities: space planning and furniture layouts, mood boards and material selection, joinery details and shop drawings, 3D visualisation in SketchUp with V-Ray or Enscape renders, preparing BOQs. Requirements: B.Des or diploma in interior design; AutoCAD and SketchUp required; Photoshop; good client presentation skills." },
+    "site-engineer": { "title": "Graduate Site Engineer - Civil", "company": "Sample Infra Projects", "description": "Graduate Site Engineer for high-rise residential projects. Duties: site execution and supervision of RCC works, checking reinforcement against bar bending schedules (BBS), quality control (QA/QC) and cube testing records, quantity take-off and preparation of RA bills, daily progress reports. Requirements: B.Tech/B.E. Civil; AutoCAD required; knowledge of IS 456; STAAD Pro is an advantage; Primavera P6 or MS Project for planning is a plus; willingness to work on site." },
+    "design-engineer": { "title": "Graduate Design Engineer - Mechanical", "company": "Sample Engineering Pvt Ltd", "description": "Graduate Engineer Trainee (Design). You will create 3D CAD models and assemblies in SolidWorks or CATIA, prepare manufacturing drawings with GD&T, perform FEA in ANSYS to validate parts, and support design for manufacturing (DFM) reviews. Requirements: B.E./B.Tech Mechanical; SolidWorks required; ANSYS and FEA knowledge required; CFD exposure is a plus; MATLAB preferred; CSWA certification an advantage." }
+  },
+  "pairs": [
+    ["arch", "bim-intern"],
+    ["arch", "junior-architect"],
+    ["interiors", "interior-designer"],
+    ["civil", "site-engineer"],
+    ["mech", "design-engineer"],
+    ["civil", "junior-architect"]
+  ]
+}

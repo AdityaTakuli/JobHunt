@@ -13,11 +13,13 @@
 // standard section names, plain bullets, no tables, images or text boxes, and the title, author
 // and keywords set in the file's metadata. Up to two A4 pages (one when it fits).
 
-import { findSkills } from '../../shared/skills.js';
+import { disciplineKey, findTerms, jobKeywords, ownKeywords } from './atsKeywords.js';
+import { pickExamples, playbookPrompt } from './atsPlaybook.js';
+import { scoreCv } from './atsQuality.js';
 import { cleanDetails } from './details.js';
 import { profileFacts } from './fill.js';
 
-export const TAILOR_VERSION = 2;
+export const TAILOR_VERSION = 3;
 // tailored_docs.page_key of the general CV (no posting): one per person, newest wins.
 export const GENERAL_KEY = 'general';
 
@@ -157,7 +159,9 @@ const has = (source, w) => source.includes(` ${w} `) || source.includes(` ${w}s 
 // Every word of `name` (ignoring tiny ones) appears in the source text.
 function foundIn(source, name) {
   const words = wordsOf(name);
-  return words.length > 0 && words.every((w) => has(source, w));
+  // A name with no long word ("L&T", "AB Studio") must appear as a whole.
+  if (!words.length) return Boolean(norm(name)) && source.includes(` ${norm(name)} `);
+  return words.every((w) => has(source, w));
 }
 
 // Most words of a sentence appear in the source (for certifications and achievements, which the
@@ -174,6 +178,37 @@ const numbersIn = (s) => (String(s).match(/\d+(?:[.,]\d+)?/g) || []).map((n) => 
 const STOCK = /I am writing to (express|apply)|I am (excited|thrilled|delighted) to apply|passionate|esteemed|dynamic team|perfect fit|hit the ground running|team player|go-getter|synergy|I believe I would be a great|hard-?working|results-driven|strong foundation/i;
 
 const splitSentences = (s) => s.split(/(?<=[.!?])\s+/).filter(Boolean);
+
+// Degree names, written the ways CVs and postings write them. Case-sensitive on purpose: "be" and
+// "me" are words, "B.E." and "M.E." are degrees.
+const DEGREE_RE = /\b(?:B\.?\s?Tech|M\.?\s?Tech|B\.?\s?Arch|M\.?\s?Arch|B\.?\s?Des|M\.?\s?Des|B\.?\s?Plan|M\.?\s?Plan|B\.\s?E\.?|M\.\s?E\.?|BE(?=\s)|ME(?=\s)|B\.?\s?Sc|M\.?\s?Sc|Diploma)\b\.?/g;
+const DEGREE_KEYS = [
+  [/^b\.?\s?tech/i, 'btech'],
+  [/^m\.?\s?tech/i, 'mtech'],
+  [/^b\.?\s?arch/i, 'barch'],
+  [/^m\.?\s?arch/i, 'march'],
+  [/^b\.?\s?des/i, 'bdes'],
+  [/^m\.?\s?des/i, 'mdes'],
+  [/^b\.?\s?plan/i, 'bplan'],
+  [/^m\.?\s?plan/i, 'mplan'],
+  [/^b\.?\s?e\b|^be$/i, 'be'],
+  [/^m\.?\s?e\b|^me$/i, 'me'],
+  [/^b\.?\s?sc/i, 'bsc'],
+  [/^m\.?\s?sc/i, 'msc'],
+  [/^diploma/i, 'diploma'],
+  [/bachelor of technology/i, 'btech'],
+  [/bachelor of engineering/i, 'be'],
+  [/bachelor of architecture/i, 'barch'],
+  [/bachelor of design/i, 'bdes'],
+];
+export const degreeKey = (s) => DEGREE_KEYS.find(([re]) => re.test(String(s || '').trim()))?.[1] || null;
+// Does the person's material name this degree anywhere?
+function degreeHeld(key, sourceText) {
+  const found = new Set();
+  for (const m of String(sourceText).matchAll(DEGREE_RE)) found.add(degreeKey(m[0]));
+  for (const [re, k] of DEGREE_KEYS) if (re.source.startsWith('bachelor') && re.test(sourceText)) found.add(k);
+  return found.has(key);
+}
 
 /** Education as the profile read it, with what she typed in her details on top. */
 export function educationOf(profile, details) {
@@ -271,11 +306,23 @@ export function checkTailored(value, { profile, resumeText, facts, pages = null,
   const certifications = strs(value.certifications, 8, 160).filter((c) => keep(mostlyIn(source, c, 0.6) && numbersOk(c), `certification ${short(c)}`));
   const achievements = strs(value.achievements, 6, 220).filter((a) => keep(mostlyIn(source, a, 0.5) && numbersOk(a), `achievement ${short(a)}`));
 
-  // Summary and headline: sentences with a number the sources don't have, or stock phrases, go.
-  const summary = splitSentences(str(value.summary, 700))
-    .filter((s) => keep(numbersOk(s), `a summary line with a number the sources don't have (${short(s)})`) && keep(!STOCK.test(s), `stock line ${short(s)}`))
-    .join(' ');
-  const headline = numbersOk(str(value.headline, 140)) ? str(value.headline, 140) : '';
+  // Summary and headline: sentences with a number the sources don't have, or stock phrases, go;
+  // a degree they don't hold (the posting's "B.E./B.Tech" copied onto a B.E.) becomes their own.
+  const ownDegree = facts.degree || profile.education?.[0]?.degree || '';
+  const fixDegree = (s, where) =>
+    s.replace(DEGREE_RE, (m) => {
+      if (degreeHeld(degreeKey(m), sourceText)) return m;
+      const short = ownDegree.match(DEGREE_RE)?.[0];
+      dropped.push(`degree "${m}" in the ${where} (they hold ${ownDegree || 'another degree'})`);
+      return short || 'Graduate';
+    });
+  const summary = fixDegree(
+    splitSentences(str(value.summary, 700))
+      .filter((s) => keep(numbersOk(s), `a summary line with a number the sources don't have (${short(s)})`) && keep(!STOCK.test(s), `stock line ${short(s)}`))
+      .join(' '),
+    'summary',
+  );
+  const headline = numbersOk(str(value.headline, 140)) ? fixDegree(str(value.headline, 140), 'headline') : '';
   if (!summary && !experience.length && !projects.length) return null;
 
   const letter = value.cover_letter && typeof value.cover_letter === 'object' ? value.cover_letter : {};
@@ -343,9 +390,10 @@ const resumeAsText = (r) => {
  * `missing` are ones the person doesn't have at all: tailoring can't and won't add them.
  */
 export function keywordMatch(postingText, resumeText, tailoredResume, profile) {
-  const asked = [...new Set(findSkills(postingText).map((s) => s.label))];
+  // Soft skills ("communication") are left out: every CV can claim them, so they prove nothing.
+  const asked = [...new Set(findTerms(postingText).filter((t) => t.kind !== 'soft').map((s) => s.label))];
   if (!asked.length) return { asked: [], before: null, after: null, missing: [] };
-  const hasSet = (text) => new Set(findSkills(text).map((s) => s.label));
+  const hasSet = (text) => new Set(findTerms(text).map((s) => s.label));
   // What the profile says, for CVs read before the text was kept (and for what she owns at all).
   const profileText = [
     (profile.software || []).map((s) => s.name).join(', '),
@@ -635,17 +683,106 @@ export async function renderPdf(kind, { resume, letter, contact = {}, posting = 
  * posting = null makes a general CV.
  * @returns { resume, cover_letter, dropped, match }
  */
-export async function tailor({ profile, resumeText, posting, pages = null, details = null, account = {}, ask }) {
+// Everything the person's own files and details say: what they really have.
+export function ownedTextOf({ profile, resumeText, pages, details }) {
+  return [resumeText, JSON.stringify(profile || {}), JSON.stringify(portfolioProjects(pages)), JSON.stringify(cleanDetails(details || {}))].join('\n');
+}
+
+// The keyword brief for the prompt: what the posting asks for, in its own words, and whether the
+// person has each one. Worked out by code, so a weak model gets it right too.
+export function keywordBrief(asked, ownedText, general) {
+  if (!asked.length) return null;
+  const owned = new Set(findTerms(ownedText).map((t) => t.label));
+  const have = asked.filter((k) => owned.has(k.label) && k.kind !== 'qualification');
+  const lack = asked.filter((k) => !owned.has(k.label) && k.kind !== 'soft' && k.kind !== 'qualification');
+  const fmt = (k) => `"${k.surface || k.label}"${k.required ? ' (required)' : ''}`;
+  return [
+    general
+      ? `ATS keywords: the person's own tools and skills for their field, most important first. Show every one in the skills list, and in a bullet where the sources describe that work: ${have.map(fmt).join(', ')}.`
+      : `ATS keywords the posting asks for that the person really has, most important first. Use each one with exactly this wording (ATS systems match words literally): in the skills list, and in a bullet where the sources describe that work: ${have.map(fmt).join(', ') || '(none)'}.`,
+    lack.length && !general ? `Asked for but NOT in the person's files, so leave them out entirely: ${lack.map(fmt).join(', ')}.` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+export const REVISE_SYSTEM_PROMPT = `${TAILOR_SYSTEM_PROMPT}
+
+You are now revising a CV you wrote. A checker found the problems listed. Fix every one of them
+while keeping every hard rule above (never add anything the sources don't have). Reply with the
+whole CV again as one JSON object in the same shape, cover_letter included.`;
+
+/**
+ * Writes the CV (and, with a posting, the cover letter) with `ask` (profileBuild.askJson), in up to
+ * two passes: write, then score with code (lib/atsQuality.js) and send the problems back once.
+ * The better-scoring version is kept. posting = null makes a general CV.
+ * options: { playbook: true, revise: true } (both on in the app; the evaluation turns them off).
+ * @returns { resume, cover_letter, dropped, match: { ...keywordMatch, quality } }
+ */
+export async function tailor({ profile, resumeText, posting, pages = null, details = null, account = {}, ask, options = {} }) {
+  const { playbook = true, revise = true } = options;
   const facts = profileFacts(profile, account, details);
   posting ||= { title: '', company: '', description: '' };
-  const checked = await ask({
-    system: TAILOR_SYSTEM_PROMPT,
-    user: tailorUserPrompt({ profile, resumeText, posting, facts, pages }),
-    validate: (v) => checkTailored(v, { profile, resumeText, facts, pages, details }),
-    maxOutputTokens: 4_000,
-  });
+  const general = !posting.title && !posting.description;
+  const ownedText = ownedTextOf({ profile, resumeText, pages, details });
+  const discipline = disciplineKey(facts.discipline || facts.degree || profile.discipline || '');
+  const asked = general ? ownKeywords(ownedText, discipline) : jobKeywords(posting);
+  const owned = new Set(findTerms(ownedText).map((t) => t.label));
+
+  const base = tailorUserPrompt({ profile, resumeText, posting, facts, pages });
+  const brief = keywordBrief(asked, ownedText, general);
+  const examples = playbook ? playbookPrompt(pickExamples({ discipline, labels: [...asked.map((k) => k.label), ...owned] })) : null;
+  const user = [base, brief, examples].filter(Boolean).join('\n\n');
+  const validate = (v) => checkTailored(v, { profile, resumeText, facts, pages, details });
+
+  const first = await ask({ system: TAILOR_SYSTEM_PROMPT, user, validate, maxOutputTokens: 4_000 });
+  const q1 = scoreCv(first.resume, { asked, ownedText, name: facts.name });
+  let chosen = first;
+  let q = q1;
+  let passes = 1;
+  if (revise && q1.problems.length) {
+    try {
+      const previous = { ...first.resume, cover_letter: first.cover_letter };
+      for (const k of ['version', 'name', 'education', 'languages', 'student']) delete previous[k];
+      const second = await ask({
+        system: REVISE_SYSTEM_PROMPT,
+        user: `${user}\n\nYour previous CV:\n${JSON.stringify(previous)}\n\nProblems to fix:\n${q1.problems.map((p, i) => `${i + 1}. ${p}`).join('\n')}`,
+        validate,
+        maxOutputTokens: 4_000,
+      });
+      passes = 2;
+      const q2 = scoreCv(second.resume, { asked, ownedText, name: facts.name });
+      if (q2.score >= q1.score) {
+        chosen = { ...second, dropped: [...new Set([...first.dropped, ...second.dropped])] };
+        q = q2;
+      }
+    } catch {
+      // The revision failed (busy model, bad JSON): the first version stands.
+    }
+  }
+  // Last, with code: posting keywords the person provably has (in their own files) that the CV
+  // still doesn't show go into the skills list, in the posting's spelling. Free models sometimes
+  // ignore the instruction twice; this makes the keyword match not depend on them.
+  if (q.missingOwned.length) {
+    const resume = structuredClone(chosen.resume);
+    const add = asked.filter((k) => q.missingOwned.includes(k.surface || k.label) && (k.kind === 'tool' || k.kind === 'skill' || k.kind === 'standard'));
+    for (const k of add) {
+      const groupName = k.kind === 'tool' ? /software|tools?/i : /technical|skills?|design|site/i;
+      let group = resume.skills.find((g) => groupName.test(g.group)) || resume.skills.at(-1);
+      if (!group) resume.skills.push((group = { group: k.kind === 'tool' ? 'Software' : 'Technical', items: [] }));
+      if (!group.items.some((i) => i.toLowerCase() === (k.surface || k.label).toLowerCase())) group.items.push(k.surface || k.label);
+    }
+    if (add.length) {
+      chosen = { ...chosen, resume };
+      q = scoreCv(resume, { asked, ownedText, name: facts.name });
+    }
+  }
   const postingText = posting.description || posting.title || '';
-  return { ...checked, match: postingText ? keywordMatch(postingText, resumeText, checked.resume, profile) : null };
+  const match = postingText ? keywordMatch(postingText, resumeText, chosen.resume, profile) : { asked: [], before: null, after: null, missing: [] };
+  return {
+    ...chosen,
+    match: { ...match, quality: { score: q.score, first: q1.score, coverage: q.coverage, passes, missing: q.missingOwned, issues: q.issues.slice(0, 12) } },
+  };
 }
 
 export const contactOf = (profile, account = {}, details = null) => {

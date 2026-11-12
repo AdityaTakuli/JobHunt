@@ -291,3 +291,33 @@ CREATE TABLE IF NOT EXISTS profiles (
   built_at DATETIME NULL,
   updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ATS keywords (lib/atsKeywords.js): tools, skills, qualifications and standards postings ask for,
+-- with the other ways they are written. Rows with source 'seed' mirror server/data/atsTerms.js
+-- and are refreshed on every start; add rows with any other source to extend the list.
+CREATE TABLE IF NOT EXISTS ats_terms (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  label VARCHAR(80) NOT NULL,
+  kind VARCHAR(16) NOT NULL,                 -- tool / skill / qualification / standard / soft
+  disciplines JSON NOT NULL,                 -- ["civil", "architecture"] or ["all"]
+  aliases JSON NOT NULL,                     -- other spellings, acronyms, long forms
+  source VARCHAR(16) NOT NULL DEFAULT 'seed',
+  updated_at DATETIME NOT NULL,
+  UNIQUE KEY uq_ats_label (label)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The CV playbook (lib/atsPlaybook.js): weak/strong example lines shown to the AI as a style guide.
+-- 'seed' rows mirror server/data/cvPlaybook.js; add rows with another source to extend it.
+CREATE TABLE IF NOT EXISTS cv_examples (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  ex_key VARCHAR(40) NOT NULL,
+  kind VARCHAR(12) NOT NULL,                 -- bullet / project / summary
+  disciplines JSON NOT NULL,
+  tags JSON NOT NULL,                        -- ATS term labels the example is about
+  before_text TEXT NOT NULL,
+  after_text TEXT NOT NULL,
+  note VARCHAR(300) NULL,
+  source VARCHAR(16) NOT NULL DEFAULT 'seed',
+  updated_at DATETIME NOT NULL,
+  UNIQUE KEY uq_cv_example (ex_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

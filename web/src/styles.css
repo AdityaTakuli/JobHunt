@@ -4978,3 +4978,31 @@ dialog.dialog:has(.details-form) {
     padding-inline: 8px;
   }
 }
+
+/* ATS check under a written CV (TailorSection, My CV). */
+.ats-check {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+}
+.ats-check p {
+  margin: 0;
+}
+.ats-check.is-good {
+  border-left-color: var(--success, #15803d);
+}
+.ats-check.is-ok {
+  border-left-color: var(--warning, #b45309);
+}
+.ats-check.is-low {
+  border-left-color: var(--danger, #b91c1c);
+}
+.ats-check details {
+  margin-top: 4px;
+}
+.ats-check ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

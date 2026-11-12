@@ -7,6 +7,32 @@ import { IconCheck, IconRefresh, IconSparkle } from '../icons.jsx';
 // (server lib/tailor.js). Shows the keyword match before and after, what the posting asks for
 // that she doesn't have (left out, never invented), and what the checks removed.
 
+// The code check run on the written CV (server lib/atsQuality.js): keywords she has that it shows,
+// strong bullets, standard sections. Shown so she can see what an ATS would see.
+export function AtsCheck({ quality }) {
+  if (!quality) return null;
+  const tone = quality.score >= 85 ? 'good' : quality.score >= 65 ? 'ok' : 'low';
+  return (
+    <div className={`ats-check is-${tone}`}>
+      <p className="small">
+        <strong>ATS check: {quality.score}/100</strong>
+        {quality.passes > 1 && quality.first != null && quality.first !== quality.score ? <span className="muted"> (first draft {quality.first}, revised once)</span> : null}
+        {quality.coverage != null && <span className="muted"> · shows {quality.coverage}% of the matching keywords you have</span>}
+      </p>
+      {quality.issues?.length > 0 && (
+        <details className="small">
+          <summary>{quality.issues.length} thing{quality.issues.length === 1 ? '' : 's'} still to improve</summary>
+          <ul>
+            {quality.issues.map((i) => (
+              <li key={i}>{i}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function letterText(letter) {
   return letter ? [letter.greeting, ...letter.paragraphs, letter.sign_off].join('\n\n') : '';
 }
@@ -89,6 +115,7 @@ export default function TailorSection({ jobId }) {
               <strong>Asked for, not on your CV:</strong> {m.missing.join(', ')}. Left out rather than claimed; see "Your fit" for how to cover them.
             </p>
           )}
+          <AtsCheck quality={m?.quality} />
           {t.resume?.summary && <p className="small muted tailor-summary">“{t.resume.summary}”</p>}
           <div className="tailor-actions">
             <a className="btn btn-primary btn-sm" href={t.cv_url} target="_blank" rel="noopener noreferrer">
