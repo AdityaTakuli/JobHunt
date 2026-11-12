@@ -193,7 +193,7 @@ export function ApplicationDetailsCard({ state, onOpen }) {
   return (
     <section className="card profile-section details-card">
       <div className="profile-section-head">
-        <h3>Application details</h3>
+        <h2>Application details</h2>
         <button type="button" className="btn btn-primary btn-sm" onClick={onOpen}>
           {state?.details_saved ? 'Edit details' : 'Fill in details'}
         </button>

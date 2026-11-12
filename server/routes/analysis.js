@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
-import { dbUsageStore } from '../lib/aiBudget.js';
+import { logUsage } from '../lib/aiBudget.js';
 import { forgetJob } from '../lib/fitCache.js';
 import { ANALYSIS_VERSION, analyseJob, analysisGateways } from '../lib/jobAnalysis.js';
 import { COMPANIES } from '../lib/companies.js';
@@ -145,7 +145,7 @@ analysisRouter.post('/:id/analysis', async (req, res) => {
         source: context.source,
         sourceHost: context.sourceHost,
         // Counted with the labeling budget, so analyses can't starve the daily job labels.
-        onUsage: (provider, tokens) => (provider === 'freellm' && tokens ? dbUsageStore.add('freellm', istDateString(), tokens).catch(() => {}) : null),
+        onUsage: (provider, tokens) => logUsage('analysis', provider, istDateString(), tokens),
       });
       const row = {
         job_id: id,

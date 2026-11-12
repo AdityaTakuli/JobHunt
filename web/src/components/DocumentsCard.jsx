@@ -87,7 +87,7 @@ export default function DocumentsCard({ refreshKey }) {
   return (
     <section className="card profile-section documents-card">
       <div className="profile-section-head">
-        <h3>Your files for applications</h3>
+        <h2>Your files for applications</h2>
         <span className="small muted">
           {own.length}/{limits.maxDocs} added
         </span>
@@ -141,7 +141,7 @@ export default function DocumentsCard({ refreshKey }) {
         </div>
       )}
       <div className="upload-actions">
-        <input ref={inputRef} type="file" multiple accept=".pdf,.docx,.jpg,.jpeg,.png,application/pdf,image/png,image/jpeg" hidden onChange={add} />
+        <input ref={inputRef} type="file" multiple accept=".pdf,.docx,.jpg,.jpeg,.png,application/pdf,image/png,image/jpeg" hidden aria-label="Add files" onChange={add} />
         <button type="button" className="btn btn-sm" onClick={() => inputRef.current?.click()} disabled={Boolean(uploading) || own.length >= limits.maxDocs}>
           {uploading ? 'Uploading…' : 'Add files'}
         </button>

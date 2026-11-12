@@ -279,6 +279,29 @@ function PreferencesPanel() {
 
 /* ---------- Connections ---------- */
 
+// Which feature spent the free AI quota over the last 7 days (server lib/aiBudget.js logUsage).
+const FEATURE_LABELS = { tailor: 'CV writing', analysis: 'Job analysis', profile: 'Reading CVs and portfolios', fill: 'Form filling (ARCH)' };
+function FeatureUsage({ byFeature }) {
+  const rows = Object.entries(byFeature || {}).sort((a, b) => b[1].tokens - a[1].tokens);
+  if (!rows.length) return null;
+  const total = rows.reduce((n, [, u]) => n + u.tokens, 0) || 1;
+  return (
+    <div className="feature-usage">
+      <p className="small muted">AI use by feature, last 7 days</p>
+      <ul>
+        {rows.map(([k, u]) => (
+          <li key={k}>
+            <span>{FEATURE_LABELS[k] || k}</span>
+            <span className="small muted">
+              {u.tokens.toLocaleString('en-IN')} tokens · {u.requests} call{u.requests === 1 ? '' : 's'} · {Math.round((u.tokens / total) * 100)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Usage({ label, period, used, limit, note }) {
   const pct = limit ? Math.min(100, (used / limit) * 100) : 0;
   const tone = pct >= 90 ? 'is-high' : pct >= 70 ? 'is-mid' : '';
@@ -350,6 +373,7 @@ function ConnectionsPanel({ system, onRan }) {
             <Usage label="Gemini tokens" period="today" used={ai.gemini.today.tokens} limit={ai.gemini.dailyTokens} note={`${ai.gemini.today.requests} of ${ai.gemini.dailyRequests} requests`} />
           )}
         </div>
+        <FeatureUsage byFeature={system.aiByFeature} />
       </Section>
 
       <Section id="set-connections" title="Connections" description="Keys and passwords live in the server's environment variables (hPanel on Hostinger).">

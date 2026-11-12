@@ -47,6 +47,8 @@ export function FilterPill({ label, active = false, children, panelLabel }) {
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((o) => !o)}
+        // On phones the filters scroll sideways: a pill reached with Tab comes fully into view.
+        onFocus={(e) => e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' })}
       >
         {label}
         <IconChevronDown size={16} className="pill-chevron" />

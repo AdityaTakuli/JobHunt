@@ -5,7 +5,7 @@
 import express, { Router } from 'express';
 import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
-import { dbUsageStore } from '../lib/aiBudget.js';
+import { logUsage } from '../lib/aiBudget.js';
 import { fillFields, FILL_VERSION, sanitizeFields } from '../lib/fill.js';
 import { gapSummary, scoreFit } from '../lib/fit.js';
 import { factsFor } from '../lib/fitCache.js';
@@ -86,7 +86,7 @@ function startBuild(uid) {
         {
           knownPages: Array.isArray(knownPages) ? knownPages : null,
           onProgress: (step) => (state.step = step),
-          onUsage: (provider, tokens) => (provider === 'freellm' && tokens ? dbUsageStore.add('freellm', today, tokens).catch(() => {}) : null),
+          onUsage: (provider, tokens) => logUsage('profile', provider, today, tokens),
         },
       );
       await upsertRow(uid, {
@@ -332,7 +332,7 @@ profileRouter.post('/fill', async (req, res) => {
       return askJson({
         ...call,
         cfg: { ...config, profile: { ...config.profile, timeoutMs: config.profile.fillTimeoutMs } },
-        onUsage: (provider, tokens) => (provider === 'freellm' && tokens ? dbUsageStore.add('freellm', today, tokens).catch(() => {}) : null),
+        onUsage: (provider, tokens) => logUsage('fill', provider, today, tokens),
       });
     },
   });

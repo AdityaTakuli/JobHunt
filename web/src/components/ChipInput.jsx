@@ -4,7 +4,7 @@ import { IconX } from '../icons.jsx';
 
 // A list edited as chips: type and press Enter (or a comma) to add, × or Backspace to remove.
 // Text left in the box is added when it loses focus, so nothing typed is silently dropped.
-export default function ChipInput({ id, value, onChange, placeholder, addLabel = 'Add', max = 50, maxLength = 120, splitOnComma = true, describedBy }) {
+export default function ChipInput({ id, value, onChange, placeholder, addLabel = 'Add', max = 50, maxLength = 120, splitOnComma = true, describedBy, label }) {
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
 
@@ -57,6 +57,7 @@ export default function ChipInput({ id, value, onChange, placeholder, addLabel =
         value={draft}
         placeholder={value.length ? `${addLabel}…` : placeholder}
         aria-describedby={describedBy}
+        aria-label={label}
         disabled={value.length >= max}
         onChange={(e) => {
           const v = e.target.value;

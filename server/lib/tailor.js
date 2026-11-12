@@ -740,7 +740,10 @@ export async function tailor({ profile, resumeText, posting, pages = null, detai
   let chosen = first;
   let q = q1;
   let passes = 1;
-  if (revise && q1.problems.length) {
+  // The second AI call only when it is worth it: missing keywords are added by code below for free,
+  // so a draft that would score 92+ once they are in is kept as it is (saves a call per CV).
+  const worthRevising = q1.score + Math.min(40, q1.missingOwned.length * 10) < 92;
+  if (revise && q1.problems.length && worthRevising) {
     try {
       const previous = { ...first.resume, cover_letter: first.cover_letter };
       for (const k of ['version', 'name', 'education', 'languages', 'student']) delete previous[k];

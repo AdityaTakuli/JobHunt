@@ -61,10 +61,30 @@ export function memoryUsageStore(initial = {}) {
   };
 }
 
-// Today's usage for every provider, for the Settings screen.
+// Today's usage for every provider, for the Settings screen. Per-feature rows ("f:tailor") are
+// left out here: they are in usageByFeature.
 export async function usageToday(now = new Date()) {
-  const rows = await query('SELECT provider, requests, tokens FROM ai_usage WHERE day = ?', [istDateString(now)]);
+  const rows = await query("SELECT provider, requests, tokens FROM ai_usage WHERE day = ? AND provider NOT LIKE 'f:%'", [istDateString(now)]);
   return Object.fromEntries(rows.map((r) => [r.provider, { requests: Number(r.requests), tokens: Number(r.tokens) }]));
+}
+
+export const FEATURES = ['tailor', 'analysis', 'profile', 'fill'];
+
+/**
+ * One AI call's tokens: counted on the provider (what the daily budgets read) and on the feature
+ * that made it, so the Settings screen can show which feature spends the free quota.
+ */
+export async function logUsage(feature, provider, day, tokens) {
+  if (provider !== 'freellm' || !tokens) return;
+  await dbUsageStore.add('freellm', day, tokens).catch(() => {});
+  if (FEATURES.includes(feature)) await dbUsageStore.add(`f:${feature}`, day, tokens).catch(() => {});
+}
+
+// The last `days` days of AI use per feature: { tailor: { requests, tokens }, ... }.
+export async function usageByFeature(days = 7, now = new Date()) {
+  const since = istDateString(new Date(now.getTime() - (days - 1) * 86_400_000));
+  const rows = await query("SELECT provider, SUM(requests) AS requests, SUM(tokens) AS tokens FROM ai_usage WHERE day >= ? AND provider LIKE 'f:%' GROUP BY provider", [since]);
+  return Object.fromEntries(rows.map((r) => [r.provider.slice(2), { requests: Number(r.requests), tokens: Number(r.tokens) }]));
 }
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

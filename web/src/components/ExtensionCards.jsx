@@ -8,7 +8,7 @@ export function ExtensionCard({ fillsToday, fillsPerDay }) {
           A
         </span>
         <div>
-          <h3>ARCH in Chrome</h3>
+          <h2>ARCH in Chrome</h2>
           <p className="small muted" style={{ margin: 0 }}>
             Fills a job application when you ask it to: press Fill with ARCH on the form, or Alt+Shift+A. It never fills other sites by itself and never presses submit.
           </p>

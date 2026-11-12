@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { config } from '../config.js';
 import { parseJson, query } from '../db/pool.js';
-import { dbUsageStore } from '../lib/aiBudget.js';
+import { logUsage } from '../lib/aiBudget.js';
 import { jobUrlPatterns, MIN_POSTING, postingFromJsonLd } from '../lib/jobPage.js';
 import { LlmError } from '../lib/llm.js';
 import { askJson, profileAvailable } from '../lib/profileBuild.js';
@@ -141,7 +141,7 @@ tailorRouter.post('/', async (req, res) => {
           askJson({
             ...call,
             cfg: { ...config, profile: { ...config.profile, timeoutMs: config.profile.tailorTimeoutMs } },
-            onUsage: (provider, tokens) => (provider === 'freellm' && tokens ? dbUsageStore.add('freellm', today, tokens).catch(() => {}) : null),
+            onUsage: (provider, tokens) => logUsage('tailor', provider, today, tokens),
           }),
       });
       const row = {

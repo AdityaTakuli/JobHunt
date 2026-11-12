@@ -107,7 +107,7 @@ function Board({ apps, onMove, onEdit }) {
             }}
           >
             <div className="column-head">
-              <span>{STATUS_LABELS[status]}</span>
+              <h2 className="column-title">{STATUS_LABELS[status]}</h2>
               <span className="badge">{items.length}</span>
             </div>
             {items.length ? (

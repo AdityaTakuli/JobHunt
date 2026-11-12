@@ -36,9 +36,9 @@ export default function MyCvCard({ hasResume, ready }) {
   return (
     <section className="card profile-section">
       <div className="profile-section-head">
-        <h3>
+        <h2>
           <IconSparkle size={15} /> My CV
-        </h3>
+        </h2>
         {cv && !state.busy && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={make} title="Write it again from your latest files and details">
             <IconRefresh size={14} /> Make again

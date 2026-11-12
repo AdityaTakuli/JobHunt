@@ -229,8 +229,11 @@ function Shell() {
 
   return (
     <MetaContext.Provider value={{ meta, refreshMeta, me, refreshMe }}>
+      {/* While the welcome screen is up, everything behind it is inert: Tab and screen readers stay
+          in the welcome dialog instead of reaching controls it covers. */}
       <a
         className="skip-link"
+        inert={welcome || undefined}
         href="#main"
         onClick={(e) => {
           // Keep the hash route intact; just move focus.
@@ -240,7 +243,7 @@ function Shell() {
       >
         Skip to content
       </a>
-      <header className="app-header">
+      <header className="app-header" inert={welcome || undefined}>
         <div className="app-header-inner">
           <a className="brand" href="#/jobs" aria-label="ArchJobs home">
             <Logo width={46} />
@@ -268,7 +271,7 @@ function Shell() {
         </div>
       </header>
 
-      <main id="main" tabIndex={-1}>
+      <main id="main" tabIndex={-1} inert={welcome || undefined}>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={route.path}
@@ -283,7 +286,7 @@ function Shell() {
         </AnimatePresence>
       </main>
 
-      <nav className="bottom-nav" aria-label="Main">
+      <nav className="bottom-nav" aria-label="Main" inert={welcome || undefined}>
         {NAV.map((item) => {
           const { path, label, Icon } = item;
           const current = isCurrent(item, route.path);

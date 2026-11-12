@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
-import { usageToday } from '../lib/aiBudget.js';
+import { usageByFeature, usageToday } from '../lib/aiBudget.js';
 import { MAIL_BUDGET } from '../lib/mailTriage.js';
 import { providerConfigured } from '../lib/classify.js';
 import { mailConfigured } from '../lib/mailer.js';
@@ -37,10 +37,11 @@ const aiStatus = (name, today) => {
 
 // Health of each source: what is configured, last run, recent errors, SerpApi quota, AI budget.
 settingsRouter.get('/system', requireAdmin, async (req, res) => {
-  const [recent, searchesUsed, today] = await Promise.all([
+  const [recent, searchesUsed, today, byFeature] = await Promise.all([
     query('SELECT id, source, run_at, jobs_found, jobs_new, requests_used, error FROM fetch_log ORDER BY run_at DESC, id DESC LIMIT 40'),
     localSearchesThisMonth(),
     usageToday(),
+    usageByFeature(7),
   ]);
   res.json({
     configured: {
@@ -68,6 +69,8 @@ settingsRouter.get('/system', requireAdmin, async (req, res) => {
         dailyRequests: config.freellm.mailLimits.dailyRequests,
       },
     },
+    // Which feature spent the free AI quota over the last 7 days.
+    aiByFeature: byFeature,
     fetchLog: recent,
   });
 });
