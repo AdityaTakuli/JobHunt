@@ -7,7 +7,7 @@ export default function ProfilePage() {
       <header className="settings-head">
         <div>
           <h1>Your profile</h1>
-          <p>Your CV and portfolio. Every job is scored against them.</p>
+          <p>Your CV and/or portfolio, and the details application forms ask for. Every job is scored against them.</p>
         </div>
       </header>
       <ProfilePanel />

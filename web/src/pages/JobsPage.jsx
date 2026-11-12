@@ -24,6 +24,13 @@ const ROLE_SWITCH = [
   ['internship', 'Internships'],
   ['job', 'Jobs'],
 ];
+// Where a job was found: by search (Google Jobs, firms' careers sites) or in her email
+// (LinkedIn job alerts and other job emails read from Gmail).
+const ORIGIN_SWITCH = [
+  ['', 'All sources', 'Every job, wherever it was found'],
+  ['search', 'Found by search', "Google Jobs and firms' own careers sites"],
+  ['email', 'From your email', 'LinkedIn job alerts and other job emails in your Gmail'],
+];
 // Experience filter on by default at "up to 1 year": the point of the app is entry-level roles.
 const DEFAULT_FILTERS = {
   city: 'mine',
@@ -35,6 +42,7 @@ const DEFAULT_FILTERS = {
   software: [],
   bim: false,
   source: '',
+  origin: '',
   apply: '',
   linkedin: false,
   hideApplied: false,
@@ -234,6 +242,7 @@ export default function JobsPage() {
       within: filters.within,
       pay: filters.pay,
       source: filters.source,
+      origin: filters.origin,
       apply: filters.apply,
       linkedin: filters.linkedin,
       bim: filters.bim,
@@ -372,7 +381,7 @@ export default function JobsPage() {
   }, [meta, filters.city]);
 
   const otherFilters =
-    filters.role || filters.software.length || filters.within || filters.pay || filters.source || filters.apply || filters.linkedin || filters.bim || filters.hideApplied;
+    filters.role || filters.origin || filters.software.length || filters.within || filters.pay || filters.source || filters.apply || filters.linkedin || filters.bim || filters.hideApplied;
   const pickedCity = !search && !['mine', 'all'].includes(filters.city) ? filters.city : null;
   const closeDetail = useCallback(() => setSelectedId(null), []);
   const selectedJob = jobs.find((j) => j.id === selectedId);
@@ -500,6 +509,14 @@ export default function JobsPage() {
       <div className="segmented role-switch" role="group" aria-label="Internships or jobs">
         {ROLE_SWITCH.map(([value, label]) => (
           <button key={value || 'all'} type="button" aria-pressed={filters.role === value} onClick={() => setFilters((f) => ({ ...f, role: value }))}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="segmented origin-switch" role="group" aria-label="Where the jobs came from">
+        {ORIGIN_SWITCH.map(([value, label, title]) => (
+          <button key={value || 'all'} type="button" title={title} aria-pressed={filters.origin === value} onClick={() => setFilters((f) => ({ ...f, origin: value }))}>
             {label}
           </button>
         ))}

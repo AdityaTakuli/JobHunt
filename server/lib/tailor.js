@@ -1,67 +1,140 @@
-// A CV and cover letter tailored to one posting, from the person's own CV (ARCH in Chrome and the
-// job details). The AI reorders and rewords; it does not add. Everything it returns is checked
-// against the CV text and the profile, and anything that can't be found there is dropped, with
-// the reason shown: a firm, a role, a tool, a project or a number the CV doesn't have never reaches
-// the PDF. The keyword match before and after is counted the same way the fit score counts skills
-// (shared/skills.js), so it is a real number, not a promise.
+// The CV ArchJobs writes (and ARCH in Chrome uploads): a detailed, ATS-friendly CV made from the
+// person's own material, either general ("My CV" on the Profile page) or tailored to one posting
+// with a cover letter. Works for any discipline: architecture and design students' projects come
+// from what the portfolio pages show; engineering students' (civil, mechanical...) from their CV.
+//
+// The AI reorders, combines and rewords; it does not add. Everything it returns is checked against
+// the CV text, the portfolio page notes, the profile and the person's own details, and anything
+// that can't be found there is dropped with the reason shown: a firm, a role, a tool, a project or
+// a number the sources don't have never reaches the PDF. The keyword match before and after is
+// counted the same way the fit score counts skills (shared/skills.js), so it is a real number.
+//
+// The PDF is ATS-friendly by construction: one column of real, selectable text in reading order,
+// standard section names, plain bullets, no tables, images or text boxes, and the title, author
+// and keywords set in the file's metadata. Up to two A4 pages (one when it fits).
 
 import { findSkills } from '../../shared/skills.js';
+import { cleanDetails } from './details.js';
 import { profileFacts } from './fill.js';
 
-export const TAILOR_VERSION = 1;
+export const TAILOR_VERSION = 2;
+// tailored_docs.page_key of the general CV (no posting): one per person, newest wins.
+export const GENERAL_KEY = 'general';
 
-export const TAILOR_SYSTEM_PROMPT = `You tailor an architecture student's or graduate's CV and write their cover letter for ONE job
-posting. You may only reorder, shorten and reword what their CV and profile already say.
+export const TAILOR_SYSTEM_PROMPT = `You write a detailed, ATS-friendly CV for a student or recent graduate in India: architecture,
+interior design, civil, mechanical or any other engineering or design field (see "discipline").
+When a job posting is given, you also write a cover letter for it. You may only reorder, combine,
+shorten and reword what their CV text, portfolio notes, profile and details already say.
 
 Hard rules:
 - Never add an employer, role, project, degree, tool, skill, date, number, award or responsibility
-  that is not in the CV text or the profile. If the posting asks for something they don't have,
-  leave it out: do not hint they have it.
-- Use the posting's own words for things they really did (if the CV says "made drawings in Revit"
-  and the posting says "Revit documentation", write "Revit documentation" for that work).
-- Put what this posting asks for first: order experience bullets, projects and skills by relevance.
-- One page: up to 3 experience entries with up to 3 bullets each (under 22 words per bullet), up to
-  3 projects, up to 14 skills. Bullets start with a verb. No first person in the CV.
-- Cover letter: 3 short paragraphs, 170-230 words in all, first person, plain and specific. Name the
-  firm and two things from the posting; back each with a real project or internship from the CV.
-  Never use stock lines like "I am writing to express my interest", "I am excited to apply",
+  that is not in the sources. If the posting asks for something they don't have, leave it out: do
+  not hint they have it. A number (area, units, %, months, count) only when the sources give it.
+- Portfolio notes are real work: one entry per project. Describe each from its notes: the kind
+  and scale of building or product, what was produced (plans, sections, elevations, details,
+  working drawings, renders, models, analysis), the software that made it, the design process
+  shown, and the role the student states. Never invent a site area, budget, client or team size.
+- Engineering projects and internships: say what was designed, analysed, built, tested or
+  supervised, with which method or tool, and the result the CV states.
+- Bullets: start with a strong past-tense verb (Designed, Detailed, Modelled, Analysed, Drafted,
+  Coordinated, Supervised, Tested...), then what, with which tool, and the deliverable or result.
+  12 to 28 words each. No first person anywhere in the CV.
+- ATS: plain words, no symbols or emoji. Name each tool exactly as the sources do. With a posting,
+  use the posting's own terms for things they really did ("Revit documentation" for "drawings in
+  Revit") and put what it asks for first; without one, order by strength for roles in their field.
+- Size: up to 4 experience entries with 3-5 bullets each; up to 5 projects with 2-3 bullets each
+  (a student with little experience gets fuller projects, never padding); skills in 2-4 groups
+  (for example "Software", "Technical", "Design", "Site and management") with up to 24 items in all;
+  every certification and achievement the sources list, written "Name | Issuer | hours or date"
+  as far as the sources give them. Summary ("Professional Summary"): who they are (degree, year,
+  institution and marks when given), their strongest real experience and tools, the kinds of
+  role they want, and when they are available when the details say. 3-4 sentences, 50-80 words, no
+  clichés ("hard-working", "passionate", "team player", "go-getter", "strong foundation"). Call
+  them what they are: a student is "a B.Arch student" or "a final-year civil engineering student",
+  never "an architect" or "an engineer" before they have graduated.
+- Cover letter, only when there is a posting: 3 short paragraphs, 170-230 words, first person,
+  plain and specific. Name the firm and two things from the posting; back each with a real project
+  or internship. Never use "I am writing to express my interest", "I am excited to apply",
   "passionate", "esteemed", "dynamic team", "perfect fit", "hit the ground running".
 Reply with one JSON object and nothing else:
 {
-  "headline": string,                       // e.g. "B.Arch student (2027) · Revit and working drawings"
-  "summary": string,                        // 2 sentences for the top of the CV, aimed at this posting
-  "skills": string[],
-  "experience": [{ "role": string, "firm": string, "dates": string | null, "bullets": string[] }],
-  "projects": [{ "title": string, "line": string }],        // line = one sentence on what they did, relevant to the posting
-  "education": [{ "degree": string, "institution": string, "year": string | null }],
-  "cover_letter": { "greeting": string, "paragraphs": string[], "sign_off": string }
+  "headline": string,                 // e.g. "B.Arch student (2027) | Revit and working drawings" or "Mechanical engineering graduate | SolidWorks, ANSYS"
+  "summary": string,
+  "skills": [{ "group": string, "items": string[] }],
+  "experience": [{ "role": string, "firm": string, "location": string | null, "dates": string | null, "bullets": string[] }],   // role may carry the kind of work as the CV says: "Overseas Contractor (Part-time)"
+  "projects": [{ "title": string, "place": string | null, "dates": string | null, "context": string | null, "tools": string[], "bullets": string[] }],   // place = site or city ("IMT Manesar"); dates as written ("2026-Present", "Ongoing"); context = "Semesters VII-VIII, Group Project", "Architectural thesis", "Internship at Studio X"
+  "certifications": string[],
+  "achievements": string[],           // awards, competitions, publications, positions of responsibility
+  "cover_letter": { "greeting": string, "paragraphs": string[], "sign_off": string } | null
 }`;
 
-export function tailorUserPrompt({ profile, resumeText, posting, facts }) {
+// Portfolio page notes, one entry per project, small enough for a prompt.
+export function portfolioProjects(pages) {
+  const by = new Map();
+  for (const p of pages || []) {
+    if (!p?.project) continue;
+    const key = p.project.trim();
+    const e = by.get(key) || { title: key, pages: [], typology: null, scale: null, drawings: new Set(), software: new Set(), process: false, technical: false, roles: new Set(), notes: [] };
+    e.pages.push(p.page);
+    e.typology ||= p.typology;
+    e.scale ||= p.scale;
+    for (const d of p.drawings || []) e.drawings.add(d);
+    for (const s of p.software || []) e.software.add(s);
+    e.process ||= p.process;
+    e.technical ||= p.technical;
+    if (p.role) e.roles.add(p.role);
+    if (p.note && e.notes.length < 4) e.notes.push(p.note);
+    by.set(key, e);
+  }
+  return [...by.values()].slice(0, 12).map((e) => ({
+    title: e.title,
+    pages: e.pages.length,
+    typology: e.typology,
+    scale: e.scale,
+    drawings: [...e.drawings],
+    software: [...e.software],
+    process_shown: e.process,
+    technical_drawings: e.technical,
+    role: [...e.roles].join('; ') || null,
+    notes: e.notes,
+  }));
+}
+
+export function tailorUserPrompt({ profile, resumeText, posting, facts, pages }) {
   const known = {
     name: facts.name,
+    discipline: facts.discipline,
     stage: profile.stage,
-    graduation_year: profile.graduation_year,
+    graduation_year: facts.graduation_year,
     education: profile.education,
+    degree_from_details: facts.degree ? { degree: facts.degree, specialization: facts.specialization, institution: facts.institution, score: facts.score } : null,
     experience: profile.experience,
     software: (profile.software || []).map((s) => s.name),
     skills: profile.skills,
     projects: profile.projects,
-    portfolio_projects: profile.portfolio?.projects || [],
     certifications: profile.certifications,
+    achievements: profile.achievements || [],
     coa: profile.coa,
+    languages: facts.languages,
+    available_from: facts.available_from,
+    preferred_cities: facts.cities,
+    portfolio_review: profile.portfolio ? { strengths: profile.portfolio.strengths, best_for: profile.portfolio.best_for, summary: profile.portfolio.summary } : null,
   };
+  const general = !posting?.title && !posting?.description;
+  const portfolio = portfolioProjects(pages);
   return [
-    `Job: ${posting.title || 'unknown title'} at ${posting.company || 'unknown firm'}${posting.location ? `, ${posting.location}` : ''}`,
-    `Posting:\n${String(posting.description || '').slice(0, 6_000) || '(no posting text: tailor to the title only)'}`,
+    general
+      ? `No posting: write a general CV for ${facts.discipline || 'their field'} roles${facts.stage === 'student' ? ' (internships)' : ''}, and cover_letter = null.`
+      : `Job: ${posting.title || 'unknown title'} at ${posting.company || 'unknown firm'}${posting.location ? `, ${posting.location}` : ''}\nPosting:\n${String(posting.description || '').slice(0, 6_000) || '(no posting text: tailor to the title only)'}`,
     `Profile:\n${JSON.stringify(known)}`,
+    portfolio.length ? `Portfolio projects (read from the portfolio pages):\n${JSON.stringify(portfolio)}` : null,
     resumeText ? `CV text:\n${String(resumeText).slice(0, 8_000)}` : null,
   ]
     .filter(Boolean)
     .join('\n\n');
 }
 
-// ---- Checks: nothing that isn't in the CV or the profile ----
+// ---- Checks: nothing the sources don't back up ----
 
 const norm = (s) =>
   String(s || '')
@@ -74,64 +147,142 @@ const norm = (s) =>
 const str = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const strs = (v, n, max) => (Array.isArray(v) ? v.map((x) => str(x, max)).filter(Boolean).slice(0, n) : []);
 
+const SMALL_WORDS = new Set(['the', 'and', 'pvt', 'ltd', 'llp', 'inc', 'private', 'limited', 'for', 'with', 'from', 'into', 'our', 'was', 'were']);
+const wordsOf = (s) =>
+  norm(s)
+    .split(' ')
+    .filter((w) => w.length > 2 && !SMALL_WORDS.has(w));
+const has = (source, w) => source.includes(` ${w} `) || source.includes(` ${w}s `) || (w.endsWith('s') && source.includes(` ${w.slice(0, -1)} `));
+
 // Every word of `name` (ignoring tiny ones) appears in the source text.
 function foundIn(source, name) {
-  const words = norm(name)
-    .split(' ')
-    .filter((w) => w.length > 2 && !['the', 'and', 'pvt', 'ltd', 'llp', 'inc', 'private', 'limited'].includes(w));
-  if (!words.length) return false;
-  return words.every((w) => source.includes(` ${w} `) || source.includes(` ${w}s `));
+  const words = wordsOf(name);
+  return words.length > 0 && words.every((w) => has(source, w));
 }
 
-// Numbers ("30%", "12 drawings", "2024") a bullet may use: only ones the CV itself has.
+// Most words of a sentence appear in the source (for certifications and achievements, which the
+// AI may shorten or reword a little).
+function mostlyIn(source, text, share) {
+  const words = wordsOf(text);
+  return words.length > 0 && words.filter((w) => has(source, w)).length / words.length >= share;
+}
+
+// Numbers ("30%", "12 drawings", "2024") a line may use: only ones the sources have.
 const numbersIn = (s) => (String(s).match(/\d+(?:[.,]\d+)?/g) || []).map((n) => n.replace(',', ''));
 
-// Lines no cover letter needs.
-const STOCK = /I am writing to (express|apply)|I am (excited|thrilled|delighted) to apply|passionate|esteemed|dynamic team|perfect fit|hit the ground running|team player|go-getter|synergy|I believe I would be a great/i;
+// Lines no CV or cover letter needs.
+const STOCK = /I am writing to (express|apply)|I am (excited|thrilled|delighted) to apply|passionate|esteemed|dynamic team|perfect fit|hit the ground running|team player|go-getter|synergy|I believe I would be a great|hard-?working|results-driven|strong foundation/i;
+
+const splitSentences = (s) => s.split(/(?<=[.!?])\s+/).filter(Boolean);
+
+/** Education as the profile read it, with what she typed in her details on top. */
+export function educationOf(profile, details) {
+  const d = cleanDetails(details || {});
+  const list = (profile.education || []).slice(0, 4).map((e) => ({ degree: e.degree || '', institution: e.institution || '', year: e.year ? String(e.year) : null, score: e.score || null }));
+  if (d.degree || d.institution) {
+    const degree = [d.degree, d.specialization && !norm(d.degree).includes(norm(d.specialization)) ? `(${d.specialization})` : ''].filter(Boolean).join(' ');
+    const same = list.findIndex((e) => (d.institution && norm(e.institution) === norm(d.institution)) || (d.degree && norm(e.degree) === norm(d.degree)));
+    const entry = { degree: degree || list[same]?.degree || '', institution: d.institution || list[same]?.institution || '', year: d.graduation_year || list[same]?.year || null, score: d.score || list[same]?.score || null };
+    if (same >= 0) list.splice(same, 1);
+    list.unshift(entry);
+  } else if (list[0] && d.score) list[0].score = d.score;
+  return list.filter((e) => e.degree || e.institution).slice(0, 4);
+}
 
 /**
- * Keeps only what the CV and profile back up. Returns { resume, cover_letter, dropped } or null when
- * the reply is not usable at all.
+ * Keeps only what the sources back up. Returns { resume, cover_letter, dropped } or null when the
+ * reply is not usable at all.
  */
-export function checkTailored(value, { profile, resumeText, facts }) {
+export function checkTailored(value, { profile, resumeText, facts, pages = null, details = null }) {
   if (!value || typeof value !== 'object') return null;
-  const source = ` ${norm([resumeText, JSON.stringify(profile.experience), JSON.stringify(profile.education), JSON.stringify(profile.projects), (profile.portfolio?.projects || []).join(' '), (profile.software || []).map((s) => s.name).join(' '), (profile.skills || []).join(' '), (profile.certifications || []).join(' ')].join(' '))} `;
-  const cvNumbers = new Set(numbersIn(`${resumeText} ${JSON.stringify(profile)}`));
+  const d = cleanDetails(details || {});
+  const sourceText = [
+    resumeText,
+    JSON.stringify(profile.experience),
+    JSON.stringify(profile.education),
+    JSON.stringify(profile.projects),
+    (profile.portfolio?.projects || []).join(' '),
+    JSON.stringify(portfolioProjects(pages)),
+    (profile.software || []).map((s) => s.name).join(' '),
+    (profile.skills || []).join(' '),
+    (profile.certifications || []).join(' '),
+    (profile.achievements || []).join(' '),
+    profile.summary,
+    [d.discipline, d.degree, d.specialization, d.institution, d.current_company, d.current_title, d.city].join(' '),
+  ].join(' ');
+  const source = ` ${norm(sourceText)} `;
+  const cvNumbers = new Set(numbersIn(`${sourceText} ${JSON.stringify(profile)} ${d.graduation_year} ${d.score}`));
+  const numbersOk = (s) => numbersIn(s).every((n) => cvNumbers.has(n));
   const dropped = [];
   const keep = (ok, what) => {
     if (!ok) dropped.push(what);
     return ok;
   };
+  const short = (s) => `"${s.slice(0, 50)}${s.length > 50 ? '…' : ''}"`;
 
-  const skills = [...new Set(strs(value.skills, 20, 40))].filter((s) => keep(foundIn(source, s), `skill "${s}"`)).slice(0, 14);
+  // Skills, in groups. An older reply (or a model that ignores the groups) sends a flat list.
+  const rawGroups = Array.isArray(value.skills) && value.skills.every((x) => typeof x === 'string') ? [{ group: 'Skills', items: value.skills }] : Array.isArray(value.skills) ? value.skills : [];
+  const seen = new Set();
+  let total = 0;
+  const skills = rawGroups
+    .slice(0, 5)
+    .map((g) => ({
+      group: str(g?.group, 30) || 'Skills',
+      items: strs(g?.items, 20, 50).filter((s) => {
+        const k = norm(s);
+        if (seen.has(k) || total >= 24) return false;
+        if (!keep(foundIn(source, s), `skill "${s}"`)) return false;
+        seen.add(k);
+        total += 1;
+        return true;
+      }),
+    }))
+    .filter((g) => g.items.length);
+
+  const bulletsOf = (list, n, label) => strs(list, n + 2, 260).filter((b) => keep(numbersOk(b), `${label} with a number the sources don't have (${short(b)})`) && keep(!STOCK.test(b), `stock line ${short(b)}`)).slice(0, n);
+
   const experience = (Array.isArray(value.experience) ? value.experience : [])
-    .slice(0, 4)
-    .map((e) => ({ role: str(e?.role, 80), firm: str(e?.firm, 100), dates: str(e?.dates, 40) || null, bullets: strs(e?.bullets, 4, 220) }))
+    .slice(0, 5)
+    .map((e) => ({ role: str(e?.role, 80), firm: str(e?.firm, 100), location: str(e?.location, 60) || null, dates: str(e?.dates, 40) || null, bullets: e?.bullets }))
     .filter((e) => keep(e.firm && foundIn(source, e.firm), `employer "${e.firm}"`) && keep(!e.role || foundIn(source, e.role), `role "${e.role}"`))
     .map((e) => ({
       ...e,
-      dates: e.dates && numbersIn(e.dates).every((n) => cvNumbers.has(n)) ? e.dates : null,
-      bullets: e.bullets.filter((b) => keep(numbersIn(b).every((n) => cvNumbers.has(n)), `a line with a number the CV doesn't have ("${b.slice(0, 50)}…")`)).slice(0, 3),
+      location: e.location && foundIn(source, e.location) ? e.location : null,
+      dates: e.dates && numbersOk(e.dates) ? e.dates : null,
+      bullets: bulletsOf(e.bullets, 5, 'a line'),
     }))
-    .slice(0, 3);
-  const projects = (Array.isArray(value.projects) ? value.projects : [])
-    .map((p) => ({ title: str(p?.title, 100), line: str(p?.line, 220) }))
-    .filter((p) => p.title && keep(foundIn(source, p.title), `project "${p.title}"`) && keep(numbersIn(p.line).every((n) => cvNumbers.has(n)), `a project line with a number the CV doesn't have`))
-    .slice(0, 3);
-  // Education always comes from the profile as read, never from the reply.
-  const education = (profile.education || []).slice(0, 3).map((e) => ({ degree: e.degree, institution: e.institution, year: e.year ? String(e.year) : null }));
+    .slice(0, 4);
 
-  const summary = str(value.summary, 400);
-  const headline = str(value.headline, 120);
+  const projects = (Array.isArray(value.projects) ? value.projects : [])
+    .slice(0, 7)
+    .map((p) => ({ title: str(p?.title, 100), place: str(p?.place, 60) || null, dates: str(p?.dates, 40) || null, context: str(p?.context, 80) || null, tools: strs(p?.tools, 8, 40), bullets: Array.isArray(p?.bullets) ? p.bullets : p?.line ? [p.line] : [] }))
+    .filter((p) => p.title && keep(foundIn(source, p.title), `project "${p.title}"`))
+    .map((p) => ({
+      ...p,
+      place: p.place && foundIn(source, p.place) ? p.place : null,
+      dates: p.dates && numbersOk(p.dates) ? p.dates : null,
+      context: p.context && numbersOk(p.context) ? p.context : null,
+      tools: p.tools.filter((t) => keep(foundIn(source, t), `tool "${t}" on ${p.title}`)),
+      bullets: bulletsOf(p.bullets, 3, 'a project line'),
+    }))
+    .filter((p) => p.bullets.length)
+    .slice(0, 5);
+
+  const certifications = strs(value.certifications, 8, 160).filter((c) => keep(mostlyIn(source, c, 0.6) && numbersOk(c), `certification ${short(c)}`));
+  const achievements = strs(value.achievements, 6, 220).filter((a) => keep(mostlyIn(source, a, 0.5) && numbersOk(a), `achievement ${short(a)}`));
+
+  // Summary and headline: sentences with a number the sources don't have, or stock phrases, go.
+  const summary = splitSentences(str(value.summary, 700))
+    .filter((s) => keep(numbersOk(s), `a summary line with a number the sources don't have (${short(s)})`) && keep(!STOCK.test(s), `stock line ${short(s)}`))
+    .join(' ');
+  const headline = numbersOk(str(value.headline, 140)) ? str(value.headline, 140) : '';
   if (!summary && !experience.length && !projects.length) return null;
 
   const letter = value.cover_letter && typeof value.cover_letter === 'object' ? value.cover_letter : {};
-  // Stock sentences are cut out rather than rejecting the whole letter.
   const paragraphs = strs(letter.paragraphs, 4, 1_200)
     .map((p) =>
-      p
-        .split(/(?<=[.!?])\s+/)
-        .filter((sentence) => keep(!STOCK.test(sentence), `stock line "${sentence.slice(0, 50)}…"`))
+      splitSentences(p)
+        .filter((sentence) => keep(!STOCK.test(sentence), `stock line ${short(sentence)}`))
         .join(' '),
     )
     .filter(Boolean);
@@ -140,16 +291,52 @@ export function checkTailored(value, { profile, resumeText, facts }) {
     : null;
 
   return {
-    resume: { name: facts.name, headline, summary, skills, experience, projects, education },
+    resume: {
+      version: TAILOR_VERSION,
+      name: facts.name,
+      headline,
+      summary,
+      skills,
+      experience,
+      projects,
+      // Education always comes from the profile and her details, never from the reply.
+      education: educationOf(profile, details),
+      certifications,
+      achievements,
+      languages: d.languages ? d.languages.split(/,\s*/) : [],
+      student: (profile.stage || 'student') !== 'experienced' && (profile.experience_months || 0) < 12,
+    },
     cover_letter,
     dropped,
   };
 }
 
+/** A stored CV of any version in today's shape (version 1 had flat skills and one-line projects). */
+export function normalizeResume(r) {
+  const out = { name: '', headline: '', summary: '', experience: [], projects: [], education: [], certifications: [], achievements: [], languages: [], student: false, ...(r || {}) };
+  if (Array.isArray(out.skills) && out.skills.every((s) => typeof s === 'string')) out.skills = out.skills.length ? [{ group: 'Skills', items: out.skills }] : [];
+  out.skills ||= [];
+  out.projects = out.projects.map((p) => ({ title: p.title, place: p.place || null, dates: p.dates || null, context: p.context || null, tools: p.tools || [], bullets: p.bullets || (p.line ? [p.line] : []) }));
+  out.experience = out.experience.map((e) => ({ location: null, ...e, bullets: e.bullets || [] }));
+  out.education = out.education.map((e) => ({ score: null, ...e }));
+  return out;
+}
+
 // ---- Keyword match, counted like the fit score ----
 
-const resumeAsText = (r) =>
-  [r.headline, r.summary, r.skills.join(', '), ...r.experience.flatMap((e) => [e.role, e.firm, ...e.bullets]), ...r.projects.flatMap((p) => [p.title, p.line]), ...r.education.flatMap((e) => [e.degree, e.institution])].join('\n');
+const resumeAsText = (r) => {
+  const n = normalizeResume(r);
+  return [
+    n.headline,
+    n.summary,
+    ...n.skills.map((g) => g.items.join(', ')),
+    ...n.experience.flatMap((e) => [e.role, e.firm, ...e.bullets]),
+    ...n.projects.flatMap((p) => [p.title, p.tools.join(', '), ...p.bullets]),
+    ...n.education.flatMap((e) => [e.degree, e.institution]),
+    ...n.certifications,
+    ...n.achievements,
+  ].join('\n');
+};
 
 /**
  * The tools and skills the posting names (taxonomy terms), and how many of them each CV shows.
@@ -158,19 +345,19 @@ const resumeAsText = (r) =>
 export function keywordMatch(postingText, resumeText, tailoredResume, profile) {
   const asked = [...new Set(findSkills(postingText).map((s) => s.label))];
   if (!asked.length) return { asked: [], before: null, after: null, missing: [] };
-  const has = (text) => new Set(findSkills(text).map((s) => s.label));
+  const hasSet = (text) => new Set(findSkills(text).map((s) => s.label));
   // What the profile says, for CVs read before the text was kept (and for what she owns at all).
   const profileText = [
     (profile.software || []).map((s) => s.name).join(', '),
     (profile.skills || []).join(', '),
     ...(profile.education || []).map((e) => `${e.degree} ${e.institution}`),
     ...(profile.experience || []).map((e) => `${e.role} ${e.firm} ${e.what || ''}`),
-    ...(profile.projects || []).map((p) => `${p.title} ${(p.tools || []).join(' ')}`),
+    ...(profile.projects || []).map((p) => `${p.title} ${(p.tools || []).join(' ')} ${p.what || ''}`),
     profile.summary || '',
   ].join('\n');
-  const before = has(resumeText || profileText);
-  const after = has(resumeAsText(tailoredResume));
-  const owned = has(`${resumeText || ''}\n${profileText}`);
+  const before = hasSet(resumeText || profileText);
+  const after = hasSet(resumeAsText(tailoredResume));
+  const owned = hasSet(`${resumeText || ''}\n${profileText}`);
   const pct = (set) => Math.round((asked.filter((k) => set.has(k)).length / asked.length) * 100);
   return {
     asked,
@@ -181,12 +368,15 @@ export function keywordMatch(postingText, resumeText, tailoredResume, profile) {
   };
 }
 
-// ---- PDF: one A4 page of real text (ATS systems read it), Helvetica ----
+// ---- PDF: real text in one column (ATS systems read it), Helvetica ----
 
 let mupdfPromise = null;
 const loadMupdf = () => (mupdfPromise ??= import('mupdf'));
 
-const PAGE = { w: 595, h: 842, margin: 44 };
+const PAGE = { w: 595, h: 842, margin: 46 };
+const INK = [0.07, 0.08, 0.1];
+const MUTED = [0.33, 0.36, 0.4];
+const ACCENT = [0.12, 0.27, 0.62];
 
 function makeWriter(m) {
   const fonts = { regular: new m.Font('Helvetica'), bold: new m.Font('Helvetica-Bold') };
@@ -200,15 +390,19 @@ function makeWriter(m) {
     String(s || '')
       .replace(/[‘’]/g, "'")
       .replace(/[“”]/g, '"')
-      .replace(/[–—]/g, '-')
-      .replace(/•/g, '-')
-      .replace(/[^\x20-\x7e -ÿ₹]/g, '');
-  const wrap = (font, text, size, width) => {
+      .replace(/[‐-―−]/g, '-')
+      .replace(/[  -   ]/g, ' ')
+      .replace(/…/g, '...')
+      .replace(/₹\s?/g, 'Rs. ')
+      .replace(/[^\x20-\x7e -ÿ•]/g, '');
+  // Lines of `text` no wider than `width` (the first line no wider than `first`).
+  const wrap = (font, text, size, width, first = width) => {
     const lines = [];
     let line = '';
-    for (const word of safe(text).split(/\s+/).filter(Boolean)) {
+    // Ordinary spaces only: a no-break space keeps "LinkedIn:" with its link.
+    for (const word of safe(text).split(/[ \t\r\n]+/).filter(Boolean)) {
       const next = line ? `${line} ${word}` : word;
-      if (widthOf(font, next, size) <= width || !line) line = next;
+      if (widthOf(font, next, size) <= (lines.length ? width : first) || !line) line = next;
       else {
         lines.push(line);
         line = word;
@@ -220,79 +414,137 @@ function makeWriter(m) {
   return { fonts, widthOf, wrap, safe };
 }
 
-// Lays out blocks; returns the y it ended at (or Infinity when it overflowed and `draw` is false).
-function layout(blocks, { m, w, device, scale }) {
+/**
+ * Lays blocks out over pages. Returns the pages, each a list of drawing operations. Block:
+ * { text, bold, size, color, gap, label (bold lead-in), right (right-aligned on line 1),
+ *   bullet, indent, heading, rule }.
+ */
+function layout(blocks, w, scale) {
   const width = PAGE.w - PAGE.margin * 2;
+  const bottom = PAGE.h - PAGE.margin;
+  const pages = [[]];
   let y = PAGE.margin;
-  const text = (str, { bold = false, size = 10, x = PAGE.margin, color = [0.07, 0.08, 0.1] } = {}) => {
-    if (device) {
-      const t = new m.Text();
-      t.showString(bold ? w.fonts.bold : w.fonts.regular, [size, 0, 0, -size, x, y], w.safe(str));
-      device.fillText(t, [1, 0, 0, 1, 0, 0], m.ColorSpace.DeviceRGB, color, 1);
-    }
+  const ops = () => pages[pages.length - 1];
+  const newPage = () => {
+    pages.push([]);
+    y = PAGE.margin;
   };
-  for (const b of blocks) {
+  blocks.forEach((b, i) => {
     const size = (b.size || 10) * scale;
-    const lead = size * 1.32;
-    if (b.gap) y += b.gap * scale;
+    const lead = size * 1.34;
     if (b.rule) {
-      y += 3.5 * scale; // clear of the heading's letters
-      if (device) {
-        const path = new m.Path();
-        path.moveTo(PAGE.margin, y);
-        path.lineTo(PAGE.w - PAGE.margin, y);
-        device.strokePath(path, new m.StrokeState({ lineCap: 'Butt', lineJoin: 'Miter', lineWidth: 0.6, miterLimit: 10, dashPhase: 0, dashes: null }), [1, 0, 0, 1, 0, 0], m.ColorSpace.DeviceRGB, [0.75, 0.77, 0.8], 1);
-      }
-      y += 6 * scale;
-      continue;
+      y += 3 * scale;
+      ops().push({ rule: true, y });
+      y += 5 * scale;
+      return;
     }
-    const indent = b.bullet ? 12 : 0;
+    // A section heading never sits alone at the foot of a page.
+    if (b.heading && y + 70 * scale > bottom) newPage();
+    else if (b.gap && y > PAGE.margin) y += b.gap * scale;
     const font = b.bold ? w.fonts.bold : w.fonts.regular;
-    const lines = w.wrap(font, b.text, size, width - indent);
-    lines.forEach((line, i) => {
+    const indent = (b.bullet ? 11 : 0) + (b.indent || 0);
+    const x = PAGE.margin + indent;
+    const labelText = b.label ? `${w.safe(b.label)} ` : '';
+    const labelW = labelText ? w.widthOf(w.fonts.bold, labelText, size) : 0;
+    const rightSize = size * 0.92;
+    const rightW = b.right ? w.widthOf(w.fonts.regular, w.safe(b.right), rightSize) + 14 : 0;
+    const lines = w.wrap(font, b.text, size, width - indent, width - indent - labelW - rightW);
+    // Keep a two-line entry title with its first bullet: move it whole when it would split.
+    const keepNext = b.keepWithNext && blocks[i + 1] ? lead * 2 : 0;
+    if (y + lead * Math.min(lines.length, 2) + keepNext > bottom && y > PAGE.margin) newPage();
+    lines.forEach((line, li) => {
+      if (y + lead > bottom) newPage();
       y += lead;
-      if (b.bullet && i === 0) text('-', { size, x: PAGE.margin + 2, color: b.color });
-      text(line, { bold: b.bold, size, x: PAGE.margin + indent, color: b.color });
-      // Right-aligned extra on the first line (dates).
-      if (b.right && i === 0) text(b.right, { size: size * 0.92, x: PAGE.w - PAGE.margin - w.widthOf(w.fonts.regular, w.safe(b.right), size * 0.92), color: [0.35, 0.38, 0.42] });
+      if (b.bullet && li === 0) ops().push({ str: '•', bold: false, size, x: PAGE.margin + (b.indent || 0) + 2, y, color: b.color || INK });
+      if (li === 0 && labelText) ops().push({ str: labelText, bold: true, size, x, y, color: b.color || INK });
+      ops().push({ str: line, bold: b.bold, size, x: li === 0 ? x + labelW : x, y, color: b.color || INK });
+      if (b.right && li === 0) ops().push({ str: w.safe(b.right), bold: false, size: rightSize, x: PAGE.w - PAGE.margin - (rightW - 14), y, color: MUTED });
     });
-  }
-  return y;
+  });
+  return pages.filter((p, i) => p.length || i === 0);
 }
 
+const clean = (u) => String(u || '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+
 function resumeBlocks(resume, contact) {
-  const muted = [0.35, 0.38, 0.42];
-  const heading = (t) => [{ gap: 8, text: t.toUpperCase(), bold: true, size: 9.5, color: [0.15, 0.32, 0.75] }, { rule: true }];
-  const contactLine = [contact.city, contact.phone, contact.email, contact.linkedin?.replace(/^https?:\/\/(www\.)?/, ''), contact.website?.replace(/^https?:\/\/(www\.)?/, '')].filter(Boolean).join('  |  ');
-  const blocks = [{ text: resume.name || 'Your name', bold: true, size: 18 }];
-  if (resume.headline) blocks.push({ text: resume.headline, size: 10.5, color: muted, gap: 2 });
-  if (contactLine) blocks.push({ text: contactLine, size: 9, color: muted, gap: 2 });
-  if (resume.summary) blocks.push(...heading('Profile'), { text: resume.summary });
-  if (resume.experience.length) {
-    blocks.push(...heading('Experience'));
-    for (const e of resume.experience) {
-      blocks.push({ text: `${e.role}${e.firm ? `, ${e.firm}` : ''}`, bold: true, right: e.dates || '', gap: 3 });
-      for (const b of e.bullets) blocks.push({ text: b, bullet: true });
-    }
-  }
-  if (resume.projects.length) {
-    blocks.push(...heading('Projects'));
-    for (const p of resume.projects) blocks.push({ text: p.title, bold: true, gap: 3 }, { text: p.line });
-  }
-  if (resume.skills.length) blocks.push(...heading('Skills'), { text: resume.skills.join('  ·  ') });
-  if (resume.education.length) {
+  const r = normalizeResume(resume);
+  const heading = (t) => [{ gap: 9, heading: true, text: t.toUpperCase(), bold: true, size: 10, color: ACCENT }, { rule: true }];
+  // The standard student CV: name; one contact line; Professional Summary; Education (marks);
+  // Technical Skills in labelled groups; Professional Experience (Role | Firm, dates right);
+  // Selected Academic Projects (Title | Place, dates right, a context line, bullets); Certifications.
+  const place = [contact.city, contact.state].filter(Boolean).join(', ');
+  const nb = ' '; // no-break space
+  const contactLine = [clean(contact.website) && `Portfolio:${nb}${clean(contact.website)}`, contact.phone, contact.email, place, clean(contact.linkedin) && `LinkedIn:${nb}${clean(contact.linkedin)}`, clean(contact.github) && `GitHub:${nb}${clean(contact.github)}`]
+    .filter(Boolean)
+    .join('  |  ');
+  const blocks = [{ text: r.name || 'Your name', bold: true, size: 19 }];
+  if (contactLine) blocks.push({ text: contactLine, size: 9.2, color: MUTED, gap: 3 });
+  if (r.headline) blocks.push({ text: r.headline, size: 10.2, color: MUTED, gap: 2 });
+
+  const summary = () => r.summary && blocks.push(...heading('Professional Summary'), { text: r.summary, size: 10 });
+  const skills = () => {
+    if (!r.skills.length) return;
+    blocks.push(...heading('Technical Skills'));
+    r.skills.forEach((g, i) => blocks.push({ label: r.skills.length > 1 || g.group !== 'Skills' ? `${g.group}:` : '', text: g.items.join(', '), gap: i ? 2 : 0 }));
+  };
+  const education = () => {
+    if (!r.education.length) return;
     blocks.push(...heading('Education'));
-    for (const e of resume.education) blocks.push({ text: [e.degree, e.institution].filter(Boolean).join(', '), right: e.year || '', gap: 2 });
+    r.education.forEach((e, i) => {
+      blocks.push({ text: e.degree || e.institution, bold: true, right: e.year || '', gap: i ? 5 : 0, keepWithNext: true });
+      const score = e.score ? `${/cgpa|gpa|%|percent|aggregate|grade/i.test(e.score) ? '' : 'Score: '}${e.score}` : '';
+      const second = [e.degree ? e.institution : '', score].filter(Boolean).join('  |  ');
+      if (second) blocks.push({ text: second, size: 9.6, gap: 1 });
+    });
+  };
+  const experience = () => {
+    if (!r.experience.length) return;
+    blocks.push(...heading(r.student ? 'Professional Experience and Internships' : 'Professional Experience'));
+    r.experience.forEach((e, i) => {
+      blocks.push({ text: [e.role, [e.firm, e.location].filter(Boolean).join(', ')].filter(Boolean).join(' | '), bold: true, right: e.dates || '', gap: i ? 6 : 0, keepWithNext: true });
+      for (const b of e.bullets) blocks.push({ text: b, bullet: true, gap: 1.5 });
+    });
+  };
+  const projects = () => {
+    if (!r.projects.length) return;
+    blocks.push(...heading(r.student ? 'Selected Academic Projects' : 'Selected Projects'));
+    r.projects.forEach((p, i) => {
+      blocks.push({ text: [p.title, p.place].filter(Boolean).join(' | '), bold: true, right: p.dates || '', gap: i ? 6 : 0, keepWithNext: true });
+      const sub = [p.context, p.tools.length ? `Tools: ${p.tools.join(', ')}` : ''].filter(Boolean).join('  |  ');
+      if (sub) blocks.push({ text: sub, size: 9.5, color: MUTED, gap: 1 });
+      for (const b of p.bullets) blocks.push({ text: b, bullet: true, gap: 1.5 });
+    });
+  };
+  const list = (title, items) => {
+    if (!items.length) return;
+    blocks.push(...heading(title));
+    items.forEach((t, i) => blocks.push({ text: t, bullet: true, gap: i ? 1.5 : 0 }));
+  };
+
+  summary();
+  // A student's education leads; someone with a year of work leads with the work.
+  if (r.student) {
+    education();
+    skills();
+    experience();
+    projects();
+  } else {
+    skills();
+    experience();
+    projects();
+    education();
   }
+  list('Certifications', r.certifications);
+  list('Achievements', r.achievements);
+  if (r.languages.length) blocks.push(...heading('Languages'), { text: r.languages.join(', ') });
   return blocks;
 }
 
 function letterBlocks(letter, resume, contact, posting) {
-  const muted = [0.35, 0.38, 0.42];
   const head = [resume.name, [contact.phone, contact.email].filter(Boolean).join('  |  ')].filter(Boolean);
-  const blocks = head.map((t, i) => ({ text: t, bold: i === 0, size: i === 0 ? 14 : 9.5, color: i === 0 ? undefined : muted, gap: i ? 2 : 0 }));
+  const blocks = head.map((t, i) => ({ text: t, bold: i === 0, size: i === 0 ? 14 : 9.5, color: i === 0 ? undefined : MUTED, gap: i ? 2 : 0 }));
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
-  blocks.push({ text: today, gap: 18, color: muted });
+  blocks.push({ text: today, gap: 18, color: MUTED });
   if (posting.company) blocks.push({ text: posting.company, gap: 10 });
   if (posting.title) blocks.push({ text: `Re: ${posting.title}`, bold: true, gap: 2 });
   blocks.push({ text: letter.greeting, gap: 16 });
@@ -301,50 +553,102 @@ function letterBlocks(letter, resume, contact, posting) {
   return blocks;
 }
 
-/** One-page PDF of real text. Shrinks the type a little, then drops bullets, until it fits. */
-export async function renderPdf(kind, { resume, letter, contact = {}, posting = {} }) {
-  const m = await loadMupdf();
-  const w = makeWriter(m);
-  let r = structuredClone(resume);
-  let blocks = kind === 'resume' ? resumeBlocks(r, contact) : letterBlocks(letter, r, contact, posting);
-  let scale = 1;
-  const bottom = PAGE.h - PAGE.margin;
-  for (let tries = 0; layout(blocks, { m, w, device: null, scale }) > bottom && tries < 12; tries++) {
-    if (scale > 0.86) scale -= 0.035;
-    else if (kind === 'resume') {
-      // Too long even small: the last bullet of the longest entry goes.
-      const longest = [...r.experience].sort((a, b) => b.bullets.length - a.bullets.length)[0];
-      if (longest?.bullets.length > 1) longest.bullets.pop();
-      else if (r.projects.length > 1) r.projects.pop();
-      else break;
-      blocks = resumeBlocks(r, contact);
-    } else break;
-  }
+function draw(m, w, pages) {
   const buffer = new m.Buffer();
   const writer = new m.DocumentWriter(buffer, 'pdf', '');
-  const device = writer.beginPage([0, 0, PAGE.w, PAGE.h]);
-  layout(blocks, { m, w, device, scale });
-  writer.endPage();
+  for (const page of pages) {
+    const device = writer.beginPage([0, 0, PAGE.w, PAGE.h]);
+    for (const op of page) {
+      if (op.rule) {
+        const path = new m.Path();
+        path.moveTo(PAGE.margin, op.y);
+        path.lineTo(PAGE.w - PAGE.margin, op.y);
+        device.strokePath(path, new m.StrokeState({ lineCap: 'Butt', lineJoin: 'Miter', lineWidth: 0.6, miterLimit: 10, dashPhase: 0, dashes: null }), [1, 0, 0, 1, 0, 0], m.ColorSpace.DeviceRGB, [0.75, 0.77, 0.8], 1);
+        continue;
+      }
+      const t = new m.Text();
+      t.showString(op.bold ? w.fonts.bold : w.fonts.regular, [op.size, 0, 0, -op.size, op.x, op.y], op.str);
+      device.fillText(t, [1, 0, 0, 1, 0, 0], m.ColorSpace.DeviceRGB, op.color, 1);
+    }
+    writer.endPage();
+  }
   writer.close();
-  return Buffer.from(buffer.asUint8Array());
+  return buffer.asUint8Array();
+}
+
+// Title, author and keywords in the PDF's own metadata: what an ATS and a file list show.
+function withMetadata(m, bytes, meta) {
+  const doc = m.Document.openDocument(bytes, 'application/pdf');
+  try {
+    for (const [k, v] of Object.entries(meta)) if (v) doc.setMetaData(`info:${k}`, String(v).slice(0, 500));
+    return Buffer.from(doc.asPDF().saveToBuffer('compress').asUint8Array());
+  } finally {
+    doc.destroy?.();
+  }
 }
 
 /**
- * Tailors the CV and letter for one posting with `ask` (profileBuild.askJson).
- * @returns { resume, cover_letter, dropped, match }
+ * The CV (up to two pages, one when it fits) or the cover letter (one page) as a PDF of real text.
+ * Shrinks the type a little, then drops the least important bullets, until it fits.
  */
-export async function tailor({ profile, resumeText, posting, account = {}, ask }) {
-  const facts = profileFacts(profile, account);
-  const checked = await ask({
-    system: TAILOR_SYSTEM_PROMPT,
-    user: tailorUserPrompt({ profile, resumeText, posting, facts }),
-    validate: (v) => checkTailored(v, { profile, resumeText, facts }),
-    maxOutputTokens: 2_500,
+export async function renderPdf(kind, { resume, letter, contact = {}, posting = {} }) {
+  const m = await loadMupdf();
+  const w = makeWriter(m);
+  const r = normalizeResume(structuredClone(resume));
+  const maxPages = kind === 'resume' ? 2 : 1;
+  const build = () => (kind === 'resume' ? resumeBlocks(r, contact) : letterBlocks(letter, r, contact, posting));
+  let scale = 1;
+  let pages = layout(build(), w, scale);
+  // A CV that spills a few lines onto page two is set a little smaller to fit on one.
+  if (kind === 'resume' && pages.length === 2 && pages[1].length < 14) {
+    const tighter = layout(build(), w, 0.92);
+    if (tighter.length === 1) {
+      pages = tighter;
+      scale = 0.92;
+    }
+  }
+  for (let tries = 0; pages.length > maxPages && tries < 30; tries++) {
+    if (scale > 0.87) scale -= 0.035;
+    else if (kind === 'resume') {
+      // Too long even small: the last bullet of the longest entry goes, then the last project.
+      const entries = [...r.experience, ...r.projects].filter((e) => e.bullets.length > 2).sort((a, b) => b.bullets.length - a.bullets.length);
+      if (entries[0]) entries[0].bullets.pop();
+      else if (r.projects.length > 2) r.projects.pop();
+      else if (r.achievements.length > 3) r.achievements.pop();
+      else break;
+    } else break;
+    pages = layout(build(), w, scale);
+  }
+  const bytes = draw(m, w, pages.slice(0, maxPages));
+  const skills = r.skills.flatMap((g) => g.items);
+  return withMetadata(m, bytes, {
+    Title: kind === 'resume' ? `${r.name || 'CV'} - CV${posting.title ? ` - ${posting.title}` : ''}` : `${r.name || ''} - Cover letter${posting.company ? ` - ${posting.company}` : ''}`,
+    Author: r.name,
+    Subject: kind === 'resume' ? r.headline : posting.title,
+    Keywords: kind === 'resume' ? skills.join(', ') : '',
+    Creator: 'ArchJobs',
   });
-  return { ...checked, match: keywordMatch(posting.description || posting.title || '', resumeText, checked.resume, profile) };
 }
 
-export const contactOf = (profile, account = {}) => {
-  const f = profileFacts(profile, account);
-  return { city: f.city, phone: f.phone, email: f.email, linkedin: f.linkedin, website: f.website };
+/**
+ * Writes the CV (and, with a posting, the cover letter) with `ask` (profileBuild.askJson).
+ * posting = null makes a general CV.
+ * @returns { resume, cover_letter, dropped, match }
+ */
+export async function tailor({ profile, resumeText, posting, pages = null, details = null, account = {}, ask }) {
+  const facts = profileFacts(profile, account, details);
+  posting ||= { title: '', company: '', description: '' };
+  const checked = await ask({
+    system: TAILOR_SYSTEM_PROMPT,
+    user: tailorUserPrompt({ profile, resumeText, posting, facts, pages }),
+    validate: (v) => checkTailored(v, { profile, resumeText, facts, pages, details }),
+    maxOutputTokens: 4_000,
+  });
+  const postingText = posting.description || posting.title || '';
+  return { ...checked, match: postingText ? keywordMatch(postingText, resumeText, checked.resume, profile) : null };
+}
+
+export const contactOf = (profile, account = {}, details = null) => {
+  const f = profileFacts(profile || {}, account, details);
+  return { city: f.city, state: f.state, phone: f.phone, email: f.email, linkedin: f.linkedin, website: f.website, github: f.github };
 };

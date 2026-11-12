@@ -37,7 +37,7 @@ function RoleList({ company }) {
       <ul className="co-roles">
         {company.roles.map((r) => (
           <li className="co-role" key={r.id}>
-            <a href={r.apply_url} target="_blank" rel="noopener noreferrer">
+            <a href={r.apply_url} data-arch-apply="" target="_blank" rel="noopener noreferrer">
               {r.title}
             </a>
             <RoleMeta role={r} />
@@ -98,6 +98,11 @@ function CompanyCard({ company, checking, busy, onCheck }) {
         <div className="grow">
           <h2>{company.name}</h2>
           <div className="small muted">{[company.kind, company.cities].filter(Boolean).join(' · ')}</div>
+          {company.internships + company.jobs > 0 && (
+            <div className="small muted co-split">
+              {company.internships} internship{company.internships === 1 ? '' : 's'} · {company.jobs} job{company.jobs === 1 ? '' : 's'}
+            </div>
+          )}
         </div>
         {company.openRoles > 0 && (
           <a className="badge co-open" href="#/jobs" title="See these roles on Jobs">
@@ -128,19 +133,36 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState(null);
   const [checking, setChecking] = useState([]);
   const [error, setError] = useState('');
+  const [type, setType] = useState(() => {
+    try {
+      return sessionStorage.getItem('aj-co-type') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [totals, setTotals] = useState(null);
   const before = useRef(null); // open-role total when a check started, for the "done" toast
 
   const load = useCallback(
     () =>
-      api('/companies')
+      api(`/companies${type ? `?type=${type}` : ''}`)
         .then((d) => {
           setCompanies(d.companies);
+          setTotals(d.totals || null);
           setChecking(d.checking || []);
           return d;
         })
         .catch((err) => setError(err.message)),
-    [],
+    [type],
   );
+  const pickType = (value) => {
+    setType(value);
+    try {
+      sessionStorage.setItem('aj-co-type', value);
+    } catch {
+      // storage blocked: the switch still works for this visit
+    }
+  };
   useEffect(() => {
     load();
   }, [load]);
@@ -199,6 +221,18 @@ export default function CompaniesPage() {
         Global firms with offices in India that hire architecture interns and freshers. {tracked ? `${tracked} have a careers feed that is read every morning, or right away with Check now. Their roles show up in Jobs too. ` : ''}
         Campus hiring mostly runs September to December: look for “Graduate Architect”, “Architect Intern” or “BIM Trainee”.
       </p>
+      <div className="segmented role-switch" role="group" aria-label="Internships or jobs">
+        {[
+          ['', 'All openings', null],
+          ['internship', 'Internships', totals?.internship],
+          ['job', 'Jobs', totals?.job],
+        ].map(([value, label, count]) => (
+          <button key={value || 'all'} type="button" aria-pressed={type === value} onClick={() => pickType(value)}>
+            {label}
+            {count != null ? ` · ${count}` : ''}
+          </button>
+        ))}
+      </div>
       {error && (
         <p className="form-error" role="alert">
           {error}

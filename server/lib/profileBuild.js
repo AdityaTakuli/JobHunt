@@ -115,7 +115,7 @@ export async function buildProfile(files, { cfg = config, fetchImpl = fetch, onU
       system: RESUME_SYSTEM_PROMPT,
       user: `CV (${n} page${n === 1 ? '' : 's'}):\n\n${text.slice(0, cfg.profile.maxResumeChars)}`,
       validate: validateResumeProfile,
-      maxOutputTokens: 1_500,
+      maxOutputTokens: 2_500,
     });
   }
 

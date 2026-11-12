@@ -47,7 +47,7 @@ describe('tailored CV: only what the CV backs up', () => {
   const c = checkTailored(reply, { profile, resumeText, facts });
 
   it('drops tools, employers, projects and numbers the CV does not have', () => {
-    assert.deepEqual(c.resume.skills, ['Revit', 'AutoCAD']);
+    assert.deepEqual(c.resume.skills, [{ group: 'Skills', items: ['Revit', 'AutoCAD'] }], 'a flat list from an older reply becomes one group');
     assert.deepEqual(
       c.resume.experience.map((e) => e.firm),
       ['Studio Lotus'],
@@ -61,7 +61,7 @@ describe('tailored CV: only what the CV backs up', () => {
   });
 
   it('takes education from the profile, never from the reply', () => {
-    assert.deepEqual(c.resume.education, [{ degree: 'B.Arch', institution: 'School of Planning and Architecture, Delhi', year: '2027' }]);
+    assert.deepEqual(c.resume.education, [{ degree: 'B.Arch', institution: 'School of Planning and Architecture, Delhi', year: '2027', score: null }]);
   });
 
   it('cuts stock lines out of the cover letter and keeps the rest', () => {
@@ -96,13 +96,17 @@ describe('tailored CV: only what the CV backs up', () => {
     assert.match((await pdfText(letter, { maxPages: 1 })).text, /Re: Junior Architect/);
   });
 
-  it('keeps a long CV to one page', async () => {
+  it('keeps a long CV to two pages at most', async () => {
     const long = structuredClone(c.resume);
     long.experience = Array.from({ length: 3 }, () => ({ ...c.resume.experience[0], bullets: Array(3).fill('Prepared 12 working drawings for a residential villa in Revit with site visits every week and detailed coordination notes') }));
-    long.projects = Array(3).fill({ title: 'Hillside Housing', line: 'Designed 40 units of hillside housing with a long explanation of the site, the climate and the planning approach taken.' });
+    long.experience = Array.from({ length: 4 }, () => ({ ...c.resume.experience[0], bullets: Array(5).fill('Prepared 12 working drawings for a residential villa in Revit with site visits every week and detailed coordination notes') }));
+    long.projects = Array(5).fill({ title: 'Hillside Housing', context: 'Academic project', tools: ['Revit'], bullets: Array(3).fill('Designed 40 units of hillside housing with a long explanation of the site, the climate and the planning approach taken.') });
+    long.achievements = Array(6).fill('First place in the NASA design competition for a long and detailed entry on housing');
     long.summary = 'Final-year student. '.repeat(20);
-    const { pages } = await pdfText(await renderPdf('resume', { resume: long, contact: contactOf(profile) }), { maxPages: 3 });
-    assert.equal(pages, 1);
+    const { pages } = await pdfText(await renderPdf('resume', { resume: long, contact: contactOf(profile) }), { maxPages: 4 });
+    assert.ok(pages <= 2, pages + ' pages');
+    const short = await pdfText(await renderPdf('resume', { resume: c.resume, contact: contactOf(profile) }), { maxPages: 3 });
+    assert.equal(short.pages, 1, 'a short CV stays on one page');
   });
 });
 
@@ -191,5 +195,123 @@ describe('saved files for upload boxes', () => {
     assert.ok(skipped.some((s) => s.key === 'a' && s.reason === 'file'), 'an unclear box is left for the picker');
     const noLibrary = matchFields(fields, facts, { resume: true, portfolio: true, library: [] });
     assert.equal(noLibrary.answers.find((a) => a.key === 'w').file, 'portfolio', 'no work sample saved: the portfolio goes');
+  });
+});
+
+describe('the detailed CV: any discipline, portfolio projects, ATS-friendly PDF', () => {
+  const pages = [
+    { page: 3, project: 'Riverside Library', typology: 'Institutional', scale: 'medium', drawings: ['plan', 'section', 'render'], software: ['Revit', 'Lumion'], process: true, technical: true, role: 'Individual project', note: 'Clear sections with a timber roof detail' },
+    { page: 4, project: 'Riverside Library', typology: 'Institutional', scale: 'medium', drawings: ['detail'], software: ['AutoCAD'], process: false, technical: true, role: null, note: 'Wall section detail' },
+  ];
+  const portfolioOnly = {
+    name: 'MEERA NAIR',
+    stage: 'student',
+    experience_months: 0,
+    education: [],
+    experience: [],
+    software: [
+      { name: 'Revit', level: 'shown' },
+      { name: 'Lumion', level: 'shown' },
+      { name: 'AutoCAD', level: 'shown' },
+    ],
+    skills: ['Detailing'],
+    projects: [],
+    certifications: [],
+    portfolio: { projects: ['Riverside Library'] },
+  };
+  const details = { name: 'Meera Nair', discipline: 'Architecture', degree: 'B.Arch', institution: 'CEPT University', graduation_year: '2027', score: '8.1 CGPA', languages: 'English, Malayalam', city: 'Ahmedabad', email: 'meera@example.com' };
+  const facts = profileFacts(portfolioOnly, {}, details);
+  const reply = {
+    headline: 'B.Arch student (2027) | Revit and detailing',
+    summary: 'Architecture student at CEPT University. Detailed a public library in Revit and AutoCAD, from plans and sections to a timber roof detail. Hard-working team player.',
+    skills: [
+      { group: 'Software', items: ['Revit', 'AutoCAD', 'Lumion', 'Rhino'] },
+      { group: 'Technical', items: ['Detailing'] },
+    ],
+    experience: [],
+    projects: [
+      {
+        title: 'Riverside Library',
+        context: 'Academic project',
+        tools: ['Revit', 'AutoCAD', 'Grasshopper'],
+        bullets: ['Designed a medium-scale public library, developing plans, sections and renders in Revit and Lumion', 'Detailed a timber roof and wall section in AutoCAD', 'Managed a 2,000 sqm site with 12 consultants'],
+      },
+      { title: 'Metro Station', context: null, tools: [], bullets: ['Designed a station'] },
+    ],
+    certifications: ['Autodesk Certified Professional: Revit'],
+    achievements: [],
+  };
+  const c = checkTailored(reply, { profile: portfolioOnly, resumeText: '', facts, pages, details });
+
+  it('writes projects from the portfolio pages when there is no CV', () => {
+    assert.deepEqual(
+      c.resume.projects.map((p) => p.title),
+      ['Riverside Library'],
+    );
+    assert.deepEqual(c.resume.projects[0].tools, ['Revit', 'AutoCAD'], 'a tool the pages do not show is dropped');
+    assert.equal(c.resume.projects[0].bullets.length, 2, 'the line with an invented site area is dropped');
+    assert.deepEqual(c.resume.skills, [
+      { group: 'Software', items: ['Revit', 'AutoCAD', 'Lumion'] },
+      { group: 'Technical', items: ['Detailing'] },
+    ]);
+    assert.ok(c.dropped.some((d) => d.includes('Metro Station')));
+    assert.ok(c.dropped.some((d) => d.includes('Autodesk Certified')), 'a certification not in the sources is dropped');
+  });
+
+  it('cuts stock phrases from the summary and takes education, marks and languages from her details', () => {
+    assert.ok(!/team player|hard-working/i.test(c.resume.summary));
+    assert.deepEqual(c.resume.education[0], { degree: 'B.Arch', institution: 'CEPT University', year: '2027', score: '8.1 CGPA' });
+    assert.deepEqual(c.resume.languages, ['English', 'Malayalam']);
+    assert.equal(c.resume.student, true);
+  });
+
+  it('draws a real-text PDF with standard sections and metadata', async () => {
+    const pdf = await renderPdf('resume', { resume: c.resume, contact: contactOf(portfolioOnly, {}, details) });
+    const { text } = await pdfText(pdf, { maxPages: 2 });
+    for (const t of ['Meera Nair', 'SUMMARY', 'EDUCATION', 'SKILLS', 'PROJECTS', 'LANGUAGES', 'Riverside Library', '8.1 CGPA', 'Ahmedabad', 'meera@example.com']) assert.match(text, new RegExp(t), t);
+    assert.ok(text.indexOf('EDUCATION') < text.indexOf('PROJECTS'), 'a student starts with education');
+    const mupdf = await import('mupdf');
+    const doc = mupdf.Document.openDocument(pdf, 'application/pdf');
+    assert.equal(doc.getMetaData('info:Title'), 'Meera Nair - CV');
+    assert.equal(doc.getMetaData('info:Author'), 'Meera Nair');
+    assert.match(doc.getMetaData('info:Keywords'), /Revit/);
+  });
+
+  it('still draws a CV stored in the old shape', async () => {
+    const old = { name: 'Asha Rao', headline: '', summary: 'Student.', skills: ['Revit'], experience: [], projects: [{ title: 'Hillside Housing', line: 'Designed housing.' }], education: [] };
+    const { text } = await pdfText(await renderPdf('resume', { resume: old, contact: {} }), { maxPages: 1 });
+    assert.match(text, /Hillside Housing/);
+    assert.match(text, /Designed housing/);
+  });
+
+  it('works for an engineering CV too', () => {
+    const mech = {
+      name: 'Ravi Kumar',
+      stage: 'graduate',
+      experience_months: 6,
+      education: [{ degree: 'B.Tech Mechanical', institution: 'COEP', year: 2026 }],
+      experience: [{ role: 'Design Intern', firm: 'Tata Motors', months: 6, what: 'Modelled brackets in SolidWorks and ran FEA in ANSYS' }],
+      software: [
+        { name: 'SolidWorks', level: 'listed' },
+        { name: 'ANSYS', level: 'listed' },
+      ],
+      skills: ['FEA'],
+      projects: [],
+      certifications: [],
+    };
+    const cv = 'Ravi Kumar. B.Tech Mechanical, COEP, 2026. Design Intern, Tata Motors: modelled brackets in SolidWorks, ran FEA in ANSYS, cut weight 15%.';
+    const out = checkTailored(
+      {
+        headline: 'Mechanical engineer',
+        summary: 'Mechanical graduate with SolidWorks and ANSYS.',
+        skills: [{ group: 'Software', items: ['SolidWorks', 'ANSYS', 'CATIA'] }],
+        experience: [{ role: 'Design Intern', firm: 'Tata Motors', location: 'Pune', dates: null, bullets: ['Modelled brackets in SolidWorks and cut weight by 15% after FEA in ANSYS'] }],
+        projects: [],
+      },
+      { profile: mech, resumeText: cv, facts: profileFacts(mech, {}) },
+    );
+    assert.deepEqual(out.resume.skills[0].items, ['SolidWorks', 'ANSYS']);
+    assert.equal(out.resume.experience[0].bullets.length, 1, 'the 15% is in the CV, so it stays');
+    assert.equal(out.resume.experience[0].location, null, 'a city the CV never names is dropped');
   });
 });

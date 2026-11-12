@@ -120,6 +120,13 @@ export function feedFilters(q, now = new Date(), myCities = [], uid = 1) {
     where.push("JSON_SEARCH(j.sources, 'one', ?, NULL, '$[*].source') IS NOT NULL");
     params.push(String(q.source));
   }
+  // Where it was found: by search (Google Jobs, firms' careers feeds) or in an email (LinkedIn
+  // alerts, other job emails). A job seen in both counts for both.
+  const ORIGINS = { search: ['google_jobs', 'company_careers'], email: ['linkedin_email', 'job_email'] };
+  if (ORIGINS[q.origin]) {
+    where.push(`(${ORIGINS[q.origin].map(() => "JSON_SEARCH(j.sources, 'one', ?, NULL, '$[*].source') IS NOT NULL").join(' OR ')})`);
+    params.push(...ORIGINS[q.origin]);
+  }
   if (q.bim === '1') where.push('j.is_bim = 1');
   // Pay: 'listed' = any pay shown; a number = at least that many rupees a month.
   if (q.pay === 'listed') where.push(PAY_LISTED);

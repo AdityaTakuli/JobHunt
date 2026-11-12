@@ -11,7 +11,7 @@ import { jobUrlPatterns, MIN_POSTING, postingFromJsonLd } from '../lib/jobPage.j
 import { LlmError } from '../lib/llm.js';
 import { askJson, profileAvailable } from '../lib/profileBuild.js';
 import { getRow } from '../lib/profileStore.js';
-import { contactOf, renderPdf, tailor, TAILOR_VERSION } from '../lib/tailor.js';
+import { contactOf, GENERAL_KEY, renderPdf, tailor, TAILOR_VERSION } from '../lib/tailor.js';
 import { istDateString, startOfIstDay } from '../lib/time.js';
 
 export const tailorRouter = Router();
@@ -38,6 +38,7 @@ function serialize(row) {
     job_id: row.job_id,
     title: row.title,
     company: row.company,
+    general: row.page_key === GENERAL_KEY,
     resume: parseJson(row.resume, null),
     cover_letter: parseJson(row.cover_letter, null),
     match: parseJson(row.match_info, null),
@@ -90,6 +91,8 @@ tailorRouter.get('/', async (req, res) => {
   let row = null;
   if (req.query.jobId && /^\d{1,10}$/.test(String(req.query.jobId))) {
     [row] = await query('SELECT * FROM tailored_docs WHERE user_id = ? AND job_id = ? ORDER BY id DESC LIMIT 1', [uid, Number(req.query.jobId)]);
+  } else if (req.query.general) {
+    [row] = await query('SELECT * FROM tailored_docs WHERE user_id = ? AND page_key = ? ORDER BY id DESC LIMIT 1', [uid, GENERAL_KEY]);
   } else if (req.query.url) {
     const { job, key } = await resolvePosting({ url: String(req.query.url) });
     if (job) [row] = await query('SELECT * FROM tailored_docs WHERE user_id = ? AND job_id = ? ORDER BY id DESC LIMIT 1', [uid, job.id]);
@@ -104,11 +107,12 @@ tailorRouter.post('/', async (req, res) => {
   const uid = req.user.id;
   const profileRow = await getRow(uid);
   const profile = profileRow?.status === 'ready' ? parseJson(profileRow.profile, null) : null;
-  if (!profile) return res.status(400).json({ error: 'Upload your CV on the Profile page first: the tailored CV is made from it.' });
+  if (!profile) return res.status(400).json({ error: 'Upload your CV or portfolio on the Profile page first: your CV is made from them.' });
   if (!profileAvailable()) return res.status(503).json({ error: 'AI is not set up on this server.' });
-  const { job, key, posting } = await resolvePosting(req.body || {});
+  const general = req.body?.general === true;
+  const { job, key, posting } = general ? { job: null, key: GENERAL_KEY, posting: null } : await resolvePosting(req.body || {});
   if (!job && !key) return res.status(400).json({ error: 'Say which job: a job in ArchJobs or the page of a posting.' });
-  if (!posting.title && posting.description.length < MIN_POSTING) return res.status(400).json({ error: 'There is no posting on this page to tailor to.' });
+  if (!general && !posting.title && posting.description.length < MIN_POSTING) return res.status(400).json({ error: 'There is no posting on this page to tailor to.' });
 
   if (!req.body?.refresh) {
     const [existing] = job
@@ -128,6 +132,8 @@ tailorRouter.post('/', async (req, res) => {
         profile,
         resumeText: profileRow.resume_text ? String(profileRow.resume_text) : '',
         posting,
+        pages: parseJson(profileRow.pages, null),
+        details: parseJson(profileRow.details, null),
         account: { name: req.user.name, email: req.user.email },
         ask: (call) =>
           askJson({
@@ -140,11 +146,11 @@ tailorRouter.post('/', async (req, res) => {
         user_id: uid,
         job_id: job?.id || null,
         page_key: key,
-        title: posting.title.slice(0, 200) || null,
-        company: posting.company.slice(0, 200) || null,
+        title: posting?.title.slice(0, 200) || null,
+        company: posting?.company.slice(0, 200) || null,
         resume: JSON.stringify(result.resume),
         cover_letter: result.cover_letter ? JSON.stringify(result.cover_letter) : null,
-        match_info: JSON.stringify(result.match),
+        match_info: result.match ? JSON.stringify(result.match) : null,
         dropped: JSON.stringify(result.dropped),
         version: TAILOR_VERSION,
         created_at: new Date(),
@@ -174,7 +180,7 @@ tailorRouter.get('/:id/:file', async (req, res) => {
   if (!resume || (kind === 'letter' && !letter)) return res.status(404).json({ error: 'Not found.' });
   const profileRow = await getRow(req.user.id);
   const profile = parseJson(profileRow?.profile, {}) || {};
-  const pdf = await renderPdf(kind, { resume, letter, contact: contactOf(profile, { name: req.user.name, email: req.user.email }), posting: { title: row.title, company: row.company } });
+  const pdf = await renderPdf(kind, { resume, letter, contact: contactOf(profile, { name: req.user.name, email: req.user.email }, parseJson(profileRow?.details, null)), posting: { title: row.title, company: row.company } });
   const who = String(resume.name || 'CV').replace(/[^\p{L}\p{N} ]+/gu, '').trim().replace(/\s+/g, '_') || 'CV';
   const firm = String(row.company || '').replace(/[^\p{L}\p{N} ]+/gu, '').trim().replace(/\s+/g, '_');
   const name = `${who}_${kind === 'resume' ? 'CV' : 'Cover_Letter'}${firm ? `_${firm}` : ''}.pdf`;

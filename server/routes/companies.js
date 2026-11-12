@@ -12,23 +12,46 @@ let checkingSlugs = [];
 
 // Each watched company with its careers link and the open roles we have for it (newest first).
 // Firms with openings are listed first. Roles she hid stay hidden here too.
+// ?type=internship shows internships only; ?type=job everything else (fresher and full-time roles).
+const TYPE_WHERE = {
+  internship: " AND j.role_type = 'internship'",
+  job: " AND (j.role_type IS NULL OR j.role_type <> 'internship')",
+};
+
+const isIntern = (j) => j.role_type === 'internship';
+const fitsType = { internship: isIntern, job: (j) => !isIntern(j) };
+const entryFirst = (a, b) => Number(['internship', 'fresher'].includes(b.role_type)) - Number(['internship', 'fresher'].includes(a.role_type)) || new Date(b.posted_at) - new Date(a.posted_at);
+
 companiesRouter.get('/', async (req, res) => {
+  const type = Object.hasOwn(TYPE_WHERE, req.query.type) ? req.query.type : '';
   const rows = await query('SELECT * FROM companies ORDER BY sort_order');
+  const namesOf = new Map(rows.map((c) => [c.slug, parseJson(c.match_names, [c.name]).map((n) => String(n).toLowerCase())]));
+  const allNames = [...new Set([...namesOf.values()].flat())];
+  // One query for every firm's open roles (it was two per firm: 34 queries on a 5-connection
+  // pool queued badly under load), then split by firm here. A name matches the start of the
+  // job's company, as LIKE 'name%' did.
+  const jobs = allNames.length
+    ? await query(
+        `SELECT j.id, j.title, j.company, j.city, j.role_type, j.apply_url, COALESCE(j.posted_at, j.created_at) AS posted_at
+           FROM jobs j
+          WHERE ${STILL_OPEN} AND j.is_archived = 0 AND j.is_relevant = 1 AND (${allNames.map(() => 'j.company LIKE ?').join(' OR ')})
+            AND NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ?)`,
+        [...allNames.map((n) => `${n.replace(/[\\%_]/g, '\\$&')}%`), req.user.id],
+      )
+    : [];
   const companies = [];
   for (const c of rows) {
-    const names = parseJson(c.match_names, [c.name]);
-    const like = names.map(() => 'j.company LIKE ?').join(' OR ');
-    const where = `${STILL_OPEN} AND j.is_archived = 0 AND j.is_relevant = 1 AND (${like})
-      AND NOT EXISTS (SELECT 1 FROM job_hides h WHERE h.job_id = j.id AND h.user_id = ?)`;
-    const params = [...names.map((n) => `${n.replace(/[\\%_]/g, '\\$&')}%`), req.user.id];
-    const [{ n }] = await query(`SELECT COUNT(*) AS n FROM jobs j WHERE ${where}`, params);
-    const roles = Number(n)
-      ? await query(
-          `SELECT j.id, j.title, j.city, j.role_type, j.apply_url, COALESCE(j.posted_at, j.created_at) AS posted_at
-             FROM jobs j WHERE ${where} ORDER BY (j.role_type IN ('internship', 'fresher')) DESC, COALESCE(j.posted_at, j.created_at) DESC LIMIT ${ROLES_SHOWN}`,
-          params,
-        )
-      : [];
+    const names = namesOf.get(c.slug);
+    const mine = jobs.filter((j) => names.some((n) => String(j.company || '').toLowerCase().startsWith(n)));
+    // Both counts every time, so the switch can say how many of each there are.
+    const interns = mine.filter(isIntern).length;
+    const total = mine.length;
+    const shown = type ? mine.filter(fitsType[type]) : mine;
+    const n = shown.length;
+    const roles = [...shown]
+      .sort(entryFirst)
+      .slice(0, ROLES_SHOWN)
+      .map(({ company, ...r }) => r);
     companies.push({
       slug: c.slug,
       name: c.name,
@@ -42,11 +65,14 @@ companiesRouter.get('/', async (req, res) => {
       lastFound: c.last_found,
       lastNew: c.last_new,
       openRoles: Number(n),
+      internships: interns,
+      jobs: total - interns,
       roles,
     });
   }
   companies.sort((a, b) => b.openRoles - a.openRoles);
-  res.json({ companies, checking: isRunning('fetch-companies') ? checkingSlugs : [] });
+  const totals = { internship: companies.reduce((s, c) => s + c.internships, 0), job: companies.reduce((s, c) => s + c.jobs, 0) };
+  res.json({ companies, type, totals, checking: isRunning('fetch-companies') ? checkingSlugs : [] });
 });
 
 // "Check now": reads the firm's careers feed (or every firm's) right away instead of waiting for

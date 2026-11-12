@@ -43,7 +43,40 @@ async function tabState(tabId) {
   const key = tabKey(tabId);
   const state = (await chrome.storage.session.get(key))[key] || {};
   if (state.sessionAt && Date.now() - state.sessionAt > SESSION_MS) delete state.sessionAt;
+  if (state.armedAt && Date.now() - state.armedAt > SESSION_MS) delete state.armedAt;
   return state;
+}
+
+// ---- Tabs opened from an ArchJobs Apply link ("armed": ARCH may fill them by itself, if the
+// person switched that on). The click and the new tab arrive in either order, a moment apart. ----
+
+const ARM_WINDOW_MS = 15_000;
+let pendingArm = null; // { from, at } after an Apply click
+const recentTabs = []; // { id, opener, at } for tabs just created
+async function arm(tabId, url) {
+  await setTabState(tabId, { armedAt: Date.now(), startUrl: url || null });
+}
+chrome.tabs.onCreated.addListener((tab) => {
+  const now = Date.now();
+  if (pendingArm && now - pendingArm.at < ARM_WINDOW_MS && (tab.openerTabId === pendingArm.from || (tab.openerTabId == null && now - pendingArm.at < 3_000))) {
+    const { url } = pendingArm;
+    pendingArm = null;
+    arm(tab.id, url).catch(() => {});
+    return;
+  }
+  recentTabs.push({ id: tab.id, opener: tab.openerTabId, at: now });
+  while (recentTabs.length && now - recentTabs[0].at > ARM_WINDOW_MS) recentTabs.shift();
+});
+async function armFromClick(fromTab, url, newTab) {
+  if (!newTab) return arm(fromTab, url); // the ArchJobs tab itself goes to the posting
+  const now = Date.now();
+  const i = recentTabs.findIndex((t) => t.opener === fromTab && now - t.at < 3_000);
+  if (i >= 0) {
+    const [t] = recentTabs.splice(i, 1);
+    return arm(t.id, url);
+  }
+  pendingArm = { from: fromTab, url, at: now };
+  return null;
 }
 async function setTabState(tabId, patch) {
   const next = { ...(await tabState(tabId)), ...patch };
@@ -134,6 +167,9 @@ async function onMessage(message, sender) {
 
     case 'tab-state':
       return tabId != null ? tabState(tabId) : {};
+    case 'arm-next':
+      if (tabId != null && /^https?:/.test(String(message.url || ''))) await armFromClick(tabId, String(message.url).slice(0, 2000), Boolean(message.newTab));
+      return { ok: true };
     case 'tab-state-set':
       return tabId != null ? setTabState(tabId, message.patch || {}) : {};
 

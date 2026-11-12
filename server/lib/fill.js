@@ -12,6 +12,7 @@
 //
 // Nothing here ever submits a form; the extension marks what was filled for the person to check.
 
+import { cleanDetails, niceName } from './details.js';
 import { CONTACT_KEYS } from './profile.js';
 
 export const FILL_VERSION = 1;
@@ -31,38 +32,56 @@ const yearsText = (months) => {
  * @param profile the stored profile (lib/profile.js shape)
  * @param account { name, email } of the signed-in person, used when the CV has no contact line
  */
-export function profileFacts(profile, account = {}) {
+export function profileFacts(profile, account = {}, details = null) {
+  profile = profile || {};
+  const d = cleanDetails(details || {});
   const c = profile.contact || {};
-  // CVs often set the name in capitals ("ASHA RAO"); forms want "Asha Rao".
-  const rawName = (profile.name || account.name || '').trim().replace(/\s+/g, ' ');
-  const name = rawName && !/[a-z]/.test(rawName) ? rawName.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, sep, ch) => sep + ch.toUpperCase()) : rawName;
+  // What she typed in "Application details" wins over what the AI read from the CV.
+  const name = niceName(d.name || profile.name || account.name || '');
   const parts = name.split(/\s+/).filter(Boolean);
   const edu = profile.education?.[0] || null;
   const exp = profile.experience?.[0] || null;
   const software = (profile.software || []).map((s) => s.name);
-  const city = c.city || profile.cities?.[0] || null;
+  const city = d.city || c.city || profile.cities?.[0] || null;
+  const cities = d.preferred_cities ? d.preferred_cities.split(/,\s*/) : profile.cities || [];
+  const or = (v) => v || null;
   return {
     name: name || null,
     first_name: parts[0] || null,
     last_name: parts.length > 1 ? parts.slice(1).join(' ') : null,
-    email: c.email || account.email || null,
-    phone: c.phone || null,
-    linkedin: c.linkedin || null,
-    website: c.website || null,
+    email: d.email || c.email || account.email || null,
+    phone: d.phone || c.phone || null,
+    linkedin: d.linkedin || c.linkedin || null,
+    website: d.website || c.website || null,
+    github: or(d.github),
     city,
-    address: c.address || null,
-    country: 'India',
-    date_of_birth: c.date_of_birth || null,
-    degree: edu?.degree || null,
-    institution: edu?.institution || null,
-    graduation_year: profile.graduation_year || edu?.year || null,
-    company: exp?.firm || null,
-    title: exp?.role || null,
+    state: or(d.state),
+    pincode: or(d.pincode),
+    address: d.address || c.address || null,
+    country: d.country || 'India',
+    nationality: or(d.nationality),
+    date_of_birth: d.date_of_birth || c.date_of_birth || null,
+    gender: or(d.gender),
+    discipline: d.discipline || profile.discipline || null,
+    degree: d.degree || edu?.degree || null,
+    specialization: or(d.specialization),
+    institution: d.institution || edu?.institution || null,
+    graduation_year: d.graduation_year || profile.graduation_year || edu?.year || null,
+    score: or(d.score),
+    company: d.current_company || exp?.firm || null,
+    title: d.current_title || exp?.role || null,
+    current_ctc: or(d.current_ctc),
+    expected_ctc: or(d.expected_ctc),
+    notice_period: or(d.notice_period),
+    available_from: or(d.available_from),
+    relocate: or(d.relocate),
+    languages: or(d.languages),
+    heard_from: or(d.heard_from),
     experience_years: yearsText(profile.experience_months || 0),
     experience_months: profile.experience_months || 0,
     software,
     skills: [...new Set([...software, ...(profile.skills || [])])],
-    cities: profile.cities || [],
+    cities,
     summary: profile.summary || null,
     stage: profile.stage || 'student',
     coa: Boolean(profile.coa),
@@ -98,6 +117,9 @@ const AUTOCOMPLETE = {
   'address-level2': 'city',
   'street-address': 'address',
   'country-name': 'country',
+  'address-level1': 'state',
+  'postal-code': 'pincode',
+  sex: 'gender',
   organization: 'company',
   'organization-title': 'title',
   bday: 'date_of_birth',
@@ -105,20 +127,39 @@ const AUTOCOMPLETE = {
 
 // Order matters: the first rule whose test matches wins.
 export const RULES = [
+  // Pay, notice and dates first: their labels also say "current", "company" or "experience".
+  { fact: 'expected_ctc', test: /expected (salary|ctc|stipend|compensation|pay|package)|salary expectation|desired (salary|pay|compensation)|expected annual/ },
+  { fact: 'current_ctc', test: /current (salary|ctc|stipend|compensation|pay|package)|present (salary|ctc)|last drawn|\bctc\b|current annual/, not: /expect/ },
+  { fact: 'available_from', test: /earliest (start|joining)|available (from|to start)|availability date|start date|date of joining|joining date|when can you (start|join)/ },
+  { fact: 'notice_period', test: /notice period|how soon can you join|serving notice/ },
+  // ai: not in her details, but the AI can work it out ("Willing to relocate?" from her cities,
+  // "How did you hear about us?" from the options).
+  { fact: 'relocate', test: /relocat/, ai: true },
+  { fact: 'heard_from', test: /how did you (hear|find|learn|come across)|where did you (hear|find|see)|source of (application|hire|this)|referral source|how you heard/, ai: true },
+  { fact: 'gender', test: /\bgender\b|\bsex\b/ },
   { fact: 'email', test: /e ?mail/ },
   { fact: 'phone', test: /phone|mobile|whatsapp|\btel\b|telephone|contact (no|number|num)/ },
   { fact: 'first_name', test: /\b(first|given|fore) ?name\b|^f ?name$|\bfname\b/ },
   { fact: 'last_name', test: /\b(last|family) ?name\b|\bsurname\b|^l ?name$|\blname\b/ },
   { fact: 'name', test: /\bname\b|^candidate$|^applicant$/, not: NOT_PERSON_NAME },
   { fact: 'linkedin', test: /linked ?in/ },
-  { fact: 'website', test: /portfolio|website|web site|personal site|behance|issuu|\burl\b|online work|link to your work/, not: /linked ?in|github|resume|cv\b/ },
+  { fact: 'github', test: /git ?hub/ },
+  { fact: 'website', test: /portfolio|website|web site|personal site|behance|issuu|\burl\b|online work|link to your work/, not: /linked ?in|github|resume|cv\b|upload|attach/ },
   { fact: 'date_of_birth', test: /date of birth|\bdob\b|birth ?date|birthday/ },
+  { fact: 'languages', test: /languages? (known|spoken|you speak|proficien)|\blanguages\b/, not: /programming|coding/, ai: true },
   { fact: 'cities', test: /preferred (location|city|cities)|location preference|where (would|do) you (want|prefer)|open to work in/ },
+  { fact: 'pincode', test: /pin ?code|postal ?code|\bzip\b|post ?code/ },
   { fact: 'address', test: /\baddress\b/, not: /e ?mail|\bip\b|web/ },
-  { fact: 'country', test: /\bcountry\b|nationality/ },
+  { fact: 'nationality', test: /nationality|citizenship/ },
+  { fact: 'country', test: /\bcountry\b/ },
+  { fact: 'state', test: /\bstate\b|province|\bregion\b/, not: /statement|united states/ },
   { fact: 'city', test: /\bcity\b|current location|\blocation\b|where (are you|do you) (based|live|stay)|hometown|home town|residence|residing/, not: /preferred|job|office|work ?location|relocat/ },
+  // Marks before the graduation rule ("graduation percentage"); school marks are never filled.
+  { fact: 'score', test: /\bc?gpa\b|\bsgpa\b|percentage|aggregate|\bmarks\b|\bgrade\b|\bscore\b/, not: /upload|sheet|10th|12th|class (x|xii|10|12)|\bhsc\b|\bssc\b|secondary|high school|test|exam|gre|toefl|ielts/ },
   { fact: 'institution', test: /college|university|institute|institution|school name|alma mater|\bschool\b|studied at/ },
   { fact: 'graduation_year', test: /graduat|passing|year of (completion|passing|study)|batch|pass ?out|completion year/ },
+  { fact: 'specialization', test: /speciali[sz]ation|\bmajor\b|concentration/, ai: true },
+  { fact: 'discipline', test: /discipline|\bbranch\b|\bstream\b|field of study|area of study/, ai: true },
   { fact: 'degree', test: /\bdegree\b|qualification|education level|highest education|course name|\bcourse\b|programme|program of study/ },
   { fact: 'company', test: /current (company|employer|organi[sz]ation|firm)|employer|company name|organi[sz]ation name|where do you work|last company|previous company/ },
   { fact: 'title', test: /current (title|role|designation|position|job)|designation|job title|current profile|present role/ },
@@ -175,7 +216,7 @@ function datePart(iso, part, field) {
 function factValue(fact, facts, field) {
   const v = facts[fact];
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) return null;
-  if (field.part && (fact === 'date_of_birth' || fact === 'graduation_year')) return datePart(String(v), field.part, field);
+  if (field.part && (fact === 'date_of_birth' || fact === 'graduation_year' || fact === 'available_from')) return datePart(String(v), field.part, field);
   if (fact === 'skills' || fact === 'cities') return v.join(', ');
   if (fact === 'experience_years' && field.type === 'number') return String(Math.round(facts.experience_months / 12));
   return String(v);
@@ -188,7 +229,14 @@ function altsFor(fact, value, facts) {
     return y < 1 ? ['Fresher', 'No experience', '0-1 years', 'Less than 1 year', '0 - 1 years', '0', 'Entry level'] : y < 2 ? ['1-2 years', '1 - 2 years', '1-3 years', '1+ years', '1'] : [`${Math.floor(y)}`, `${Math.floor(y)}+ years`];
   }
   if (fact === 'country') return ['India', 'IN', 'Republic of India'];
-  if (fact === 'degree') return [value, String(value).replace(/\./g, ''), 'Bachelor of Architecture', "Bachelor's Degree", 'Bachelors'];
+  if (fact === 'degree') {
+    const v = String(value);
+    const long = /\bb\.? ?arch/i.test(v) ? 'Bachelor of Architecture' : /\bm\.? ?arch/i.test(v) ? 'Master of Architecture' : /\bb\.? ?(tech|e)\b/i.test(v) ? 'Bachelor of Technology' : /\bm\.? ?(tech|e)\b/i.test(v) ? 'Master of Technology' : /\bb\.? ?des/i.test(v) ? 'Bachelor of Design' : null;
+    const level = /^m|master/i.test(v) ? ["Master's Degree", 'Masters', 'Post Graduate'] : /diploma/i.test(v) ? ['Diploma'] : ["Bachelor's Degree", 'Bachelors', 'Graduate'];
+    return [v, v.replace(/\./g, ''), ...(long ? [long] : []), ...level];
+  }
+  if (fact === 'relocate') return value === 'Yes' ? ['Yes', 'Y', 'Willing to relocate'] : ['No', 'N'];
+  if (fact === 'gender') return value === 'Prefer not to say' ? [value, 'Decline to self-identify', "I don't wish to answer", 'Prefer not to disclose'] : [value];
   return [value];
 }
 
@@ -226,8 +274,9 @@ export function matchFields(fields, facts, files = { resume: false, portfolio: f
       continue;
     }
     let fact = AUTOCOMPLETE[String(field.autocomplete || '').toLowerCase()] || null;
+    let rule = null;
     if (!fact) {
-      const rule = RULES.find((r) => r.test.test(sig) && !(r.not && r.not.test(sig)));
+      rule = RULES.find((r) => r.test.test(sig) && !(r.not && r.not.test(sig)));
       fact = rule?.fact || null;
     }
     if (!fact) {
@@ -252,7 +301,7 @@ export function matchFields(fields, facts, files = { resume: false, portfolio: f
       }
     }
     if (value && field.maxLength > 0) value = value.slice(0, field.maxLength);
-    if (!value && fact === 'cover_letter') {
+    if (!value && (fact === 'cover_letter' || rule?.ai)) {
       rest.push(field);
       continue;
     }
@@ -265,8 +314,9 @@ export function matchFields(fields, facts, files = { resume: false, portfolio: f
 
 // ---- The AI pass ----
 
-export const FILL_SYSTEM_PROMPT = `You fill in a job application form for an architecture student or graduate in India, from their
-profile and CV. The person will check every answer before sending, so leave a field empty rather
+export const FILL_SYSTEM_PROMPT = `You fill in a job application form for a student or recent graduate in India (architecture,
+interior design, civil, mechanical or another engineering or design field: see "discipline"), from
+their profile, CV and the details they typed in themselves. The person will check every answer before sending, so leave a field empty rather
 than guess: a wrong "fact" costs them the application.
 
 Rules:
@@ -291,7 +341,13 @@ List every key you were given.`;
 export function fillUserPrompt({ page, fields, facts, profile, resumeText }) {
   const compactProfile = {
     name: facts.name,
+    discipline: facts.discipline,
     stage: facts.stage,
+    degree: facts.degree,
+    specialization: facts.specialization,
+    institution: facts.institution,
+    languages: facts.languages,
+    willing_to_relocate: facts.relocate,
     graduation_year: facts.graduation_year,
     experience_months: facts.experience_months,
     education: profile.education,
@@ -358,8 +414,9 @@ const AI_NEVER = /salary|\bctc\b|stipend|compensation|pay expectation|notice per
  * open questions remain and `useAi` is on.
  * @returns {{ answers, skipped, ai: { asked, answered, error } }}
  */
-export async function fillFields({ profile, account, resumeText, page, fields, files, useAi = true, ask, coverLetter = null }) {
-  const facts = { ...profileFacts(profile, account), cover_letter: coverLetter };
+export async function fillFields({ profile, account, details = null, resumeText, page, fields, files, useAi = true, ask, coverLetter = null }) {
+  profile = profile || {};
+  const facts = { ...profileFacts(profile, account, details), cover_letter: coverLetter };
   const { answers, rest, skipped } = matchFields(fields, facts, files);
   const ai = { asked: 0, answered: 0, error: null };
   const forAi = [];

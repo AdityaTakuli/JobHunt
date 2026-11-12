@@ -103,7 +103,7 @@ describe('filling forms from the profile, without AI', () => {
   it('leaves only what the rules could not settle for the AI step (which then refuses pay itself)', () => {
     assert.deepEqual(
       rest.map((f) => f.key),
-      ['f16', 'f17', 'f20'],
+      ['f16', 'f20'],
     );
   });
 });
@@ -150,7 +150,7 @@ describe('the AI pass', () => {
     );
     assert.equal(r.ai.asked, 3);
     assert.equal(r.ai.answered, 1);
-    assert.ok(r.skipped.some((s) => s.key === 'q4' && s.reason === 'never'));
+    assert.ok(r.skipped.some((s) => s.key === 'q4' && s.reason === 'unknown' && s.fact === 'expected_ctc'), 'pay comes only from her saved details, never the AI');
     assert.ok(r.skipped.some((s) => s.key === 'q1' && s.reason === 'unknown'), 'a null answer is left for her');
   });
 

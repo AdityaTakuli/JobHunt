@@ -71,7 +71,7 @@ function AppCard({ app, onMove, onEdit }) {
       <div className="row">
         <StatusSelect app={app} onMove={onMove} />
         {app.apply_url && (
-          <a className="icon-btn" href={app.apply_url} target="_blank" rel="noopener noreferrer" aria-label={`Open posting for ${app.title}`}>
+          <a className="icon-btn" href={app.apply_url} data-arch-apply="" target="_blank" rel="noopener noreferrer" aria-label={`Open posting for ${app.title}`}>
             <IconExternal size={18} />
           </a>
         )}
@@ -180,7 +180,7 @@ function Table({ apps, onMove, onEdit }) {
               <td>
                 <div className="cell-actions">
                   {app.apply_url && (
-                    <a className="icon-btn" href={app.apply_url} target="_blank" rel="noopener noreferrer" aria-label={`Open posting for ${app.title}`}>
+                    <a className="icon-btn" href={app.apply_url} data-arch-apply="" target="_blank" rel="noopener noreferrer" aria-label={`Open posting for ${app.title}`}>
                       <IconExternal size={18} />
                     </a>
                   )}

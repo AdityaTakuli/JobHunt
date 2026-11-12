@@ -13,7 +13,9 @@ import { LlmError } from '../lib/llm.js';
 import { findOtp } from '../lib/otp.js';
 import { findUser } from '../lib/users.js';
 import { openPdf, PdfError } from '../lib/pdf.js';
+import { cleanDetails, DISCIPLINES, GENDERS, hasDetails, missingEssentials, prefillDetails } from '../lib/details.js';
 import { applyProfileEdits, PROFILE_VERSION } from '../lib/profile.js';
+import { contactOf, GENERAL_KEY, renderPdf } from '../lib/tailor.js';
 import { askJson, buildProfile, profileAvailable } from '../lib/profileBuild.js';
 import { getRow, invalidate, PROFILE_KINDS, readFile, removeFile, saveFile, upsertRow } from '../lib/profileStore.js';
 import { STILL_OPEN } from '../lib/deadline.js';
@@ -26,8 +28,10 @@ const building = new Map(); // user id -> { promise, step }
 const MB = 1024 * 1024;
 const limits = () => ({ resume: config.profile.maxResumeMb * MB, portfolio: config.profile.maxPortfolioMb * MB });
 
-function serialize(row, uid) {
+function serialize(row, uid, account = {}) {
   const b = building.get(uid);
+  const profileJson = row?.profile ? parseJson(row.profile, null) : null;
+  const details = prefillDetails(parseJson(row?.details, null), profileJson, account);
   return {
     available: profileAvailable(),
     status: b ? 'building' : row?.status || 'empty',
@@ -44,6 +48,11 @@ function serialize(row, uid) {
     builds_today: countToday(row, 'builds'),
     fills_today: countToday(row, 'fills'),
     fills_per_day: config.profile.dailyFills,
+    // "Application details": saved values, else what the CV gave, for the form to start from.
+    details,
+    details_saved: hasDetails(parseJson(row?.details, null)),
+    details_missing: missingEssentials(details),
+    details_options: { disciplines: DISCIPLINES, genders: GENDERS },
   };
 }
 
@@ -106,8 +115,28 @@ function startBuild(uid) {
   return state.promise;
 }
 
+const acct = (req) => ({ name: req.user.name, email: req.user.email });
+
 profileRouter.get('/', async (req, res) => {
-  res.json(serialize(await getRow(req.user.id), req.user.id));
+  res.json(serialize(await getRow(req.user.id), req.user.id, acct(req)));
+});
+
+// "Application details" (the popup form): what ARCH in Chrome fills forms with. Saved apart from
+// the AI-read profile, so it works before any CV is uploaded and survives a re-read.
+profileRouter.put('/details', async (req, res) => {
+  const uid = req.user.id;
+  const details = cleanDetails(req.body || {});
+  await upsertRow(uid, { details: JSON.stringify(details) });
+  const row = await getRow(uid);
+  // Name and contact also correct the profile, so the fit score and old screens agree.
+  if (row?.status === 'ready' && row.profile) {
+    const p = parseJson(row.profile, {});
+    const edited = applyProfileEdits(p, { ...(details.name ? { name: details.name } : {}), contact: Object.fromEntries(['email', 'phone', 'linkedin', 'website', 'city', 'address', 'date_of_birth'].filter((k) => details[k]).map((k) => [k, details[k]])) });
+    await upsertRow(uid, { profile: JSON.stringify(edited) });
+  }
+  const sent = req.body && typeof req.body === 'object' ? req.body : {};
+  const rejected = Object.keys(details).filter((k) => typeof sent[k] === 'string' && sent[k].trim() && !details[k]);
+  res.json({ ...serialize(await getRow(uid), uid, acct(req)), rejected });
 });
 
 // The PDF itself is the request body (Content-Type: application/pdf); the name comes in a header.
@@ -150,7 +179,7 @@ profileRouter.put('/:kind', express.raw({ type: ['application/pdf', 'application
     ...(kind === 'portfolio' ? { pages: null } : {}),
   });
   startBuild(uid).catch(() => {});
-  res.status(202).json(serialize(await getRow(uid), uid));
+  res.status(202).json(serialize(await getRow(uid), uid, acct(req)));
 });
 
 // Read the stored files again (after the models were down, or to apply a newer reader).
@@ -162,7 +191,7 @@ profileRouter.post('/build', async (req, res) => {
   if (building.has(uid)) return res.status(409).json({ error: 'Your profile is being built right now.' });
   if ((await buildsToday(row)) >= config.profile.dailyBuilds) return res.status(429).json({ error: `You have used today's ${config.profile.dailyBuilds} profile reads. More tomorrow.` });
   startBuild(uid).catch(() => {});
-  res.status(202).json(serialize(await getRow(uid), uid));
+  res.status(202).json(serialize(await getRow(uid), uid, acct(req)));
 });
 
 profileRouter.delete('/:kind', async (req, res) => {
@@ -183,7 +212,7 @@ profileRouter.delete('/:kind', async (req, res) => {
   });
   // What is left is read again so the profile matches the files.
   if (other && profileAvailable() && (await buildsToday(await getRow(uid))) < config.profile.dailyBuilds) startBuild(uid).catch(() => {});
-  res.json(serialize(await getRow(uid), uid));
+  res.json(serialize(await getRow(uid), uid, acct(req)));
 });
 
 // Corrections to the extracted profile (software, skills, cities, stage...).
@@ -193,21 +222,45 @@ profileRouter.patch('/', async (req, res) => {
   if (row?.status !== 'ready') return res.status(400).json({ error: 'No profile to edit yet.' });
   const profile = applyProfileEdits(parseJson(row.profile, {}), req.body || {});
   await upsertRow(uid, { profile: JSON.stringify(profile) });
-  res.json(serialize(await getRow(uid), uid));
+  res.json(serialize(await getRow(uid), uid, acct(req)));
 });
 
 // ---- ARCH in Chrome (extension/) ----
 
 const fileLabel = (kind) => (kind === 'resume' ? 'CV' : 'portfolio');
 
+function sendPdf(res, name, buffer) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(buffer);
+}
+
+// The latest general CV ArchJobs wrote ("My CV" on the Profile page) as a PDF, or null.
+async function generalCvPdf(req, row) {
+  const [doc] = await query('SELECT resume FROM tailored_docs WHERE user_id = ? AND page_key = ? ORDER BY id DESC LIMIT 1', [req.user.id, GENERAL_KEY]);
+  const resume = doc ? parseJson(doc.resume, null) : null;
+  if (!resume) return null;
+  const profile = parseJson(row?.profile, {}) || {};
+  const buffer = await renderPdf('resume', { resume, contact: contactOf(profile, acct(req), parseJson(row?.details, null)) });
+  const who = String(resume.name || 'CV').replace(/[^\p{L}\p{N} ]+/gu, '').trim().replace(/\s+/g, '_') || 'CV';
+  return { name: `${who}_CV.pdf`, buffer };
+}
+
 // What the extension shows in its popup: who is signed in and whether there is a profile to fill from.
 profileRouter.get('/extension', async (req, res) => {
   const row = await getRow(req.user.id);
-  const ready = row?.status === 'ready' && Boolean(row.profile);
+  const details = parseJson(row?.details, null);
+  // Saved details alone are enough to fill the usual fields (name, email, college...).
+  const ready = (row?.status === 'ready' && Boolean(row.profile)) || hasDetails(details);
+  const [general] = await query('SELECT id FROM tailored_docs WHERE user_id = ? AND page_key = ? ORDER BY id DESC LIMIT 1', [req.user.id, GENERAL_KEY]);
   res.json({
     version: FILL_VERSION,
     user: { name: req.user.name, email: req.user.email },
     ready,
+    details: hasDetails(details),
+    details_missing: missingEssentials(prefillDetails(details, parseJson(row?.profile, null), acct(req))),
+    general_cv: Boolean(general),
     status: building.has(req.user.id) ? 'building' : row?.status || 'empty',
     resume: Boolean(row?.resume_uploaded_at),
     portfolio: Boolean(row?.portfolio_uploaded_at),
@@ -222,6 +275,11 @@ profileRouter.get('/file/:kind', async (req, res) => {
   if (!PROFILE_KINDS.includes(kind)) return res.status(404).json({ error: 'Not found.' });
   const row = await getRow(req.user.id);
   const buffer = row?.[`${kind}_uploaded_at`] ? await readFile(req.user.id, kind) : null;
+  // No CV uploaded (a student with only a portfolio): the CV ArchJobs wrote for them.
+  if (!buffer && kind === 'resume') {
+    const pdf = await generalCvPdf(req, row);
+    if (pdf) return sendPdf(res, pdf.name, pdf.buffer);
+  }
   if (!buffer) return res.status(404).json({ error: `No ${fileLabel(kind)} uploaded.` });
   const name = String(row[`${kind}_name`] || `${kind}.pdf`).replace(/["\r\n]/g, '');
   res.setHeader('Content-Type', 'application/pdf');
@@ -236,7 +294,8 @@ profileRouter.post('/fill', async (req, res) => {
   const uid = req.user.id;
   const row = await getRow(uid);
   const profile = row?.status === 'ready' ? parseJson(row.profile, null) : null;
-  if (!profile) return res.status(400).json({ error: 'Upload your CV in ArchJobs first, so there is something to fill from.' });
+  const details = parseJson(row?.details, null);
+  if (!profile && !hasDetails(details)) return res.status(400).json({ error: 'Fill in your application details (or upload your CV) in ArchJobs first, so there is something to fill from.' });
   const fields = sanitizeFields(req.body?.fields);
   if (!fields.length) return res.status(400).json({ error: 'No fields to fill.' });
   const str = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
@@ -252,15 +311,17 @@ profileRouter.post('/fill', async (req, res) => {
     const [t] = await query('SELECT id, cover_letter FROM tailored_docs WHERE id = ? AND user_id = ?', [Number(req.body.tailoredId), uid]);
     if (t) tailored = { id: t.id, cover_letter: parseJson(t.cover_letter, null) };
   }
+  const [general] = await query('SELECT id FROM tailored_docs WHERE user_id = ? AND page_key = ? LIMIT 1', [uid, GENERAL_KEY]);
   const result = await fillFields({
     profile,
+    details,
     account: { name: req.user.name, email: req.user.email },
-    resumeText: row.resume_text ? String(row.resume_text).slice(0, 8_000) : null,
+    resumeText: row?.resume_text ? String(row.resume_text).slice(0, 8_000) : null,
     page,
     fields,
     files: {
-      resume: Boolean(row.resume_uploaded_at) || Boolean(tailored),
-      portfolio: Boolean(row.portfolio_uploaded_at),
+      resume: Boolean(row.resume_uploaded_at) || Boolean(tailored) || Boolean(general),
+      portfolio: Boolean(row?.portfolio_uploaded_at),
       letter: Boolean(tailored?.cover_letter),
       library: await query('SELECT id, kind FROM user_documents WHERE user_id = ? ORDER BY uploaded_at DESC', [uid]),
     },
@@ -279,7 +340,7 @@ profileRouter.post('/fill', async (req, res) => {
   res.json({
     ...result,
     ai: { ...result.ai, used: aiUsed, limited: wantAi && !aiAllowed, today: used + (aiUsed ? 1 : 0), limit: config.profile.dailyFills },
-    files: { resume: Boolean(row.resume_uploaded_at), portfolio: Boolean(row.portfolio_uploaded_at) },
+    files: { resume: Boolean(row?.resume_uploaded_at) || Boolean(general), portfolio: Boolean(row?.portfolio_uploaded_at) },
     tailoredId: tailored?.id || null,
   });
 });

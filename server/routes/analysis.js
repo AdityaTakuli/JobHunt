@@ -86,7 +86,7 @@ analysisRouter.post('/posting', async (req, res) => {
   const patterns = jobUrlPatterns(url);
   if (!patterns.length) return res.status(400).json({ error: 'Send the address of a job page.' });
   const where = patterns.map(() => "(j.apply_url LIKE ? OR JSON_SEARCH(j.apply_options, 'one', ?, NULL, '$[*].url') IS NOT NULL)").join(' OR ');
-  const jobs = await query(`SELECT j.id, j.description FROM jobs j WHERE ${where} ORDER BY j.id DESC LIMIT 3`, patterns.flatMap((p) => [p, p]));
+  const jobs = await query(`SELECT j.id, j.title, j.description, j.sources FROM jobs j WHERE ${where} ORDER BY j.id DESC LIMIT 3`, patterns.flatMap((p) => [p, p]));
   if (!jobs.length) return res.json({ matched: false });
 
   const blocks = Array.isArray(req.body?.jsonld) ? req.body.jsonld.filter((b) => typeof b === 'string').slice(0, 10).map((b) => b.slice(0, 200_000)) : [];
@@ -96,8 +96,18 @@ analysisRouter.post('/posting', async (req, res) => {
   if (!description) return res.json({ matched: true, saved: false, reason: 'No posting text on that page.' });
 
   const saved = [];
+  const retitled = [];
+  // A title read from an alert email can belong to the card next to it; the page's own posting
+  // data names the job at this link, so it wins.
+  const pageTitle = typeof fromData?.title === 'string' ? fromData.title.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
   for (const job of jobs) {
-    if (String(job.description || '').length >= description.length) continue;
+    const fromEmail = JSON.stringify(parseJson(job.sources, [])).includes('"job_email"');
+    if (pageTitle.length >= 3 && fromEmail && pageTitle.toLowerCase() !== String(job.title || '').toLowerCase()) {
+      await query('UPDATE jobs SET title = ?, updated_at = ? WHERE id = ?', [pageTitle, new Date(), job.id]);
+      forgetJob(job.id);
+      retitled.push(job.id);
+    }
+    if (String(job.description || '').length >= description.length && !retitled.includes(job.id)) continue;
     await query('UPDATE jobs SET description = ?, updated_at = ? WHERE id = ?', [description, new Date(), job.id]);
     // An analysis written without the posting is dropped, so the next one reads the real thing.
     await query("DELETE FROM job_analyses WHERE job_id = ? AND JSON_EXTRACT(analysis, '$.based_on.posting') = false", [job.id]);

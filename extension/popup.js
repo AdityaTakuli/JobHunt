@@ -15,12 +15,14 @@ function show(s) {
   } else {
     html =
       `<p style="margin-bottom:6px">Signed in as <b>${esc(s.user?.name || s.user?.email || 'you')}</b></p>` +
-      `<div class="line"><span>Profile read from your CV</span>${s.ready ? yes : no}</div>` +
-      `<div class="line"><span>CV uploaded</span>${s.resume ? yes : no}</div>` +
+      `<div class="line"><span>Application details saved</span>${s.details ? yes : no}</div>` +
+      `<div class="line"><span>Profile read from your CV / portfolio</span>${s.ready ? yes : no}</div>` +
+      `<div class="line"><span>CV to attach</span>${s.resume ? yes : s.general_cv ? '<span class="ok">My CV</span>' : no}</div>` +
       `<div class="line"><span>Portfolio uploaded</span>${s.portfolio ? yes : no}</div>` +
       `<div class="line"><span>AI answers today</span><span>${s.fills?.today ?? 0} / ${s.fills?.limit ?? '–'}${s.ai ? '' : ' (off)'}</span></div>` +
       (s.status === 'building' ? '<p class="muted" style="margin-top:6px">Your profile is being read right now.</p>' : '') +
-      (!s.ready && s.status !== 'building' ? '<p class="muted" style="margin-top:6px">Upload your CV on your ArchJobs Profile page so there is something to fill from.</p>' : '');
+      (s.details_missing?.length ? `<p class="muted" style="margin-top:6px">Still needed in your details: ${esc(s.details_missing.join(', ').replace(/_/g, ' '))}.</p>` : '') +
+      (!s.ready && s.status !== 'building' ? '<p class="muted" style="margin-top:6px">Fill in your application details (or upload your CV) in ArchJobs so there is something to fill from.</p>' : '');
   }
   $('status').innerHTML = html;
   $('fill').disabled = !(s.signedIn && s.ready);
@@ -29,12 +31,12 @@ function show(s) {
 chrome.runtime.sendMessage({ type: 'status' }).then(show, (err) => show({ error: err.message }));
 
 // The two automatic behaviours, both on unless switched off.
-chrome.storage.sync.get({ autoFill: true, autoTailor: true, autoNext: true }).then((s) => {
-  $('autoFill').checked = s.autoFill;
+chrome.storage.sync.get({ autoFillFromArch: false, autoTailor: true, autoNext: true }).then((s) => {
+  $('autoFill').checked = s.autoFillFromArch;
   $('autoTailor').checked = s.autoTailor;
   $('autoNext').checked = s.autoNext;
 });
-for (const id of ['autoFill', 'autoTailor', 'autoNext']) $(id).addEventListener('change', (e) => chrome.storage.sync.set({ [id]: e.target.checked }));
+for (const id of ['autoFill', 'autoTailor', 'autoNext']) $(id).addEventListener('change', (e) => chrome.storage.sync.set({ [id === 'autoFill' ? 'autoFillFromArch' : id]: e.target.checked }));
 
 $('fill').addEventListener('click', async () => {
   $('fill').textContent = 'Filling…';
@@ -47,6 +49,7 @@ $('fill').addEventListener('click', async () => {
   }
 });
 $('open').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'open-site', path: '#/profile' }));
+$('details').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'open-site', path: '#/profile?details=1' }));
 $('save').addEventListener('click', async () => {
   $('status').innerHTML = '<span class="muted">Checking…</span>';
   show(await chrome.runtime.sendMessage({ type: 'set-server', server: $('server').value.trim() }));

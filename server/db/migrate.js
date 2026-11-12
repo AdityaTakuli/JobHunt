@@ -36,6 +36,7 @@ const ADDED_COLUMNS = [
   ['profiles', 'resume_text', 'MEDIUMTEXT NULL AFTER builds_count'],
   ['profiles', 'fills_on', 'DATE NULL AFTER resume_text'],
   ['profiles', 'fills_count', 'SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER fills_on'],
+  ['profiles', 'details', 'JSON NULL AFTER fills_count'],
 ];
 
 async function hasIndex(table, name) {

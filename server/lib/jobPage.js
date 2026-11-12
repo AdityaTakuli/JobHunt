@@ -74,6 +74,9 @@ export function postingFromJsonLd(blocks) {
  * address without the query string, and on the listing ids job sites use (Glassdoor ?jl=,
  * jobListingId=, LinkedIn /jobs/view/<id>), so a link with different tracking still matches.
  */
+const ID_PARAMS = ['jobListingId', 'jl', 'jk', 'vjk', 'gh_jid', 'jobId', 'jobid', 'job_id', 'jid', 'reqId', 'requisitionId', 'postingId', 'id'];
+const GENERIC_PATH = /\/(partner\/)?joblisting\.htm$|\/viewjob$|\/rc\/clk$|\/pagead\/clk$|\/apply$|\/job$|\/jobs$|\/careers?$|\/index\.(php|html?|aspx)$/i;
+
 export function jobUrlPatterns(url) {
   let u;
   try {
@@ -85,14 +88,35 @@ export function jobUrlPatterns(url) {
   const like = (s) => s.replace(/[\\%_]/g, '\\$&');
   const out = new Set();
   const path = u.pathname.replace(/\/+$/, '');
-  // A bare site root ("https://x.com/") says nothing about which job it is.
-  if (path.length > 1) out.add(`${like(`${u.host}${path}`)}%`);
   const host = u.hostname.replace(/^www\./, '');
+  // The job's own id in the query string ("?jobListingId=123", "?jk=abc", "?gh_jid=42").
+  let idParam = null;
+  for (const key of ID_PARAMS) {
+    const v = u.searchParams.get(key);
+    if (v && /^[A-Za-z0-9_-]{4,64}$/.test(v)) {
+      idParam = [key, v];
+      break;
+    }
+  }
+  // The path alone names one job only when it carries an id or a slug ("/jobs/view/4012345",
+  // "/job-listing/bim-intern-wsp-JV_...htm"). A shared path ("/partner/jobListing.htm",
+  // "/viewjob", "/apply") is the same for every job on the site: matching on it tied pages to
+  // the wrong job (a Glassdoor posting's text saved on another Glassdoor job).
+  const pathNamesJob = path.length > 1 && (/\d{4,}/.test(path) || path.split('/').some((seg) => (seg.length >= 12 && /[-_]/.test(seg)) || seg.length >= 25 || /\d{3,}/.test(seg))) && !GENERIC_PATH.test(path);
+  if (pathNamesJob) out.add(`${like(`${u.host}${path}`)}%`);
+  else if (idParam && path.length >= 1) out.add(`${like(`${u.host}${path || '/'}`)}%${like(`${idParam[0]}=${idParam[1]}`)}%`);
   if (/(^|\.)glassdoor\./.test(host)) {
     const id = u.searchParams.get('jl') || u.searchParams.get('jobListingId');
     if (/^\d{6,}$/.test(id || '')) {
       out.add(`%glassdoor.%jl=${id}%`);
       out.add(`%glassdoor.%jobListingId=${id}%`);
+    }
+  }
+  if (/(^|\.)indeed\./.test(host)) {
+    const jk = u.searchParams.get('jk') || u.searchParams.get('vjk');
+    if (/^[a-f0-9]{8,32}$/i.test(jk || '')) {
+      out.add(`%indeed.%jk=${jk}%`);
+      out.add(`%indeed.%vjk=${jk}%`);
     }
   }
   if (/(^|\.)linkedin\.com$/.test(host)) {

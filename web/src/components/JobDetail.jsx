@@ -62,7 +62,7 @@ function WhereToApply({ job, actions }) {
       <ul className="apply-list">
         {options.map((o, i) => (
           <li key={o.url}>
-            <a href={o.url} target="_blank" rel="noopener noreferrer" onClick={() => actions.promptApplied(job)}>
+            <a href={o.url} data-arch-apply="" target="_blank" rel="noopener noreferrer" onClick={() => actions.promptApplied(job)}>
               {o.publisher}
             </a>
             <span className={`apply-kind is-${o.kind}`}>{APPLY_KIND_LABELS[o.kind]}</span>
@@ -90,7 +90,7 @@ function Actions({ job, actions, className = '' }) {
   const saved = Boolean(job.application_status);
   return (
     <div className={`detail-actions ${className}`}>
-      <a className="btn btn-primary" href={job.apply_url} target="_blank" rel="noopener noreferrer" onClick={() => actions.promptApplied(job)}>
+      <a className="btn btn-primary" href={job.apply_url} data-arch-apply="" target="_blank" rel="noopener noreferrer" onClick={() => actions.promptApplied(job)}>
         {applyLabel(job)} <IconExternal size={17} />
       </a>
       <button type="button" className={`btn${saved ? ' is-on' : ''}`} onClick={() => actions.toggleSave(job)} aria-pressed={saved}>

@@ -19,22 +19,25 @@ import { canonicalSkill, canonicalTypology, DRAWING_TYPES, findSkills, findTypol
 
 export const PROFILE_VERSION = 1;
 
-export const RESUME_SYSTEM_PROMPT = `You read the CV (resume) of an architecture student or fresh graduate in India and turn it into
-structured data for matching with job postings. Copy only what the CV states; never invent
-software, projects or experience. Reply with one JSON object and nothing else:
+export const RESUME_SYSTEM_PROMPT = `You read the CV (resume) of a student or fresh graduate in India (architecture, interior design,
+civil, mechanical or any other engineering or design field) and turn it into structured data for
+matching with job postings. Copy only what the CV states; never invent software, projects or
+experience. Reply with one JSON object and nothing else:
 {
   "name": string | null,
+  "discipline": string | null,                       // the field they study or work in: "Architecture", "Interior design", "Civil engineering", "Mechanical engineering"...
   "stage": "student" | "graduate" | "experienced",   // student = still studying; experienced = 2+ years of paid work after graduating
-  "graduation_year": integer | null,                 // year of (expected) B.Arch / M.Arch graduation
-  "experience_months": integer,                      // paid or internship work in architecture, total months (0 if none)
-  "education": [{ "degree": string, "institution": string, "year": integer | null }],
-  "experience": [{ "role": string, "firm": string, "months": integer | null, "what": string }],  // up to 8, what = one line of what they did
-  "software": string[],                              // every tool named (Revit, AutoCAD, SketchUp, Rhino, Lumion, Photoshop...)
-  "skills": string[],                                // up to 15 things they can do, as written (working drawings, 3D modelling, site visits...)
-  "projects": [{ "title": string, "typology": string, "scale": string | null, "role": string | null, "tools": string[], "academic": boolean }],  // up to 10
+  "graduation_year": integer | null,                 // year of (expected) graduation from their main degree
+  "experience_months": integer,                      // paid or internship work in their field, total months (0 if none)
+  "education": [{ "degree": string, "institution": string, "year": integer | null, "score": string | null }],  // every level the CV lists (degree, Class XII, Class X); score = marks as written ("84.35%", "8.2 CGPA")
+  "experience": [{ "role": string, "firm": string, "months": integer | null, "what": string }],  // up to 8, what = up to 3 sentences of what they did, with every tool, number and result the CV gives
+  "software": string[],                              // every tool named (Revit, AutoCAD, SketchUp, SolidWorks, ANSYS, STAAD.Pro, ETABS, Primavera, MATLAB...)
+  "skills": string[],                                // up to 15 things they can do, as written (working drawings, structural analysis, GD&T, site supervision...)
+  "projects": [{ "title": string, "typology": string, "scale": string | null, "role": string | null, "tools": string[], "academic": boolean, "what": string | null }],  // up to 10; what = 1-2 sentences of what they did and found, as the CV says
   "cities": string[],                                // cities they live in or are open to, if stated
   "coa": boolean,                                    // registered with the Council of Architecture, if stated
   "certifications": string[],
+  "achievements": string[],                          // up to 6: awards, competitions, rankings, publications, positions of responsibility, as written
   "summary": string,                                 // 1-2 plain sentences on who they are and what they are strongest at
   "contact": {                                       // exactly as written on the CV, null when absent
     "email": string | null,
@@ -47,7 +50,8 @@ software, projects or experience. Reply with one JSON object and nothing else:
   }
 }`;
 
-export const PORTFOLIO_PAGES_SYSTEM_PROMPT = `You review pages of an architecture student's portfolio (images). For each page, say what it
+export const PORTFOLIO_PAGES_SYSTEM_PROMPT = `You review pages of a student's portfolio or project report (images): usually architecture or interiors, sometimes civil,
+mechanical or another engineering field. For each page, say what it
 shows so the work can be matched with job postings. Judge only what is visible. Reply with one
 JSON object and nothing else:
 {
@@ -114,11 +118,11 @@ export function validateResumeProfile(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const stage = ['student', 'graduate', 'experienced'].includes(value.stage) ? value.stage : 'student';
   const education = (Array.isArray(value.education) ? value.education : [])
-    .map((e) => ({ degree: str(e?.degree, 80), institution: str(e?.institution, 120), year: int(e?.year, { min: 1980, max: 2040 }) }))
+    .map((e) => ({ degree: str(e?.degree, 80), institution: str(e?.institution, 120), year: int(e?.year, { min: 1980, max: 2040 }), score: str(e?.score, 30) || null }))
     .filter((e) => e.degree || e.institution)
     .slice(0, 6);
   const experience = (Array.isArray(value.experience) ? value.experience : [])
-    .map((e) => ({ role: str(e?.role, 80), firm: str(e?.firm, 100), months: int(e?.months, { max: 600 }), what: str(e?.what, 200) }))
+    .map((e) => ({ role: str(e?.role, 80), firm: str(e?.firm, 100), months: int(e?.months, { max: 600 }), what: str(e?.what, 600) }))
     .filter((e) => e.role || e.firm)
     .slice(0, 8);
   const projects = (Array.isArray(value.projects) ? value.projects : [])
@@ -129,6 +133,7 @@ export function validateResumeProfile(value) {
       role: str(p?.role, 100) || null,
       tools: dedupeCanonical(strList(p?.tools, 8)),
       academic: p?.academic !== false,
+      what: str(p?.what, 400) || null,
     }))
     .filter((p) => p.title)
     .slice(0, 10);
@@ -136,6 +141,7 @@ export function validateResumeProfile(value) {
   if (!summary && !education.length && !projects.length) return null;
   return {
     name: str(value.name, 80) || null,
+    discipline: str(value.discipline, 60) || null,
     stage,
     graduation_year: int(value.graduation_year, { min: 1980, max: 2040 }),
     experience_months: int(value.experience_months, { max: 600 }) ?? 0,
@@ -147,6 +153,7 @@ export function validateResumeProfile(value) {
     cities: strList(value.cities, 8),
     coa: value.coa === true,
     certifications: strList(value.certifications, 8, 80),
+    achievements: strList(value.achievements, 6, 200),
     summary,
     contact: validateContact(value.contact),
   };
@@ -218,7 +225,7 @@ export function portfolioRubric(pages, totalPages) {
 export function mergeProfile({ resume = null, pages = null, review = null, totalPages = 0 } = {}) {
   const profile = resume
     ? structuredClone(resume)
-    : { name: null, stage: 'student', graduation_year: null, experience_months: 0, education: [], experience: [], software: [], skills: [], projects: [], cities: [], coa: false, certifications: [], summary: '', contact: { ...EMPTY_CONTACT } };
+    : { name: null, discipline: null, stage: 'student', graduation_year: null, experience_months: 0, education: [], experience: [], software: [], skills: [], projects: [], cities: [], coa: false, certifications: [], achievements: [], summary: '', contact: { ...EMPTY_CONTACT } };
   profile.contact = { ...EMPTY_CONTACT, ...(profile.contact || {}) };
   const software = new Map(profile.software.map((s) => [s.name, s.level]));
   const typologies = new Set(profile.projects.map((p) => p.typology).filter(Boolean));

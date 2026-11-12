@@ -5,7 +5,9 @@ import { formatDateTime } from '../format.js';
 import { IconAlert, IconRefresh, IconX } from '../icons.jsx';
 import ChipInput from './ChipInput.jsx';
 import DocumentsCard from './DocumentsCard.jsx';
-import { ContactCard, ExtensionCard } from './ExtensionCards.jsx';
+import { ApplicationDetailsCard, ApplicationDetailsDialog } from './ApplicationDetails.jsx';
+import { ExtensionCard } from './ExtensionCards.jsx';
+import MyCvCard from './MyCvCard.jsx';
 import { RowsSkeleton } from './Skeleton.jsx';
 import { useToast } from './Toast.jsx';
 
@@ -104,7 +106,9 @@ export default function ProfilePanel() {
   const [gaps, setGaps] = useState(null);
   const [edits, setEdits] = useState(null); // software, skills, cities, stage, coa while editing
   const [saving, setSaving] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const wasBuilding = useRef(false);
+  const askedDetails = useRef(false);
 
   const load = useCallback(() => api('/profile').then(setState).catch((err) => toast({ message: err.message, error: true })), [toast]);
   const loadGaps = useCallback(() => api('/profile/gaps').then(setGaps).catch(() => setGaps(null)), []);
@@ -112,6 +116,22 @@ export default function ProfilePanel() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The details form opens by itself when ARCH in Chrome sends her here (#/profile?details=1), and
+  // once per visit while the basics most forms need are still missing.
+  useEffect(() => {
+    if (!state || askedDetails.current) return;
+    askedDetails.current = true;
+    const fromLink = /[?&]details=1/.test(window.location.hash);
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem('aj-details-asked') === '1';
+      sessionStorage.setItem('aj-details-asked', '1');
+    } catch {
+      // storage blocked: ask anyway
+    }
+    if (fromLink || (!seen && !state.details_saved && state.details_missing?.length > 0)) setDetailsOpen(true);
+  }, [state]);
 
   // While the AI reads the files, ask every few seconds; when it finishes, say so and refresh.
   const building = state?.status === 'building';
@@ -202,16 +222,16 @@ export default function ProfilePanel() {
         </p>
       )}
       <p className="small muted" style={{ marginTop: 0 }}>
-        Upload your CV, your portfolio, or both. The AI reads them once into a profile (software, skills, projects, what your portfolio shows), and every job then gets a fit score against it:
+        Any field of study (architecture, interiors, civil, mechanical…): upload your CV, your portfolio, or both. Only a portfolio is fine too: ArchJobs writes a CV from it. The AI reads them once into a profile (software, skills, projects, what your portfolio shows), and every job then gets a fit score against it:
         the ranking a hiring system does, shown openly. Your files stay private to you. {state.builds_today}/{state.limits.buildsPerDay} reads used today.
       </p>
 
       <div className="upload-grid">
-        <UploadCard kind="resume" title="CV / resume" hint="A text PDF (not a scan). Education, internships, software, projects." file={state.resume} limitMb={state.limits.resumeMb} busy={building} onUpload={upload} onRemove={remove} />
+        <UploadCard kind="resume" title="CV / resume" hint="A text PDF (not a scan): education, internships, software, projects. Optional if you upload a portfolio." file={state.resume} limitMb={state.limits.resumeMb} busy={building} onUpload={upload} onRemove={remove} />
         <UploadCard
           kind="portfolio"
           title="Portfolio"
-          hint={`Your design portfolio as a PDF. The first ${state.limits.portfolioPages} pages are read as images; export at screen quality to keep it small.`}
+          hint={`Your portfolio, project report or work samples as one PDF. The first ${state.limits.portfolioPages} pages are read as images; export at screen quality to keep it small.`}
           file={state.portfolio}
           limitMb={state.limits.portfolioMb}
           busy={building}
@@ -219,6 +239,10 @@ export default function ProfilePanel() {
           onRemove={remove}
         />
       </div>
+
+      <ApplicationDetailsCard state={state} onOpen={() => setDetailsOpen(true)} />
+      <ApplicationDetailsDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} state={state} onSaved={setState} />
+      <MyCvCard hasResume={Boolean(state.resume)} ready={state.status === 'ready' || Boolean(profile)} />
 
       <DocumentsCard refreshKey={`${state.resume?.uploaded_at || ''}${state.portfolio?.uploaded_at || ''}`} />
 
@@ -331,8 +355,6 @@ export default function ProfilePanel() {
               </button>
             </div>
           </section>
-
-          <ContactCard profile={profile} onSaved={setState} />
 
           {profile.portfolio && (
             <section className="card profile-section">

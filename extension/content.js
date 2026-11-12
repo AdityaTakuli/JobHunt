@@ -1187,24 +1187,52 @@
 
   // ---- Offering help ----
 
+  // A job application form, not just any form (a settings page, a search console, a checkout).
+  // The address or title must say so, or the form itself must ask for a CV / talk about applying.
   function looksLikeApplication() {
     const inputs = [...document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=search]), textarea, select')].filter(
       (el) => el.type === 'file' || visible(el),
     );
     if (inputs.length < 3) return 0;
-    const hasFile = inputs.some((el) => el.type === 'file');
-    const words = /apply|application|career|job|candidate|recruit|hiring|vacanc|internship|position|opening|resume|\bcv\b/i;
-    const page = `${location.href} ${document.title} ${text(document.body?.innerText || '').slice(0, 3000)}`;
-    return hasFile || words.test(page) ? inputs.length : 0;
+    const jobWords = /\bapply\b|application|careers?\b|\bjobs?\b|candidate|recruit|hiring|vacanc|internship|opening|requisition|talent|workday|greenhouse|lever\.co|smartrecruiters|icims|naukri|instahire/i;
+    const formWords = /resume|\bcv\b|curriculum vitae|cover letter|portfolio|apply|application|candidate|notice period|expected (salary|ctc)|current (ctc|employer)|years of experience|work experience|graduation|college|university/i;
+    const where = `${location.hostname}${location.pathname} ${document.title}`;
+    // The words around the inputs only: a page that merely mentions "jobs" in its menu doesn't count.
+    const near = new Set();
+    for (const el of inputs.slice(0, 40)) near.add(el.closest('form, [role=form], main, section, fieldset') || el.parentElement);
+    const formText = text([...near].map((n) => n?.innerText || '').join(' ')).slice(0, 6000);
+    const asksForCv = inputs.some((el) => el.type === 'file') && /resume|\bcv\b|curriculum|portfolio|cover letter/i.test(formText);
+    return asksForCv || (jobWords.test(where) && formWords.test(formText)) || (formWords.test(formText) && jobWords.test(formText)) ? inputs.length : 0;
+  }
+
+  // On the ArchJobs site itself: an Apply link marks the tab it opens, so ARCH fills that
+  // application by itself. Nothing is filled on ArchJobs.
+  function watchArchJobsLinks() {
+    const arm = (e) => {
+      const a = e.target?.closest?.('a[data-arch-apply]');
+      if (!a || !/^https?:/.test(a.href)) return;
+      const newTab = a.target === '_blank' || e.ctrlKey || e.metaKey || e.button === 1;
+      send({ type: 'arm-next', url: a.href, newTab });
+    };
+    document.addEventListener('click', arm, true);
+    document.addEventListener('auxclick', arm, true);
   }
 
   async function start() {
     const { server } = await chrome.storage.sync.get('server').catch(() => ({}));
     const own = String(server || 'https://archjobs.velocitytechnologies.in');
-    if (location.href.startsWith(own) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(#|$|\?)/.test(location.href)) return;
+    if (location.href.startsWith(own) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(#|$|\?)/.test(location.href)) {
+      if (isTop) {
+        // Back on ArchJobs: this tab is no longer in the middle of an application from it.
+        send({ type: 'tab-state-set', patch: { armedAt: null } });
+        watchArchJobsLinks();
+      }
+      return;
+    }
     const state = (await send({ type: 'tab-state' })) || {};
     tailored = state.tailored || null;
     sessionActive = Boolean(state.sessionAt);
+    const armed = Boolean(state.armedAt);
     watchForNewFields();
     watchSubmits();
     if (isTop) {
@@ -1220,9 +1248,10 @@
     const count = looksLikeApplication();
     if (!count) return;
     addPickers();
-    // Filling automatically (the default): no button to press.
-    const { autoFill } = await chrome.storage.sync.get({ autoFill: true });
-    if (autoFill) {
+    // ARCH fills when asked: the chip, the popup's button or Alt+Shift+A. Filling by itself is an
+    // opt-in switch (off by default), and even then only in a tab opened from an ArchJobs Apply link.
+    const { autoFillFromArch: autoFill } = await chrome.storage.sync.get({ autoFillFromArch: false });
+    if (autoFill && armed) {
       run();
       return;
     }

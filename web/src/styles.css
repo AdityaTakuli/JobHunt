@@ -4898,3 +4898,83 @@ a.co-open:hover {
     min-height: 44px;
   }
 }
+
+/* ---- Application details (popup form on the Profile page) ---- */
+dialog.dialog:has(.details-form) {
+  width: min(760px, calc(100vw - 24px));
+}
+.details-intro {
+  margin: 0;
+}
+.details-form {
+  display: grid;
+  gap: 14px;
+}
+.details-section {
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.details-section legend {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.details-req {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.details-form .input[aria-invalid='true'] {
+  border-color: var(--warning, #b45309);
+}
+.dialog:has(.details-form) .dialog-actions {
+  position: sticky;
+  bottom: -20px;
+  margin: 0 -20px -20px;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.details-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 16px;
+  margin: 0 0 8px;
+}
+.details-summary dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.details-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.details-missing {
+  margin: 0;
+  color: var(--warning-text, var(--text));
+}
+
+/* Jobs page: where the jobs came from (search or email), under the internships/jobs switch. */
+.origin-switch {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 10px;
+}
+.origin-switch button {
+  flex: 1 1 auto;
+}
+.co-split {
+  margin-top: 2px;
+}
+@media (max-width: 480px) {
+  .origin-switch {
+    width: 100%;
+  }
+  .origin-switch button {
+    padding-inline: 8px;
+  }
+}

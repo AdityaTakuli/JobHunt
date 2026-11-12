@@ -287,6 +287,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   resume_text MEDIUMTEXT NULL,               -- the CV as text, for filling application forms (lib/fill.js)
   fills_on DATE NULL,                        -- IST day of the AI form fills counted in fills_count
   fills_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  details JSON NULL,                         -- "Application details" the person typed (lib/details.js)
   built_at DATETIME NULL,
   updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
