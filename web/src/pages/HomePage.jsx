@@ -118,7 +118,7 @@ export default function HomePage({ google = false, theme = 'system', onCycleThem
       <header className="home-header">
         <div className="home-header-inner">
           <a className="brand" href="#/" aria-label="ArchJobs home">
-            <Logo width={46} />
+            <Logo height={31} />
           </a>
           <nav className="home-nav" aria-label="About ArchJobs">
             {SECTIONS.map(({ id, label }) => (
@@ -295,7 +295,7 @@ export default function HomePage({ google = false, theme = 'system', onCycleThem
         </motion.section>
 
         <motion.section className="home-section home-end" {...reveal}>
-          <LogoMark width={64} />
+          <LogoMark height={43} />
           <h2 className="home-h2">Ready when you are.</h2>
           <p className="home-sub">Sign in with the Google account you use for job hunting.</p>
           <div className="home-cta home-cta-center">

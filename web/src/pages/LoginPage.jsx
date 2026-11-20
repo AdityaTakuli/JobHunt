@@ -107,7 +107,7 @@ export default function LoginPage({ onLogin, google = false, passwordLogin = tru
         <div className="card login-card" ref={cardRef}>
           <form onSubmit={submit}>
             <div className="login-reveal login-brand">
-              <LogoMark width={56} />
+              <LogoMark height={37} />
               <div>
                 <h1>
                   <Wordmark />

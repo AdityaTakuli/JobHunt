@@ -13,6 +13,7 @@
   --ok: #157347;
   --ok-bg: #e3f4ea;
   --accent: #2563eb;
+  --logo-ink: var(--text);
   --accent-hover: #1d4ed8;
   --accent-contrast: #ffffff;
   --accent-soft: #e8efff;
@@ -51,6 +52,7 @@
     --ok: #5fd08f;
     --ok-bg: #0f2a1b;
     --accent: #4f8cff;
+    --logo-ink: #f1e8d8;
     --accent-hover: #72a3ff;
     --accent-contrast: #030b1f;
     --accent-soft: #0c1a36;
@@ -81,6 +83,7 @@
   --ok: #5fd08f;
   --ok-bg: #0f2a1b;
   --accent: #4f8cff;
+  --logo-ink: #f1e8d8;
   --accent-hover: #72a3ff;
   --accent-contrast: #030b1f;
   --accent-soft: #0c1a36;
@@ -231,20 +234,18 @@ main:focus:not(:focus-visible) {
 }
 
 .logo-mark path {
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
+  stroke-linecap: butt;
   stroke-linejoin: round;
 }
 
-.logo-mark .lm-thin {
-  stroke-width: 1.4;
-  opacity: 0.55;
+.logo-mark .lm-outer {
+  stroke: var(--accent);
+  stroke-width: 4.5;
 }
 
-.logo-mark .lm-slab {
-  stroke: var(--accent);
-  stroke-width: 2.8;
+.logo-mark .lm-inner {
+  stroke: var(--logo-ink);
+  stroke-width: 3;
 }
 
 .logo-mark.is-drawing path {
@@ -266,14 +267,16 @@ main:focus:not(:focus-visible) {
 .logo-word {
   font-family: var(--font-brand);
   font-size: 21px;
-  font-weight: 450;
+  font-weight: 700;
+  color: var(--logo-ink);
   line-height: 1;
   letter-spacing: -0.015em;
   white-space: nowrap;
 }
 
 .logo-word b {
-  font-weight: 800;
+  font-weight: 700;
+  color: var(--accent);
 }
 
 .top-nav {

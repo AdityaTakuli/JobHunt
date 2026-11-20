@@ -192,7 +192,7 @@ function Shell() {
   const boot = (
     <div className="boot" aria-busy="true" aria-label="Loading">
       <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
-        <LogoMark width={72} />
+        <LogoMark height={48} />
       </motion.span>
       <LoadingQuote after={600} />
     </div>
@@ -248,7 +248,7 @@ function Shell() {
       <header className="app-header" inert={welcome || undefined}>
         <div className="app-header-inner">
           <a className="brand" href="#/jobs" aria-label="ArchJobs home">
-            <Logo width={46} />
+            <Logo height={31} />
           </a>
           <nav className="top-nav" aria-label="Main">
             {NAV.map((item) => {
