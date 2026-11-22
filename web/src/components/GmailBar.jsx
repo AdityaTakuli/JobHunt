@@ -113,7 +113,8 @@ export default function GmailBar({ onSynced }) {
   if (!gmail.connected) {
     return (
       <p className="gmail-bar muted">
-        <IconMail size={16} /> Connect Gmail to bring in job alerts from every site you follow and keep your Tracker up to date. <a href="#/settings">Connect in Settings</a>
+        <IconMail size={16} /> <span className="gp-long">Connect Gmail to bring in job alerts from every site you follow and keep your Tracker up to date.</span>
+        <span className="gp-short">Bring your job alerts and applications in from Gmail.</span> <a href="#/settings">Connect in Settings</a>
       </p>
     );
   }

@@ -12,7 +12,7 @@ import { LlmError } from '../lib/llm.js';
 import { askJson, profileAvailable } from '../lib/profileBuild.js';
 import { getRow } from '../lib/profileStore.js';
 import { loadAtsData } from '../lib/atsKeywords.js';
-import { quotaFor, recordUse, weeklyBlock } from '../lib/quota.js';
+import { quotaFor, refundUse, reserveUse } from '../lib/quota.js';
 import { contactOf, GENERAL_KEY, renderPdf, tailor, TAILOR_VERSION } from '../lib/tailor.js';
 import { istDateString, startOfIstDay } from '../lib/time.js';
 
@@ -124,14 +124,19 @@ tailorRouter.post('/', async (req, res) => {
       : await query('SELECT * FROM tailored_docs WHERE user_id = ? AND page_key = ? AND version = ? ORDER BY id DESC LIMIT 1', [uid, key, TAILOR_VERSION]);
     if (existing) return res.json({ tailored: serialize(existing), reused: true });
   }
-  if ((await usedToday(uid)) >= config.profile.dailyTailors) {
-    return res.status(429).json({ error: `You have made today's ${config.profile.dailyTailors} tailored CVs. More tomorrow.` });
-  }
-  const blocked = await weeklyBlock(req.user, 'tailor');
-  if (blocked) return res.status(429).json({ error: blocked.message, upgrade: true });
-
   const flightKey = `${uid}:${job ? `j${job.id}` : key}`;
+  // Asking again while the same CV is being written joins that run and costs nothing.
   if (!inFlight.has(flightKey)) {
+    if ((await usedToday(uid)) >= config.profile.dailyTailors) {
+      return res.status(429).json({ error: `You have made today's ${config.profile.dailyTailors} tailored CVs. More tomorrow.` });
+    }
+    const reserved = await reserveUse(req.user, 'tailor');
+    if (reserved.blocked) return res.status(429).json({ error: reserved.blocked.message, upgrade: true });
+    // Another request for this CV started while the use was being reserved: join it instead.
+    if (inFlight.has(flightKey)) await refundUse(reserved.id);
+    else startTailor(reserved.id);
+  }
+  function startTailor(useId) {
     const today = istDateString();
     const run = (async () => {
       await loadAtsData(query);
@@ -163,9 +168,13 @@ tailorRouter.post('/', async (req, res) => {
         created_at: new Date(),
       };
       const saved = await query('INSERT INTO tailored_docs SET ?', [row]);
-      await recordUse(uid, 'tailor');
       return { ...row, id: saved.insertId };
-    })().finally(() => inFlight.delete(flightKey));
+    })()
+      .catch(async (err) => {
+        await refundUse(useId);
+        throw err;
+      })
+      .finally(() => inFlight.delete(flightKey));
     inFlight.set(flightKey, run);
   }
   try {

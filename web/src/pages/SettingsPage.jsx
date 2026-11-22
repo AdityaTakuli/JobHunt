@@ -679,9 +679,9 @@ function AccountPanel({ onLogout }) {
 
 const PLAN_FEATURES = [
   { id: 'tailor', label: 'Tailored CV + cover letter', hint: 'A CV and cover letter written for one job.' },
-  { id: 'analysis', label: 'AI job suggestions', hint: 'Fit, missing skills and what to fix, for one job.' },
-  { id: 'fill', label: 'AI answers in ARCH', hint: 'Open questions on application forms. Fields filled from your details are always free.' },
-  { id: 'profile', label: 'Profile reads', hint: 'Reading your CV or portfolio with AI after an upload.' },
+  { id: 'analysis', label: 'Job fit checks', hint: 'What a job really asks for, where you fall short and what to fix.' },
+  { id: 'fill', label: 'ARCH form answers', hint: 'Written answers to open questions on application forms. Fields filled from your details are always free.' },
+  { id: 'profile', label: 'Profile reads', hint: 'Reading your CV or portfolio after an upload.' },
 ];
 const rupees = (paise) => `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -715,6 +715,20 @@ function PlanPanel() {
   const [couponError, setCouponError] = useState('');
   const [checking, setChecking] = useState(false);
   const [couponOpen, setCouponOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
+
+  async function startTrial() {
+    setStarting(true);
+    try {
+      await api('/billing/trial', { method: 'POST' });
+      toast({ message: `Your ${billing.trial.days}-day Pro trial has started. No weekly limits until it ends.`, duration: 7000 });
+      load();
+    } catch (err) {
+      toast({ message: err.message, error: true });
+    } finally {
+      setStarting(false);
+    }
+  }
 
   // Checks the code against every plan (a code can be for one plan only).
   async function applyCode(e) {
@@ -819,13 +833,13 @@ function PlanPanel() {
     <div className="set-stack">
       <Section
         id="set-plan"
-        title={pro ? 'ArchJobs Pro' : quota.admin ? 'Admin' : 'Free plan'}
+        title={pro ? (billing.plan === 'trial' ? 'Pro trial' : 'ArchJobs Pro') : quota.admin ? 'Admin' : 'Free plan'}
         description={
           pro
-            ? `Pro until ${day(billing.expiresAt, { day: 'numeric', month: 'long', year: 'numeric' })}. No weekly limits on the AI tools.`
+            ? `${billing.plan === 'trial' ? 'Your trial runs' : 'Pro'} until ${day(billing.expiresAt, { day: 'numeric', month: 'long', year: 'numeric' })}. No weekly limits.${billing.plan === 'trial' ? ' It ends by itself: nothing is charged.' : ''}`
             : quota.admin
               ? 'Admins have no weekly limits.'
-              : `A few free uses of each AI tool every week. They come back on ${resets}.`
+              : `A few free uses of each tool every week. They come back on ${resets}.`
         }
         action={<StatusBadge ok={unlimited} okLabel={pro ? 'Pro' : 'Admin'} offLabel="Free" />}
       >
@@ -862,17 +876,33 @@ function PlanPanel() {
       </Section>
 
       {!pro && (
-        <Section id="set-pro" title="Go Pro" description="No weekly limits. One payment, no auto-renewal.">
+        <Section id="set-pro" title="Go Pro" description="For the weeks you are applying everywhere. One payment, no auto-renewal.">
           {onSale ? (
             <div className="pro-body">
               <ul className="pro-perks">
-                {['Unlimited tailored CVs and cover letters', 'Unlimited AI job suggestions', 'Unlimited AI answers in ARCH', 'Unlimited profile reads'].map((t) => (
+                {[
+                  'A CV and cover letter for every firm you apply to',
+                  'Fit checks on as many jobs as you like',
+                  'ARCH answers every open question on a form',
+                  'Written only from your own CV and portfolio, nothing made up',
+                ].map((t) => (
                   <li key={t}>
                     <IconCheck size={16} />
                     {t}
                   </li>
                 ))}
               </ul>
+
+              {billing.trial?.available && (
+                <div className="trial-row">
+                  <p>
+                    <strong>Not sure yet?</strong> Try Pro free for {billing.trial.days} days. No card, no payment: it simply ends.
+                  </p>
+                  <button type="button" className="btn btn-primary" disabled={starting || Boolean(busy)} onClick={startTrial}>
+                    {starting ? 'Starting…' : `Start ${billing.trial.days}-day trial`}
+                  </button>
+                </div>
+              )}
 
               <div className="plan-grid">
                 {plans.map((p) => {
@@ -900,7 +930,7 @@ function PlanPanel() {
                       </p>
                       <button
                         type="button"
-                        className={`btn ${best || plans.length === 1 || deal ? 'btn-primary' : ''} plan-buy`}
+                        className={`btn ${(best || plans.length === 1 || deal) && !billing.trial?.available ? 'btn-primary' : ''} plan-buy`}
                         disabled={Boolean(busy)}
                         onClick={() => buy(p.id)}
                       >
@@ -910,6 +940,10 @@ function PlanPanel() {
                   );
                 })}
               </div>
+
+              <p className="plan-guarantee">
+                <IconCheck size={16} /> Not useful? Ask within 7 days for a full refund. <a href="/refunds">How refunds work</a>
+              </p>
 
               {coupon ? (
                 <p className="coupon-applied">
@@ -953,8 +987,8 @@ function PlanPanel() {
               )}
 
               <p className="plan-note">
-                {billing.mode === 'test' ? 'Test mode: no real money is taken. ' : ''}Paid securely through Razorpay with UPI, cards or net banking. Pro does not
-                renew by itself. <a href="/refunds">Refunds within 7 days</a>.
+                {billing.mode === 'test' ? 'Test mode: no real money is taken. ' : ''}Paid through Razorpay with UPI, cards or net banking. Pro does not renew by
+                itself.
               </p>
             </div>
           ) : (

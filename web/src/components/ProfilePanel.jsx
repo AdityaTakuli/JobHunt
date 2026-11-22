@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, uploadPdf } from '../api.js';
 import { useMeta } from '../App.jsx';
 import { formatDateTime } from '../format.js';
-import { IconAlert, IconCheck, IconExternal, IconFileUser, IconRefresh, IconSparkle, IconX } from '../icons.jsx';
+import { IconAlert, IconCheck, IconEdit, IconExternal, IconFileUser, IconRefresh, IconX } from '../icons.jsx';
 import ChipInput from './ChipInput.jsx';
 import DocumentsCard from './DocumentsCard.jsx';
 import { ApplicationDetailsCard, ApplicationDetailsDialog } from './ApplicationDetails.jsx';
@@ -291,7 +291,7 @@ export default function ProfilePanel() {
     {
       id: 'feedback',
       label: 'Feedback',
-      Icon: IconSparkle,
+      Icon: IconEdit,
       note: gaps?.jobs ? `${gaps.verdicts.strong} strong fits` : profile ? '' : 'After upload',
     },
     { id: 'documents', label: 'CV & documents', Icon: IconFileUser, note: '' },
@@ -599,7 +599,7 @@ export default function ProfilePanel() {
                     {profile.portfolio.summary && <p>{profile.portfolio.summary}</p>}
                     <div className="review-grid">
                       {profile.portfolio.strengths.length > 0 && (
-                        <div>
+                        <div className="review-good">
                           <h4>Strengths</h4>
                           <ul className="small">
                             {profile.portfolio.strengths.map((x) => (
@@ -609,7 +609,7 @@ export default function ProfilePanel() {
                         </div>
                       )}
                       {profile.portfolio.weaknesses.length > 0 && (
-                        <div>
+                        <div className="review-miss">
                           <h4>What a reviewer would miss</h4>
                           <ul className="small">
                             {profile.portfolio.weaknesses.map((x) => (
@@ -619,7 +619,7 @@ export default function ProfilePanel() {
                         </div>
                       )}
                       {profile.portfolio.improvements.length > 0 && (
-                        <div>
+                        <div className="review-do">
                           <h4>Do first</h4>
                           <ol className="small">
                             {profile.portfolio.improvements.map((x) => (

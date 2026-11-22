@@ -1,8 +1,9 @@
 // Weekly free use of the paid features. Free accounts get a few tailored CVs, AI job suggestions,
 // AI answers in ARCH and profile reads each week (config.freeLimits.weekly); Pro (a running paid
 // plan) and admins have no weekly limit, only the daily caps every feature already has.
-// Weeks start Monday midnight IST. A use is counted when the AI work is done, not when it is asked
-// for, so a failed run costs nothing.
+// Weeks start Monday midnight IST. Tailoring and job analysis reserve a use before the AI starts
+// (reserveUse), so five requests at once can't all slip under a limit of two, and hand it back if
+// the AI fails (refundUse): a failed run costs nothing.
 
 import { config } from '../config.js';
 import { query } from '../db/pool.js';
@@ -13,8 +14,8 @@ export const QUOTA_FEATURES = ['tailor', 'analysis', 'fill', 'profile'];
 
 const NAMES = {
   tailor: 'tailored CVs and cover letters',
-  analysis: 'AI job suggestions',
-  fill: 'AI answers in ARCH',
+  analysis: 'job fit checks',
+  fill: 'ARCH form answers',
   profile: 'profile reads',
 };
 
@@ -35,7 +36,7 @@ function fromPrice(cfg = config) {
 
 export function limitMessage(feature, limit, cfg = config) {
   const price = fromPrice(cfg);
-  return `You have used this week's ${limit} free ${NAMES[feature]}. More come on Monday, or go Pro${price ? ` (from ${price} a month)` : ''} in Settings > Plan for no weekly limit.`;
+  return `That was this week's last free one: you get ${limit} free ${NAMES[feature]} a week, and they come back on Monday. Pro has no weekly limit${price ? ` (from ${price} a month, with a free trial)` : ''}: Settings > Plan.`;
 }
 
 /**
@@ -66,6 +67,43 @@ export async function weeklyBlock(user, feature, now = new Date(), cfg = config)
   const f = q.features[feature];
   if (f.limit == null || f.used < f.limit) return null;
   return { ...f, message: limitMessage(feature, f.limit, cfg) };
+}
+
+// One person's checks and reservations run one at a time (the app is one Node process), so the
+// count read and the row added can't interleave with another request of theirs.
+const queues = new Map(); // user id -> tail of their queue
+async function oneAtATime(userId, fn) {
+  const before = queues.get(userId) || Promise.resolve();
+  let done;
+  const mine = new Promise((resolve) => (done = resolve));
+  const tail = before.then(() => mine);
+  queues.set(userId, tail);
+  await before;
+  try {
+    return await fn();
+  } finally {
+    done();
+    if (queues.get(userId) === tail) queues.delete(userId);
+  }
+}
+
+/**
+ * Takes one use of a feature for this week: { id } when it may run, or { blocked } (as weeklyBlock)
+ * when the free uses are gone. Pro and admins always get one; it is counted for the record.
+ */
+export async function reserveUse(user, feature, now = new Date(), cfg = config) {
+  return oneAtATime(user.id, async () => {
+    const blocked = await weeklyBlock(user, feature, now, cfg);
+    if (blocked) return { blocked };
+    const res = await query('INSERT INTO feature_uses (user_id, feature, created_at) VALUES (?, ?, ?)', [user.id, feature, now]);
+    return { id: res.insertId };
+  });
+}
+
+// Gives back a reserved use when the AI work failed.
+export async function refundUse(id) {
+  if (!id) return;
+  await query('DELETE FROM feature_uses WHERE id = ?', [id]).catch((err) => console.warn(`Could not hand back use ${id}: ${err.message}`));
 }
 
 export async function recordUse(userId, feature, now = new Date()) {

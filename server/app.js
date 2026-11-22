@@ -166,6 +166,9 @@ export function createApp() {
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
+    // Body parser errors: say what is wrong in plain words, not the parser's own message.
+    if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request body is not valid JSON.' });
+    if (err.type === 'entity.too.large') return res.status(413).json({ error: 'The request is too large.' });
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error(err);
     res.status(status).json({ error: status >= 500 && config.isProduction ? 'Something went wrong.' : err.message });

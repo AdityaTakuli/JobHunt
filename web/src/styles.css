@@ -1,33 +1,35 @@
 :root {
   color-scheme: light;
-  --bg: #f5f6f8;
+  /* Light: drafting paper. A warm grey page with white cards on it, so every card stands off the
+     page (LinkedIn, Apple and Glassdoor all do this), and one calm blue for actions. */
+  --bg: #f4f2ee;
   --surface: #ffffff;
-  --surface-2: #eef0f4;
-  --border: #e2e5ea;
-  --border-strong: #cbd1d9;
-  --text: #11141a;
-  --text-2: #4a5160;
-  --text-3: #5b6476;
+  --surface-2: #ebe8e1;
+  --border: #e4e0d7;
+  --border-strong: #cdc7bb;
+  --text: #1b1c20;
+  --text-2: #4a4e57;
+  --text-3: #5d616b;
   --line: var(--border);
   --muted: var(--text-3);
   --ok: #157347;
-  --ok-bg: #e3f4ea;
-  --accent: #2563eb;
+  --ok-bg: #e4f2e8;
+  --accent: #1d5fd1;
   --logo-ink: var(--text);
-  --accent-hover: #1d4ed8;
+  --accent-hover: #174fae;
   --accent-contrast: #ffffff;
-  --accent-soft: #e8efff;
-  --accent-text: #1d4ed8;
-  --amber-bg: #fcefd2;
-  --amber-text: #744800;
-  --red-bg: #fae2df;
-  --red-text: #9c2219;
-  --focus: #2563eb;
-  --shadow: 0 1px 2px rgb(20 20 18 / 6%), 0 2px 8px rgb(20 20 18 / 5%);
-  --shadow-lg: 0 12px 40px rgb(20 20 18 / 18%);
-  --shadow-hover: 0 2px 4px rgb(20 20 18 / 6%), 0 8px 24px rgb(20 20 18 / 8%);
+  --accent-soft: #e7eefc;
+  --accent-text: #1a52b8;
+  --amber-bg: #fbeed4;
+  --amber-text: #6f4500;
+  --red-bg: #f9e2de;
+  --red-text: #9a2318;
+  --focus: #1d5fd1;
+  --shadow: 0 1px 2px rgb(45 38 22 / 6%), 0 2px 10px rgb(45 38 22 / 5%);
+  --shadow-lg: 0 12px 40px rgb(45 38 22 / 16%);
+  --shadow-hover: 0 2px 4px rgb(45 38 22 / 6%), 0 10px 28px rgb(45 38 22 / 9%);
   --glint: rgb(255 255 255 / 70%);
-  --grid-line: color-mix(in srgb, var(--accent) 9%, transparent);
+  --grid-line: color-mix(in srgb, var(--accent) 8%, transparent);
   --radius: 12px;
   --radius-sm: 8px;
   --header-h: 64px;
@@ -41,63 +43,65 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #050505;
-    --surface: #0e0e0e;
-    --surface-2: #171717;
-    --border: #232323;
-    --border-strong: #333333;
-    --text: #ededed;
-    --text-2: #a8a8a8;
-    --text-3: #8f8f8f;
+    /* Dark: blueprint. Deep navy instead of black, with lighter navy cards, so layers read
+       apart and long reading is easy on the eyes. */
+    --bg: #0b1322;
+    --surface: #131d31;
+    --surface-2: #1a2640;
+    --border: #22304a;
+    --border-strong: #314263;
+    --text: #e8edf6;
+    --text-2: #b0bccf;
+    --text-3: #8c99b0;
     --ok: #5fd08f;
-    --ok-bg: #0f2a1b;
-    --accent: #4f8cff;
+    --ok-bg: #0f2b24;
+    --accent: #5b9bff;
     --logo-ink: #f1e8d8;
-    --accent-hover: #72a3ff;
-    --accent-contrast: #030b1f;
-    --accent-soft: #0c1a36;
-    --accent-text: #93b8ff;
-    --amber-bg: #3d2e0f;
+    --accent-hover: #7cb0ff;
+    --accent-contrast: #061127;
+    --accent-soft: #142a52;
+    --accent-text: #9cc2ff;
+    --amber-bg: #3a2e14;
     --amber-text: #f6cd7a;
-    --red-bg: #401b18;
+    --red-bg: #3d1d22;
     --red-text: #f6a8a0;
-    --focus: #72a3ff;
-    --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 60%);
-    --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
-    --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+    --focus: #7cb0ff;
+    --shadow: 0 0 0 1px rgb(255 255 255 / 3%), 0 1px 2px rgb(2 6 15 / 55%), 0 4px 14px rgb(2 6 15 / 22%);
+    --shadow-lg: 0 12px 40px rgb(2 6 15 / 60%);
+    --shadow-hover: 0 2px 4px rgb(2 6 15 / 45%), 0 10px 28px rgb(2 6 15 / 40%);
     --glint: rgb(255 255 255 / 5%);
-    --grid-line: color-mix(in srgb, var(--accent) 7%, transparent);
+    --grid-line: color-mix(in srgb, var(--accent) 8%, transparent);
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #050505;
-  --surface: #0e0e0e;
-  --surface-2: #171717;
-  --border: #232323;
-  --border-strong: #333333;
-  --text: #ededed;
-  --text-2: #a8a8a8;
-  --text-3: #8f8f8f;
+  --bg: #0b1322;
+  --surface: #131d31;
+  --surface-2: #1a2640;
+  --border: #22304a;
+  --border-strong: #314263;
+  --text: #e8edf6;
+  --text-2: #b0bccf;
+  --text-3: #8c99b0;
   --ok: #5fd08f;
-  --ok-bg: #0f2a1b;
-  --accent: #4f8cff;
+  --ok-bg: #0f2b24;
+  --accent: #5b9bff;
   --logo-ink: #f1e8d8;
-  --accent-hover: #72a3ff;
-  --accent-contrast: #030b1f;
-  --accent-soft: #0c1a36;
-  --accent-text: #93b8ff;
-  --amber-bg: #3d2e0f;
+  --accent-hover: #7cb0ff;
+  --accent-contrast: #061127;
+  --accent-soft: #142a52;
+  --accent-text: #9cc2ff;
+  --amber-bg: #3a2e14;
   --amber-text: #f6cd7a;
-  --red-bg: #401b18;
+  --red-bg: #3d1d22;
   --red-text: #f6a8a0;
-  --focus: #72a3ff;
-  --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 60%);
-  --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
-  --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+  --focus: #7cb0ff;
+  --shadow: 0 0 0 1px rgb(255 255 255 / 3%), 0 1px 2px rgb(2 6 15 / 55%), 0 4px 14px rgb(2 6 15 / 22%);
+  --shadow-lg: 0 12px 40px rgb(2 6 15 / 60%);
+  --shadow-hover: 0 2px 4px rgb(2 6 15 / 45%), 0 10px 28px rgb(2 6 15 / 40%);
   --glint: rgb(255 255 255 / 5%);
-  --grid-line: color-mix(in srgb, var(--accent) 7%, transparent);
+  --grid-line: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 *,
@@ -5215,15 +5219,24 @@ dialog.dialog:has(.details-form) {
   line-height: 1;
 }
 
+/* Phones: the strip is one short line, so the jobs start near the top of the screen. */
+.gp-short {
+  display: none;
+}
 @media (max-width: 600px) {
   .go-pro-banner {
-    flex-wrap: wrap;
-  }
-  .go-pro-banner-icon {
-    display: none;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 6px 8px 12px;
   }
   .go-pro-banner p {
-    flex-basis: calc(100% - 48px);
+    font-size: 13px;
+  }
+  .gp-long {
+    display: none;
+  }
+  .gp-short {
+    display: inline;
   }
 }
 
@@ -5771,6 +5784,144 @@ dialog.dialog:has(.details-form) {
   .profile-facts div {
     grid-template-columns: 1fr;
     gap: 2px;
+  }
+}
+
+
+.trial-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 16px 20px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
+}
+
+.trial-row p {
+  flex: 1 1 280px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.plan-guarantee {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.plan-guarantee svg {
+  flex: none;
+  color: var(--accent-text);
+}
+
+/* Feedback: colour says what kind of note it is. Green for strengths, amber for what a reviewer
+   would miss, blue for what to do first. The gaps against the feed are amber too. */
+.ppane .review-grid {
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.review-good,
+.review-miss,
+.review-do {
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+}
+
+.review-good {
+  background: var(--ok-bg);
+}
+
+.review-miss {
+  background: var(--amber-bg);
+}
+
+.review-do {
+  background: var(--accent-soft);
+}
+
+.ppane .review-grid h4 {
+  margin-bottom: 8px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.review-good h4 {
+  color: var(--ok);
+}
+
+.review-miss h4 {
+  color: var(--amber-text);
+}
+
+.review-do h4 {
+  color: var(--accent-text);
+}
+
+.ppane .review-grid li + li {
+  margin-top: 4px;
+}
+
+.ppane .gap-list li {
+  padding: 12px 14px 12px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid color-mix(in srgb, var(--amber-text) 70%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.ppane .gap-head strong {
+  font-size: 15px;
+}
+
+/* Section list: each tool gets a soft tile of its own colour. */
+.pnav-mark.is-tool {
+  border: 0;
+}
+
+.pnav-list li:nth-child(1) .pnav-mark.is-tool {
+  background: var(--amber-bg);
+  color: var(--amber-text);
+}
+
+.pnav-list li:nth-child(2) .pnav-mark.is-tool {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.pnav-list li:nth-child(3) .pnav-mark.is-tool {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* Phones: the Jobs page controls are tighter, so the first jobs show without scrolling far. */
+@media (max-width: 599px) {
+  .jobs-page .search-hint {
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .jobs-page .gmail-bar {
+    margin: 0 2px 10px;
+    font-size: 12px;
+  }
+  .jobs-page .segmented {
+    margin: 0 0 8px;
+  }
+  .jobs-page .segmented button {
+    min-height: 34px;
+    padding: 0 10px;
+  }
+  .origin-switch {
+    width: 100%;
+  }
+  .origin-switch button {
+    flex: 1 1 auto;
   }
 }
 

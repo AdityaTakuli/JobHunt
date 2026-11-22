@@ -49,6 +49,8 @@ describe('coupons', () => {
     assert.throws(() => cleanCoupon({ code: 'NONE' }, plans, now), /either/);
     assert.throws(() => cleanCoupon({ code: 'BIG', percentOff: 101 }, plans, now), /1 to 100/);
     assert.throws(() => cleanCoupon({ code: 'OLD', percentOff: 10, expiresOn: '2026-11-01' }, plans, now), /future/);
+    assert.throws(() => cleanCoupon({ code: 'FEB', percentOff: 10, expiresOn: '2027-02-31' }, plans, now), /valid end date/);
+    assert.throws(() => cleanCoupon({ code: 'JUNK', percentOff: 10, expiresOn: 'tomorrow' }, plans, now), /valid end date/);
     assert.throws(() => cleanCoupon({ code: 'WHO', percentOff: 10, plan: 'gold' }, plans, now), /Unknown plan/);
   });
 });

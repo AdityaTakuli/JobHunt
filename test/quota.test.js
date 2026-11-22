@@ -25,8 +25,8 @@ describe('weekly free limits', () => {
 
   it('names the cheapest Pro price in the limit message', () => {
     const msg = limitMessage('tailor', 2, cfg('on', true));
-    assert.match(msg, /this week's 2 free tailored CVs and cover letters/);
-    assert.match(msg, /from ₹199 a month/);
+    assert.match(msg, /2 free tailored CVs and cover letters a week/);
+    assert.match(msg, /from ₹199 a month, with a free trial/);
     assert.doesNotMatch(limitMessage('fill', 10, { ...cfg('on', true), razorpay: { plans: [] } }), /₹/);
   });
 });

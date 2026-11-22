@@ -4,7 +4,6 @@ import { config } from '../config.js';
 import { query } from '../db/pool.js';
 import {
   createOrder,
-  extendUntil,
   isEnabled,
   keyMode,
   planStatus,
@@ -13,7 +12,7 @@ import {
   verifyWebhookSignature,
 } from '../lib/razorpay.js';
 import { requireAdmin } from '../auth.js';
-import { cleanCoupon, CouponError, couponView, priceWithCoupon } from '../lib/coupons.js';
+import { claimCoupon, cleanCoupon, CouponError, couponView, priceWithCoupon } from '../lib/coupons.js';
 import { quotaFor } from '../lib/quota.js';
 import { startOfIstDay } from '../lib/time.js';
 
@@ -30,6 +29,19 @@ async function userPlan(userId) {
   return planStatus(row);
 }
 
+// The free trial is one row in coupon_redemptions under a name no coupon can have (codes start with
+// a letter or digit), so the same unique key makes it once per person, even from two tabs.
+const TRIAL = '_TRIAL';
+
+async function trialAvailable(userId) {
+  if (!isEnabled(rz()) || !(rz().trialDays > 0)) return false;
+  const [{ n }] = await query(
+    "SELECT (SELECT COUNT(*) FROM coupon_redemptions WHERE coupon = ? AND user_id = ?) + (SELECT COUNT(*) FROM payments WHERE user_id = ? AND status = 'paid') AS n",
+    [TRIAL, userId, userId],
+  );
+  return Number(n) === 0;
+}
+
 billingRouter.get('/', async (req, res, next) => {
   try {
     const enabled = isEnabled(rz());
@@ -39,8 +51,32 @@ billingRouter.get('/', async (req, res, next) => {
       keyId: enabled ? rz().keyId : null,
       plans: enabled ? rz().plans.map(({ id, label, amount, currency, days }) => ({ id, label, amount, currency, days })) : [],
       ...(await userPlan(req.user.id)),
+      trial: { days: rz().trialDays, available: await trialAvailable(req.user.id) },
       quota: await quotaFor(req.user),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Starts the free trial: Pro for trialDays, once per account, for people who have never paid.
+billingRouter.post('/trial', async (req, res, next) => {
+  try {
+    if (!isEnabled(rz())) return off(res);
+    if (!(rz().trialDays > 0)) return res.status(404).json({ error: 'There is no free trial right now.' });
+    if (!(await trialAvailable(req.user.id))) return res.status(400).json({ error: 'You have already had your free trial.' });
+    try {
+      await query('INSERT INTO coupon_redemptions (coupon, user_id, created_at) VALUES (?, ?, ?)', [TRIAL, req.user.id, new Date()]);
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'You have already had your free trial.' });
+      throw err;
+    }
+    const orderId = `free_${crypto.randomBytes(12).toString('hex')}`;
+    await query('INSERT INTO payments SET ?', [
+      { user_id: req.user.id, plan: 'trial', days: rz().trialDays, amount: 0, currency: 'INR', order_id: orderId, status: 'created', mode: 'free', created_at: new Date() },
+    ]);
+    await markPaid({ orderId, paymentId: null });
+    res.json({ ok: true, ...(await userPlan(req.user.id)) });
   } catch (err) {
     next(err);
   }
@@ -92,6 +128,13 @@ billingRouter.post('/order', async (req, res, next) => {
       created_at: new Date(),
     };
     if (priced.amount === 0) {
+      // Claimed before anything is given, so a one-use code works once however many ask at once.
+      try {
+        await claimCoupon(priced.code, req.user.id);
+      } catch (err) {
+        if (err instanceof CouponError) return res.status(400).json({ error: err.message });
+        throw err;
+      }
       const orderId = `free_${crypto.randomBytes(12).toString('hex')}`;
       await query('INSERT INTO payments SET ?', [{ ...payment, order_id: orderId, mode: 'free' }]);
       await markPaid({ orderId, paymentId: null });
@@ -140,10 +183,20 @@ export async function markPaid({ orderId, paymentId, amount }, now = new Date())
   ]);
   // Another request (Checkout vs webhook) got there first.
   if (!result.affectedRows) return true;
-  if (pay.coupon) await query('UPDATE coupons SET uses = uses + 1 WHERE code = ?', [pay.coupon]);
-  const [user] = await query('SELECT plan, plan_expires_at FROM users WHERE id = ?', [pay.user_id]);
-  const until = extendUntil(user?.plan === pay.plan ? user.plan_expires_at : null, pay.days, now);
-  await query('UPDATE users SET plan = ?, plan_expires_at = ? WHERE id = ?', [pay.plan, until, pay.user_id]);
+  // A free (100%) order claimed its coupon use already; a paid one counts it now it is paid.
+  if (pay.coupon && pay.mode !== 'free') {
+    await query('INSERT IGNORE INTO coupon_redemptions (coupon, user_id, created_at) VALUES (?, ?, ?)', [pay.coupon, pay.user_id, now]);
+    await query('UPDATE coupons SET uses = uses + 1 WHERE code = ?', [pay.coupon]);
+  }
+  // One statement, so two payments landing together both add their days. Days go on the end of a
+  // running Pro period whichever plan it was (the terms promise this), else start today.
+  await query('UPDATE users SET plan_expires_at = DATE_ADD(IF(plan_expires_at > ?, plan_expires_at, ?), INTERVAL ? DAY), plan = ? WHERE id = ?', [
+    now,
+    now,
+    pay.days,
+    pay.plan,
+    pay.user_id,
+  ]);
   return true;
 }
 

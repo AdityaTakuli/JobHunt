@@ -47,6 +47,28 @@ export async function priceWithCoupon(rawCode, plan, userId, now = new Date()) {
   return { code, ...applyCoupon(plan, coupon) };
 }
 
+/**
+ * Claims one use of a code for a person, safely when many people (or one person in many tabs) try
+ * at the same moment: the unique key on coupon_redemptions lets a person claim a code once, and the
+ * guarded UPDATE only counts a use while one is left. Throws a CouponError when the claim fails.
+ */
+export async function claimCoupon(code, userId, now = new Date()) {
+  try {
+    await query('INSERT INTO coupon_redemptions (coupon, user_id, created_at) VALUES (?, ?, ?)', [code, userId, now]);
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') throw new CouponError('You have already used this coupon code.');
+    throw err;
+  }
+  const claimed = await query(
+    'UPDATE coupons SET uses = uses + 1 WHERE code = ? AND active = 1 AND (max_uses IS NULL OR uses < max_uses) AND (expires_at IS NULL OR expires_at > ?)',
+    [code, now],
+  );
+  if (!claimed.affectedRows) {
+    await query('DELETE FROM coupon_redemptions WHERE coupon = ? AND user_id = ?', [code, userId]);
+    throw new CouponError('That coupon code has been used up.');
+  }
+}
+
 // A new coupon from the admin form, checked. Throws CouponError on bad input.
 export function cleanCoupon(body, plans, now = new Date()) {
   const code = normalizeCode(body?.code);
@@ -63,9 +85,12 @@ export function cleanCoupon(body, plans, now = new Date()) {
   let expiresAt = null;
   if (body?.expiresOn) {
     // The end of that day in India.
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.expiresOn))) throw new CouponError('Pick a valid end date.');
-    expiresAt = new Date(`${body.expiresOn}T23:59:59+05:30`);
-    if (Number.isNaN(expiresAt.getTime()) || expiresAt <= now) throw new CouponError('The end date must be in the future.');
+    const day = String(body.expiresOn);
+    expiresAt = new Date(`${day}T23:59:59+05:30`);
+    // "2026-02-31" parses as 3 March: it has to read back as the same day.
+    const sameDay = !Number.isNaN(expiresAt.getTime()) && new Date(expiresAt.getTime() + 330 * 60_000).toISOString().slice(0, 10) === day;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !sameDay) throw new CouponError('Pick a valid end date.');
+    if (expiresAt <= now) throw new CouponError('The end date must be in the future.');
   }
   return {
     code,

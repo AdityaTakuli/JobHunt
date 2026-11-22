@@ -231,6 +231,8 @@ export const config = {
     plans: parsePlans(env.RAZORPAY_PLANS),
     // Orders one person may start per IST day.
     dailyOrders: num(env.RAZORPAY_DAILY_ORDERS, 10),
+    // A free Pro trial, once per account, no payment (0 turns it off).
+    trialDays: num(env.PRO_TRIAL_DAYS, 7),
     timeoutMs: 15_000,
   },
 

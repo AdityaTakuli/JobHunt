@@ -92,7 +92,7 @@ describe('integration', { skip: !dbReady }, () => {
   before(async () => {
     await migrate();
     await query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches', 'users', 'user_settings', 'job_hides', 'closed_jobs', 'mail_events']) {
+    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches', 'users', 'user_settings', 'job_hides', 'closed_jobs', 'mail_events', 'feature_uses', 'coupon_redemptions', 'coupons', 'payments']) {
       await query(`TRUNCATE TABLE ${table}`);
     }
     await query('SET FOREIGN_KEY_CHECKS = 1');
@@ -264,8 +264,94 @@ describe('integration', { skip: !dbReady }, () => {
     } finally {
       Object.assign(config.razorpay, saved);
       await query('DELETE FROM payments WHERE user_id = ?', [res.insertId]);
+      await query('DELETE FROM coupon_redemptions WHERE user_id = ?', [res.insertId]);
       await query("DELETE FROM coupons WHERE code IN ('FRIENDS', 'HALF')");
       await query('DELETE FROM users WHERE id = ?', [res.insertId]);
+    }
+  });
+
+  it('holds limits and one-use coupons when many requests land at once', async () => {
+    const { reserveUse, refundUse } = await import('../server/lib/quota.js');
+    const { claimCoupon, CouponError } = await import('../server/lib/coupons.js');
+    const { markPaid } = await import('../server/routes/billing.js');
+    const ids = [];
+    const mk = async (email) => {
+      const r = await query('INSERT INTO users SET ?', [{ email, name: 'Race', created_at: NOW }]);
+      ids.push(r.insertId);
+      return r.insertId;
+    };
+    const mode = config.freeLimits.mode;
+    try {
+      // Six tailors at once on a free account with 2 a week: exactly 2 start.
+      config.freeLimits.mode = 'on';
+      const free = { id: await mk('race-free@example.com'), isAdmin: false };
+      const tries = await Promise.all(Array.from({ length: 6 }, () => reserveUse(free, 'tailor')));
+      const ok = tries.filter((t) => t.id);
+      assert.equal(ok.length, config.freeLimits.weekly.tailor);
+      assert.ok(tries.filter((t) => t.blocked).every((t) => /Settings > Plan/.test(t.blocked.message)));
+      await refundUse(ok[0].id);
+      assert.ok((await reserveUse(free, 'tailor')).id, 'a handed-back use can be used again');
+
+      // A one-use code claimed by eight people at once, and by one person twice.
+      await query('INSERT INTO coupons SET ?', [{ code: 'RACEONE', percent_off: 100, max_uses: 1, created_at: NOW }]);
+      const people = await Promise.all(Array.from({ length: 8 }, (_, i) => mk(`race-${i}@example.com`)));
+      const claims = await Promise.allSettled(people.map((uid) => claimCoupon('RACEONE', uid)));
+      assert.equal(claims.filter((c) => c.status === 'fulfilled').length, 1);
+      assert.ok(claims.filter((c) => c.status === 'rejected').every((c) => c.reason instanceof CouponError));
+      const [coupon] = await query("SELECT uses FROM coupons WHERE code = 'RACEONE'");
+      assert.equal(coupon.uses, 1);
+      await query('INSERT INTO coupons SET ?', [{ code: 'RACEMANY', percent_off: 100, created_at: NOW }]);
+      const twice = await Promise.allSettled([claimCoupon('RACEMANY', people[0]), claimCoupon('RACEMANY', people[0])]);
+      assert.equal(twice.filter((c) => c.status === 'fulfilled').length, 1, 'one person, two tabs: one claim');
+
+      // Two payments landing together both add their days; yearly on top of a running month.
+      const buyer = await mk('race-buyer@example.com');
+      const now = new Date('2026-11-23T06:00:00Z');
+      for (const [order, plan, days] of [['order_r1', 'pro_month', 30], ['order_r2', 'pro_year', 365]]) {
+        await query('INSERT INTO payments SET ?', [{ user_id: buyer, plan, days, amount: 100, currency: 'INR', order_id: order, status: 'created', mode: 'test', created_at: now }]);
+      }
+      await Promise.all([markPaid({ orderId: 'order_r1', paymentId: 'pay_1' }, now), markPaid({ orderId: 'order_r2', paymentId: 'pay_2' }, now)]);
+      const [u] = await query('SELECT plan_expires_at FROM users WHERE id = ?', [buyer]);
+      assert.equal(new Date(u.plan_expires_at).toISOString(), new Date(now.getTime() + 395 * 86_400_000).toISOString());
+    } finally {
+      config.freeLimits.mode = mode;
+      await query(`DELETE FROM feature_uses WHERE user_id IN (${ids.join(',')})`);
+      await query(`DELETE FROM payments WHERE user_id IN (${ids.join(',')})`);
+      await query(`DELETE FROM coupon_redemptions WHERE user_id IN (${ids.join(',')})`);
+      await query("DELETE FROM coupons WHERE code IN ('RACEONE', 'RACEMANY')");
+      await query(`DELETE FROM users WHERE id IN (${ids.join(',')})`);
+    }
+  });
+
+  it('gives a free Pro trial once per account, never after paying', async () => {
+    const { parsePlans } = await import('../server/lib/razorpay.js');
+    const saved = { ...config.razorpay };
+    Object.assign(config.razorpay, { enabled: true, keyId: 'rzp_test_x', keySecret: 'k', trialDays: 7, plans: parsePlans('pro_month:19900:30:Pro monthly') });
+    const mk = async (email) => (await query('INSERT INTO users SET ?', [{ email, name: 'Trial', created_at: NOW }])).insertId;
+    const a = await mk('trial-a@example.com');
+    const b = await mk('trial-b@example.com');
+    const as = (id) => ({ cookie: `aj_session=${createSessionToken(id)}` });
+    const post = (id) => fetch(`${base}/api/billing/trial`, { method: 'POST', headers: as(id) }).then(async (r) => ({ status: r.status, data: await r.json() }));
+    try {
+      const before = await (await fetch(`${base}/api/billing`, { headers: as(a) })).json();
+      assert.deepEqual(before.trial, { days: 7, available: true });
+      // Two tabs at once: one trial.
+      const both = await Promise.all([post(a), post(a)]);
+      assert.deepEqual(both.map((r) => r.status).sort(), [200, 400]);
+      const ok = both.find((r) => r.status === 200).data;
+      assert.equal(ok.plan, 'trial');
+      assert.equal(ok.active, true);
+      assert.equal(Math.round((new Date(ok.expiresAt) - Date.now()) / 86_400_000), 7);
+      const after = await (await fetch(`${base}/api/billing`, { headers: as(a) })).json();
+      assert.equal(after.trial.available, false);
+      // Someone who already paid gets no trial.
+      await query('INSERT INTO payments SET ?', [{ user_id: b, plan: 'pro_month', days: 30, amount: 19900, currency: 'INR', order_id: 'order_trial_b', status: 'paid', mode: 'test', created_at: NOW }]);
+      assert.equal((await post(b)).status, 400);
+    } finally {
+      Object.assign(config.razorpay, saved);
+      await query('DELETE FROM payments WHERE user_id IN (?, ?)', [a, b]);
+      await query('DELETE FROM coupon_redemptions WHERE user_id IN (?, ?)', [a, b]);
+      await query('DELETE FROM users WHERE id IN (?, ?)', [a, b]);
     }
   });
 

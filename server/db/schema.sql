@@ -372,3 +372,13 @@ CREATE TABLE IF NOT EXISTS coupons (
   created_at DATETIME NOT NULL,
   UNIQUE KEY uq_coupons_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Who used which coupon, one row per person and code: the unique key is what stops one person
+-- redeeming a code twice, even from two tabs at once. Kept with the payments.
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  coupon VARCHAR(24) NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL,
+  UNIQUE KEY uq_coupon_redemptions (coupon, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -12,7 +12,7 @@ import { factsFor } from '../lib/fitCache.js';
 import { LlmError } from '../lib/llm.js';
 import { findOtp } from '../lib/otp.js';
 import { findUser } from '../lib/users.js';
-import { quotaFor, recordUse, weeklyBlock } from '../lib/quota.js';
+import { quotaFor, recordUse, refundUse, reserveUse, weeklyBlock } from '../lib/quota.js';
 import { openPdf, PdfError } from '../lib/pdf.js';
 import { cleanDetails, DISCIPLINES, GENDERS, hasDetails, missingEssentials, prefillDetails } from '../lib/details.js';
 import { applyProfileEdits, PROFILE_VERSION } from '../lib/profile.js';
@@ -327,7 +327,15 @@ profileRouter.post('/fill', async (req, res) => {
   const page = { url: str(req.body?.page?.url, 500), title: str(req.body?.page?.title, 200), text: str(req.body?.page?.text, 4_000) };
   const wantAi = req.body?.ai !== false && profileAvailable();
   const used = fillsToday(row);
-  const weekly = wantAi ? await weeklyBlock(req.user, 'fill') : null;
+  // One AI answer use is taken up front (so forms filled at once can't overshoot the weekly
+  // limit) and handed back below when the rules filled everything.
+  let weekly = null;
+  let useId = null;
+  if (wantAi && used < config.profile.dailyFills) {
+    const reserved = await reserveUse(req.user, 'fill');
+    if (reserved.blocked) weekly = reserved.blocked;
+    else useId = reserved.id;
+  }
   const aiAllowed = wantAi && used < config.profile.dailyFills && !weekly;
   const today = istDateString();
   let aiUsed = false;
@@ -338,34 +346,38 @@ profileRouter.post('/fill', async (req, res) => {
     if (t) tailored = { id: t.id, cover_letter: parseJson(t.cover_letter, null) };
   }
   const [general] = await query('SELECT id FROM tailored_docs WHERE user_id = ? AND page_key = ? LIMIT 1', [uid, GENERAL_KEY]);
-  const result = await fillFields({
-    profile,
-    details,
-    account: { name: req.user.name, email: req.user.email },
-    resumeText: row?.resume_text ? String(row.resume_text).slice(0, 8_000) : null,
-    page,
-    fields,
-    files: {
-      resume: Boolean(row.resume_uploaded_at) || Boolean(tailored) || Boolean(general),
-      portfolio: Boolean(row?.portfolio_uploaded_at),
-      letter: Boolean(tailored?.cover_letter),
-      library: await query('SELECT id, kind FROM user_documents WHERE user_id = ? ORDER BY uploaded_at DESC', [uid]),
-    },
-    coverLetter: tailored?.cover_letter ? [tailored.cover_letter.greeting, ...tailored.cover_letter.paragraphs, tailored.cover_letter.sign_off].join('\n\n') : null,
-    useAi: aiAllowed,
-    ask: async (call) => {
-      aiUsed = true;
-      return askJson({
-        ...call,
-        cfg: { ...config, profile: { ...config.profile, timeoutMs: config.profile.fillTimeoutMs } },
-        onUsage: (provider, tokens) => logUsage('fill', provider, today, tokens),
-      });
-    },
-  });
-  if (aiUsed) {
-    await upsertRow(uid, { fills_on: today, fills_count: used + 1 });
-    await recordUse(uid, 'fill');
+  let result;
+  try {
+    result = await fillFields({
+      profile,
+      details,
+      account: { name: req.user.name, email: req.user.email },
+      resumeText: row?.resume_text ? String(row.resume_text).slice(0, 8_000) : null,
+      page,
+      fields,
+      files: {
+        resume: Boolean(row.resume_uploaded_at) || Boolean(tailored) || Boolean(general),
+        portfolio: Boolean(row?.portfolio_uploaded_at),
+        letter: Boolean(tailored?.cover_letter),
+        library: await query('SELECT id, kind FROM user_documents WHERE user_id = ? ORDER BY uploaded_at DESC', [uid]),
+      },
+      coverLetter: tailored?.cover_letter ? [tailored.cover_letter.greeting, ...tailored.cover_letter.paragraphs, tailored.cover_letter.sign_off].join('\n\n') : null,
+      useAi: aiAllowed,
+      ask: async (call) => {
+        aiUsed = true;
+        return askJson({
+          ...call,
+          cfg: { ...config, profile: { ...config.profile, timeoutMs: config.profile.fillTimeoutMs } },
+          onUsage: (provider, tokens) => logUsage('fill', provider, today, tokens),
+        });
+      },
+    });
+  } catch (err) {
+    await refundUse(useId);
+    throw err;
   }
+  if (aiUsed) await upsertRow(uid, { fills_on: today, fills_count: used + 1 });
+  else await refundUse(useId);
   const count = await fillCount(req.user, await getRow(uid));
   res.json({
     ...result,

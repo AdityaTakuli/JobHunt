@@ -8,7 +8,7 @@ import { COMPANIES } from '../lib/companies.js';
 import { findPosting, jobUrlPatterns, MIN_POSTING, MIN_USEFUL, postingFromJsonLd } from '../lib/jobPage.js';
 import { LlmError } from '../lib/llm.js';
 import { hostOf } from '../lib/normalize.js';
-import { recordUse, weeklyBlock } from '../lib/quota.js';
+import { refundUse, reserveUse } from '../lib/quota.js';
 import { getUserSettings } from '../lib/settings.js';
 import { istDateString, startOfIstDay } from '../lib/time.js';
 
@@ -132,13 +132,19 @@ analysisRouter.post('/:id/analysis', async (req, res) => {
   const [stored] = await query('SELECT * FROM job_analyses WHERE job_id = ? AND version = ?', [id, ANALYSIS_VERSION]);
   if (stored && !refresh) return res.json({ analysis: serialize(stored) });
   if (!analysisGateways().length) return res.status(503).json({ error: 'AI analysis is not set up on this server.' });
-  if ((await usedToday(req.user.id)) >= config.analysis.dailyPerPerson) {
-    return res.status(429).json({ error: `You have used today's ${config.analysis.dailyPerPerson} AI analyses. More tomorrow.` });
-  }
-  const blocked = await weeklyBlock(req.user, 'analysis');
-  if (blocked) return res.status(429).json({ error: blocked.message, upgrade: true });
 
+  // Someone already analysing this job: wait for that answer, which costs nothing.
+  let useId = null;
   if (!inFlight.has(id)) {
+    if ((await usedToday(req.user.id)) >= config.analysis.dailyPerPerson) {
+      return res.status(429).json({ error: `You have used today's ${config.analysis.dailyPerPerson} AI analyses. More tomorrow.` });
+    }
+    const reserved = await reserveUse(req.user, 'analysis');
+    if (reserved.blocked) return res.status(429).json({ error: reserved.blocked.message, upgrade: true });
+    if (inFlight.has(id)) await refundUse(reserved.id);
+    else useId = reserved.id;
+  }
+  if (useId) {
     const run = (async () => {
       const { cities } = await getUserSettings(req.user.id);
       const context = await postingContext(job);
@@ -162,11 +168,15 @@ analysisRouter.post('/:id/analysis', async (req, res) => {
         created_at: new Date(),
       };
       await query('INSERT INTO job_analyses SET ? ON DUPLICATE KEY UPDATE ?', [row, row]);
-      await recordUse(req.user.id, 'analysis');
       // The analysis says which requirements are must-haves: the job's fit score is worked out again.
       forgetJob(id);
       return row;
-    })().finally(() => inFlight.delete(id));
+    })()
+      .catch(async (err) => {
+        await refundUse(useId);
+        throw err;
+      })
+      .finally(() => inFlight.delete(id));
     inFlight.set(id, run);
   }
 
