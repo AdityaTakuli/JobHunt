@@ -1270,7 +1270,7 @@
 
   async function start() {
     const { server } = await settingsOf({ server: '' });
-    const own = String(server || 'https://archjobs.velocitytechnologies.in');
+    const own = String(server || 'https://archjobs.adityapstakuli.com');
     if (location.href.startsWith(own) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(#|$|\?)/.test(location.href)) {
       if (isTop) {
         // Back on ArchJobs: this tab is no longer in the middle of an application from it.

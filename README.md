@@ -94,8 +94,8 @@ Nothing in the mailbox is changed. Refresh tokens are stored encrypted with AES-
 
 **Setting up Google (once, free):**
 1. [console.cloud.google.com](https://console.cloud.google.com) → create a project → *APIs & Services* → *Library* → enable **Gmail API**.
-2. *OAuth consent screen* (Google Auth Platform → Branding): app name ArchJobs, your support email, authorised domain `velocitytechnologies.in`. *Data access*: add the scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` and `.../auth/gmail.readonly`. *Audience*: External, then **Publish app** (in *Testing* status Google cuts Gmail access after 7 days).
-3. *Clients* → *Create client* → Web application. Authorised redirect URI: `https://archjobs.velocitytechnologies.in/api/auth/google/callback` (add `http://localhost:3000/api/auth/google/callback` for local use). Copy the client ID and secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+2. *OAuth consent screen* (Google Auth Platform → Branding): app name ArchJobs, your support email, authorised domain `adityapstakuli.com`. *Data access*: add the scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` and `.../auth/gmail.readonly`. *Audience*: External, then **Publish app** (in *Testing* status Google cuts Gmail access after 7 days).
+3. *Clients* → *Create client* → Web application. Authorised redirect URI: `https://archjobs.adityapstakuli.com/api/auth/google/callback` (add `http://localhost:3000/api/auth/google/callback` for local use). Copy the client ID and secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 
 Gmail read access is a "restricted" scope. Until Google verifies the app (a review that needs a privacy policy and, for restricted scopes, a paid security assessment), people see "Google hasn't verified this app" and choose *Advanced → Go to ArchJobs*, and at most 100 people can connect. Plain Google sign-in (name and email only) has no such warning.
 

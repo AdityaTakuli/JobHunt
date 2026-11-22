@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://archjobs.velocitytechnologies.in/sitemap.xml
+Sitemap: https://archjobs.adityapstakuli.com/sitemap.xml

@@ -4,7 +4,7 @@
 // applied for, its tailored CV, and whether ARCH is filling this tab (so later pages of the same
 // form are filled too, even on another site).
 
-const DEFAULT_SERVER = 'https://archjobs.velocitytechnologies.in';
+const DEFAULT_SERVER = 'https://archjobs.adityapstakuli.com';
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const SESSION_MS = 2 * 60 * 60 * 1000; // a tab stays "applying" for two hours after a fill
 
