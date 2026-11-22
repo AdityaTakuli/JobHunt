@@ -5228,3 +5228,104 @@ dialog.dialog:has(.details-form) {
   text-decoration: line-through;
   color: var(--text-3);
 }
+
+/* Go Pro: header button, Pro badge, Jobs page strip, link next to limit messages */
+.go-pro-btn,
+.pro-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.go-pro-btn {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: background 0.15s, box-shadow 0.2s;
+}
+
+.go-pro-btn:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.go-pro-btn:focus-visible,
+.pro-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pro-badge {
+  height: 28px;
+  padding: 0 10px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+@media (max-width: 480px) {
+  .go-pro-btn {
+    padding: 0 10px;
+  }
+}
+
+.go-pro-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: var(--radius-sm, 10px);
+  background: var(--accent-soft);
+}
+
+.go-pro-banner p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.go-pro-banner-icon {
+  flex: none;
+  color: var(--accent-text);
+}
+
+.go-pro-banner .btn {
+  flex: none;
+}
+
+.go-pro-close {
+  flex: none;
+  font-size: 20px;
+  line-height: 1;
+}
+
+@media (max-width: 600px) {
+  .go-pro-banner {
+    flex-wrap: wrap;
+  }
+  .go-pro-banner-icon {
+    display: none;
+  }
+  .go-pro-banner p {
+    flex-basis: calc(100% - 48px);
+  }
+}
+
+.go-pro-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  text-decoration: none;
+}

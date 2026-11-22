@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { formatDateTime } from '../format.js';
 import { IconRefresh, IconSparkle } from '../icons.jsx';
 import { AtsCheck } from './TailorSection.jsx';
+import { GoProLink } from './GoPro.jsx';
 
 // Profile page: "My CV", a detailed, ATS-friendly CV written from her CV, portfolio and
 // application details (server lib/tailor.js with no posting). ARCH in Chrome attaches it when no
@@ -22,12 +23,12 @@ export default function MyCvCard({ hasResume, ready }) {
   }, []);
 
   const make = async () => {
-    setState((s) => ({ ...s, busy: true, error: '' }));
+    setState((s) => ({ ...s, busy: true, error: '', upgrade: false }));
     try {
       const d = await api('/tailor', { method: 'POST', body: { general: true, refresh: Boolean(state.cv) } });
       setState((s) => ({ ...s, busy: false, cv: d.tailored, today: d.reused ? s.today : (s.today || 0) + 1 }));
     } catch (err) {
-      setState((s) => ({ ...s, busy: false, error: err.message }));
+      setState((s) => ({ ...s, busy: false, error: err.message, upgrade: err.upgrade }));
     }
   };
 
@@ -60,6 +61,7 @@ export default function MyCvCard({ hasResume, ready }) {
           {state.error}
         </p>
       )}
+      {state.error && state.upgrade && <GoProLink />}
       {!cv && !state.busy && (
         <button type="button" className="btn btn-primary btn-sm" onClick={make}>
           <IconSparkle size={16} /> Make my CV

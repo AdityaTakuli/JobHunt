@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { formatDateTime } from '../format.js';
 import { IconCheck, IconRefresh, IconSparkle } from '../icons.jsx';
+import { GoProLink } from './GoPro.jsx';
 
 // Job details: a one-page CV and a cover letter tailored to this posting, made from her own CV
 // (server lib/tailor.js). Shows the keyword match before and after, what the posting asks for
@@ -52,12 +53,12 @@ export default function TailorSection({ jobId }) {
   }, [jobId]);
 
   const make = async (refresh = false) => {
-    setState((s) => ({ ...s, busy: true, error: '' }));
+    setState((s) => ({ ...s, busy: true, error: '', upgrade: false }));
     try {
       const d = await api('/tailor', { method: 'POST', body: { jobId, refresh } });
       setState((s) => ({ ...s, busy: false, tailored: d.tailored, today: d.reused ? s.today : (s.today || 0) + 1 }));
     } catch (err) {
-      setState((s) => ({ ...s, busy: false, error: err.message }));
+      setState((s) => ({ ...s, busy: false, error: err.message, upgrade: err.upgrade }));
     }
   };
 
@@ -102,6 +103,7 @@ export default function TailorSection({ jobId }) {
           {state.error}
         </p>
       )}
+      {state.error && state.upgrade && <GoProLink />}
       {t && !state.busy && (
         <div className="tailor-result">
           {m?.before != null && (

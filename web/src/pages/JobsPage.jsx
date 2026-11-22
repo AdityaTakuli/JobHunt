@@ -5,6 +5,7 @@ import { useMeta } from '../App.jsx';
 import JobCard from '../components/JobCard.jsx';
 import JobDetail, { JobDetailPane } from '../components/JobDetail.jsx';
 import GmailBar from '../components/GmailBar.jsx';
+import { GoProBanner } from '../components/GoPro.jsx';
 import JobFilters from '../components/JobFilters.jsx';
 import SearchBar from '../components/SearchBar.jsx';
 import ErrorBoundary from '../components/ErrorBoundary.jsx';
@@ -202,7 +203,7 @@ function FeedEnd() {
 }
 
 export default function JobsPage() {
-  const { meta, refreshMeta } = useMeta();
+  const { meta, refreshMeta, me } = useMeta();
   const { toast } = useToast();
   const [filters, setFilters] = useState(loadFilters);
   const [jobs, setJobs] = useState([]);
@@ -493,6 +494,7 @@ export default function JobsPage() {
   return (
     <div className="jobs-page">
       <h1 className="visually-hidden">Jobs</h1>
+      <GoProBanner me={me} />
       <SearchBar
         cities={meta?.myCities || []}
         where={where}

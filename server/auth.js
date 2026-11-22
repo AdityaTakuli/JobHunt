@@ -10,7 +10,7 @@ import { authUrl, exchangeCode, GMAIL_SCOPE, googleConfigured, revoke } from './
 import { seal } from './lib/secretBox.js';
 import { burnTime, verifyPassword } from './lib/password.js';
 import { freeLimitsOn } from './lib/quota.js';
-import { isEnabled as paymentsOn } from './lib/razorpay.js';
+import { isEnabled as paymentsOn, planStatus } from './lib/razorpay.js';
 import { findUser, findUserByEmail, OWNER_ID, sessionUser, signInWithGoogle } from './lib/users.js';
 import { readGmail } from './tasks/readGmail.js';
 
@@ -189,7 +189,8 @@ export async function me(req, res, next) {
       passwordLogin: Boolean(config.auth.password || config.auth.demoEmail),
       ownerPassword: Boolean(config.auth.password),
       // plans: whether Settings shows the Plan tab (Pro on sale, or weekly free limits running).
-      user: found ? { ...accountView(found.row), plans: paymentsOn(config.razorpay) || freeLimitsOn() } : null,
+      // pro: on a running paid plan, for the header's Go Pro button / Pro badge.
+      user: found ? { ...accountView(found.row), plans: paymentsOn(config.razorpay) || freeLimitsOn(), pro: planStatus(found.row).active } : null,
     });
   } catch (err) {
     next(err);

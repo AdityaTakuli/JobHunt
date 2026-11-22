@@ -1,7 +1,9 @@
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, data = null) {
     super(message);
     this.status = status;
+    // A weekly free limit was hit: the page offers Go Pro next to the message.
+    this.upgrade = Boolean(data?.upgrade);
   }
 }
 
@@ -31,7 +33,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
     // empty or non-JSON body
   }
   if (res.status === 401 && path !== '/login') onUnauthorized();
-  if (!res.ok) throw new ApiError(data?.error || `Request failed (${res.status})`, res.status);
+  if (!res.ok) throw new ApiError(data?.error || `Request failed (${res.status})`, res.status, data);
   return data;
 }
 
@@ -57,7 +59,7 @@ export async function uploadFile(path, file, { onProgress, type, headers = {} } 
         // not JSON
       }
       if (xhr.status === 401) onUnauthorized();
-      if (xhr.status < 200 || xhr.status >= 300) return reject(new ApiError(data?.error || `Upload failed (${xhr.status})`, xhr.status));
+      if (xhr.status < 200 || xhr.status >= 300) return reject(new ApiError(data?.error || `Upload failed (${xhr.status})`, xhr.status, data));
       resolve(data);
     };
     xhr.send(file);

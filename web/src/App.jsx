@@ -11,6 +11,7 @@ import JobsPage from './pages/JobsPage.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import TrackerPage from './pages/TrackerPage.jsx';
+import { GoProButton } from './components/GoPro.jsx';
 
 // GSAP and the drawings are only needed on these screens, so they load on demand and the
 // everyday job list stays light.
@@ -267,6 +268,7 @@ function Shell() {
             })}
           </nav>
           <Counter meta={meta} />
+          <GoProButton me={me} />
           <AccountButton me={me} />
           <button type="button" className="icon-btn" onClick={cycleTheme} aria-label={`Theme: ${theme}. Change theme`} title={`Theme: ${theme}`}>
             <ThemeIcon />

@@ -831,7 +831,7 @@ function PlanPanel() {
         {quota.limited && <p className="set-hint plan-reset">Free uses come back on {resets}.</p>}
       </Section>
 
-      {!pro && !quota.admin && (
+      {!pro && (
         <Section id="set-pro" title="ArchJobs Pro" description="No weekly limits on tailored CVs and cover letters, AI job suggestions, ARCH answers and profile reads.">
           {billing.enabled && billing.plans.length ? (
             <div className="plan-grid">

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { formatDateTime } from '../format.js';
 import { IconCheck, IconRefresh, IconSparkle } from '../icons.jsx';
+import { GoProLink } from './GoPro.jsx';
 
 // "Analyse with AI" in the job details: what this posting asks for and what to lead with at this
 // firm, written from the posting itself (the server reads it from the job page when needed). It has
@@ -164,12 +165,12 @@ export default function JobAnalysis({ jobId, applyUrl }) {
   }, [jobId]);
 
   const run = async (refresh = false) => {
-    setState((s) => ({ ...s, busy: true, error: '' }));
+    setState((s) => ({ ...s, busy: true, error: '', upgrade: false }));
     try {
       const d = await api(`/jobs/${jobId}/analysis`, { method: 'POST', body: { refresh } });
       setState((s) => ({ ...s, busy: false, analysis: d.analysis }));
     } catch (err) {
-      setState((s) => ({ ...s, busy: false, error: err.message }));
+      setState((s) => ({ ...s, busy: false, error: err.message, upgrade: err.upgrade }));
     }
   };
 
@@ -198,6 +199,7 @@ export default function JobAnalysis({ jobId, applyUrl }) {
           {state.error}
         </p>
       )}
+      {state.error && state.upgrade && <GoProLink />}
       {state.analysis && !state.busy && <Result a={state.analysis} busy={state.busy} onRefresh={() => run(true)} applyUrl={applyUrl} />}
     </section>
   );
