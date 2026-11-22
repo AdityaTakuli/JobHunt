@@ -6150,3 +6150,21 @@ dialog.dialog:has(.details-form) {
     flex: 1 1 auto;
   }
 }
+
+.coupon-used-by {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.people-pro {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: var(--promo-soft);
+  color: var(--promo-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+

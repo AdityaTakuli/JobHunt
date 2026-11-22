@@ -261,6 +261,11 @@ describe('integration', { skip: !dbReady }, () => {
       assert.equal(c.uses, 1);
       const again = await post('/api/billing/order', { plan: 'pro_month', coupon: 'FRIENDS' }, res.insertId);
       assert.match(again.data.error, /already used/);
+      const list = await (await fetch(`${base}/api/billing/coupons`, { headers: as(1) })).json();
+      const friends = list.coupons.find((c) => c.code === 'FRIENDS');
+      assert.deepEqual(friends.usedBy.map((u) => [u.id, u.email]), [[res.insertId, 'coupon-user@example.com']]);
+      const people = await (await fetch(`${base}/api/people`, { headers: as(1) })).json();
+      assert.ok(people.users.find((u) => u.id === res.insertId).proUntil, 'People shows who has Pro');
     } finally {
       Object.assign(config.razorpay, saved);
       await query('DELETE FROM payments WHERE user_id = ?', [res.insertId]);

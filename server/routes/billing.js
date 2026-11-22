@@ -251,7 +251,23 @@ export async function razorpayWebhook(req, res) {
 billingRouter.get('/coupons', requireAdmin, async (req, res, next) => {
   try {
     const rows = await query('SELECT * FROM coupons ORDER BY created_at DESC LIMIT 200');
-    res.json({ coupons: rows.map(couponView) });
+    // Who used each code (newest first), so the owner can see where a code went.
+    const used = rows.length
+      ? await query(
+          `SELECT r.coupon, r.created_at, u.id, u.name, u.email FROM coupon_redemptions r LEFT JOIN users u ON u.id = r.user_id
+            WHERE r.coupon IN (?) ORDER BY r.created_at DESC`,
+          [rows.map((r) => r.code)],
+        )
+      : [];
+    res.json({
+      coupons: rows.map((row) => ({
+        ...couponView(row),
+        usedBy: used
+          .filter((u) => u.coupon === row.code)
+          .slice(0, 50)
+          .map((u) => ({ id: u.id, name: u.name || null, email: u.email || null, at: new Date(u.created_at).toISOString() })),
+      })),
+    });
   } catch (err) {
     next(err);
   }

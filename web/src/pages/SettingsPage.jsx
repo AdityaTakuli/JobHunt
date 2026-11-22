@@ -1126,6 +1126,14 @@ function CouponsSection({ plans }) {
                   {c.expiresAt ? ` · until ${new Date(c.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}` : ''}
                   {c.active ? '' : ' · off'}
                 </span>
+                {c.usedBy?.length > 0 && (
+                  <span className="coupon-used-by">
+                    Used by{' '}
+                    {c.usedBy
+                      .map((u) => `${u.name || u.email || `account ${u.id}`}${u.name && u.email ? ` (${u.email})` : ''}, ${new Date(u.at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}`)
+                      .join(' · ')}
+                  </span>
+                )}
               </div>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => toggle(c)}>
                 {c.active ? 'Turn off' : 'Turn on'}
@@ -1192,6 +1200,11 @@ function PeoplePanel() {
                 <div className="conn-name truncate">
                   {u.name || u.email || 'Owner'}
                   {u.isOwner ? ' · Owner' : u.isAdmin ? ' · Admin' : ''}
+                  {u.proUntil && (
+                    <span className="people-pro">
+                      {u.plan === 'trial' ? 'Pro trial' : 'Pro'} until {new Date(u.proUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+                    </span>
+                  )}
                 </div>
                 <div className="conn-detail truncate">
                   {[u.email, u.gmail ? 'Gmail connected' : null, `${u.tracked} tracked`, u.lastLoginAt ? `last in ${formatDateTime(u.lastLoginAt)}` : null]

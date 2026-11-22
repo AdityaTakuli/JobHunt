@@ -80,7 +80,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 async function people() {
   const [users, settings] = await Promise.all([
     query(
-      `SELECT u.id, u.email, u.name, u.picture, u.is_admin, u.created_at, u.last_login_at, u.gmail_token IS NOT NULL AS gmail,
+      `SELECT u.id, u.email, u.name, u.picture, u.is_admin, u.created_at, u.last_login_at, u.plan, u.plan_expires_at, u.gmail_token IS NOT NULL AS gmail,
               (SELECT COUNT(*) FROM applications a WHERE a.user_id = u.id) AS tracked
          FROM users u ORDER BY u.id`,
     ),
@@ -98,6 +98,9 @@ async function people() {
       tracked: Number(u.tracked),
       createdAt: u.created_at,
       lastLoginAt: u.last_login_at,
+      // A running paid plan (or trial), for the owner's view of who has Pro.
+      proUntil: u.plan_expires_at && new Date(u.plan_expires_at) > new Date() ? new Date(u.plan_expires_at).toISOString() : null,
+      plan: u.plan_expires_at && new Date(u.plan_expires_at) > new Date() ? u.plan : null,
     })),
     allowed: settings.allowed_emails,
     // Set on the server (ALLOWED_EMAILS / ADMIN_EMAILS / OWNER_EMAIL); shown, not editable here.
