@@ -6168,3 +6168,325 @@ dialog.dialog:has(.details-form) {
   font-weight: 600;
 }
 
+
+/* ---- Admin console ---- */
+.adm {
+  display: grid;
+  gap: 16px;
+}
+.adm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.adm-head h1 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.05;
+}
+.adm-head p,
+.adm-sub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.adm-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.adm-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.adm-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.adm-stat {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.adm-stat-label {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.adm-stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.adm-stat-note {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.adm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr));
+  gap: 16px;
+}
+.adm-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 18px 20px;
+  min-width: 0;
+}
+.adm-card h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.adm-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10px 16px;
+}
+.adm-empty {
+  margin: 8px 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.adm-foot {
+  font-size: 12px;
+}
+
+/* Bars rise from a baseline; the value shows on hover or focus. */
+.adm-cols {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 150px;
+  margin-top: 8px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.adm-col {
+  position: relative;
+  flex: 1 1 0;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  outline: none;
+  cursor: default;
+}
+.adm-col-bar {
+  display: block;
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+  transition: opacity 0.15s;
+}
+.adm-cols:hover .adm-col-bar {
+  opacity: 0.55;
+}
+.adm-cols .adm-col:hover .adm-col-bar,
+.adm-col:focus-visible .adm-col-bar {
+  opacity: 1;
+}
+.adm-col-tick {
+  position: absolute;
+  bottom: -20px;
+  left: 0;
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.adm-col:hover::after,
+.adm-col:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.adm-col:first-child:hover::after,
+.adm-col:first-child:focus-visible::after {
+  left: 0;
+  transform: none;
+}
+.adm-col:last-child:hover::after,
+.adm-col:last-child:focus-visible::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.adm-rank {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.adm-rank li {
+  display: grid;
+  grid-template-columns: minmax(130px, 200px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.adm-rank-track {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.adm-rank-bar {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--accent);
+}
+.adm-rank-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.adm-rank-value small {
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.adm-find {
+  width: 220px;
+}
+.adm-table td,
+.adm-table th {
+  white-space: nowrap;
+}
+.adm-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.adm-row {
+  cursor: pointer;
+}
+.adm-row:hover,
+.adm-row.is-open {
+  background: var(--surface-2);
+}
+.adm-person {
+  display: grid;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.adm-person span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.adm-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.adm-tag.is-pro {
+  background: var(--promo-soft);
+  color: var(--promo-text);
+}
+.adm-tag.is-trial {
+  background: var(--amber-bg);
+  color: var(--amber-text);
+}
+.adm-tag.is-bad {
+  background: var(--red-bg);
+  color: var(--red-text);
+}
+.adm-detail-row td {
+  background: var(--surface-2);
+  white-space: normal;
+}
+.adm-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 16px 28px;
+  padding: 6px 4px 10px;
+}
+.adm-detail h4 {
+  margin: 4px 0 6px;
+  font-size: 13px;
+}
+.adm-detail .adm-cols {
+  height: 90px;
+}
+.adm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.adm-list li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.adm-timeline {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.adm-timeline li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.adm-timeline li.is-work span {
+  color: var(--ok);
+  font-weight: 600;
+}
+.adm-timeline time {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+@media (max-width: 599px) {
+  .adm-head h1 {
+    font-size: 28px;
+  }
+  .adm-find {
+    width: 100%;
+  }
+  .adm-rank li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .adm-rank-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .adm-stat-value {
+    font-size: 22px;
+  }
+}

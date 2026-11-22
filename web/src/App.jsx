@@ -12,12 +12,23 @@ import ProfilePage from './pages/ProfilePage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import TrackerPage from './pages/TrackerPage.jsx';
 import { GoProButton } from './components/GoPro.jsx';
+import { track } from './track.js';
 
 // GSAP and the drawings are only needed on these screens, so they load on demand and the
 // everyday job list stays light.
 const HomePage = lazy(() => import('./pages/HomePage.jsx'));
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
 const Welcome = lazy(() => import('./components/Welcome.jsx'));
+const AdminPage = lazy(() => import('./pages/AdminPage.jsx'));
+
+// The owner's statistics page, loaded only when opened.
+function AdminRoute() {
+  return (
+    <Suspense fallback={null}>
+      <AdminPage />
+    </Suspense>
+  );
+}
 
 const ROUTES = [
   { path: 'jobs', label: 'Jobs', Icon: IconBriefcase, Page: JobsPage },
@@ -28,6 +39,8 @@ const ROUTES = [
   { path: 'companies', label: 'Companies', Icon: IconGlobe, Page: CompaniesPage, also: ['firms'] },
   { path: 'firms', label: 'Firms', Icon: IconBuilding, Page: FirmsPage, nav: false },
   { path: 'settings', label: 'Settings', Icon: IconSettings, Page: SettingsPage },
+  // Admins only: linked from the top bar and Settings, not in the bottom bar.
+  { path: 'admin', label: 'Admin', Icon: IconSettings, Page: AdminRoute, nav: false },
 ];
 
 const MetaContext = createContext({ meta: null, refreshMeta: () => {}, me: null, refreshMe: () => {} });
@@ -190,6 +203,14 @@ function Shell() {
     document.title = auth === 'in' ? `${route.label} · ArchJobs` : 'ArchJobs · Architecture, Interiors & BIM Internships and Fresher Jobs in India';
   }, [route, auth]);
 
+  // Usage statistics: one "opened the app" per visit, then each page (the Admin page is not counted).
+  useEffect(() => {
+    if (auth === 'in') track('app:open');
+  }, [auth]);
+  useEffect(() => {
+    if (auth === 'in' && route.path !== 'admin') track(`page:${route.path}`);
+  }, [auth, route.path]);
+
   const boot = (
     <div className="boot" aria-busy="true" aria-label="Loading">
       <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
@@ -266,6 +287,15 @@ function Shell() {
               </a>
               );
             })}
+            {me?.isAdmin && (
+              <a href="#/admin" aria-current={route.path === 'admin' ? 'page' : undefined}>
+                {route.path === 'admin' && (
+                  <motion.span layoutId="top-nav-pill" className="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
+                )}
+                <IconColumns size={18} />
+                Admin
+              </a>
+            )}
           </nav>
           <Counter meta={meta} />
           <GoProButton me={me} />

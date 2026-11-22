@@ -382,3 +382,15 @@ CREATE TABLE IF NOT EXISTS coupon_redemptions (
   created_at DATETIME NOT NULL,
   UNIQUE KEY uq_coupon_redemptions (coupon, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Usage statistics for the Admin page (lib/events.js): the name of an action and when, nothing
+-- typed. Deleted after 180 days and with the account.
+CREATE TABLE IF NOT EXISTS events (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  name VARCHAR(40) NOT NULL,
+  created_at DATETIME NOT NULL,
+  KEY idx_events_time (created_at),
+  KEY idx_events_user (user_id, created_at),
+  KEY idx_events_name (name, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

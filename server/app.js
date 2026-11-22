@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
-import { googleCallback, googleStart, login, logout, me, requireAuth, requireCronKey } from './auth.js';
+import { googleCallback, googleStart, login, logout, me, requireAdmin, requireAuth, requireCronKey } from './auth.js';
 import { config, ROOT_DIR } from './config.js';
 import { zipDirectory } from './lib/zip.js';
 import { accountRouter } from './routes/account.js';
+import { adminRouter, postEvents } from './routes/admin.js';
 import { analysisRouter } from './routes/analysis.js';
 import { billingRouter, razorpayWebhook } from './routes/billing.js';
 import { profileRouter } from './routes/profile.js';
@@ -107,6 +108,9 @@ export function createApp() {
   app.use('/api/tailor', tailorRouter);
   app.use('/api/documents', documentsRouter);
   app.use('/api/billing', billingRouter);
+  // Usage statistics: everyone reports what they press; only admins read them.
+  app.post('/api/events', postEvents);
+  app.use('/api/admin', requireAdmin, adminRouter);
   // ARCH in Chrome, zipped from extension/ (unzip, then chrome://extensions → Load unpacked).
   app.get('/api/extension.zip', async (req, res, next) => {
     try {

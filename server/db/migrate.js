@@ -88,10 +88,24 @@ async function ensureOwner() {
     );
   }
   const email = config.auth.ownerEmail;
-  if (email && (!owner || owner.email !== email)) {
+  // Account 1 takes OWNER_EMAIL only while it has no email (made before sign-in with Google). An
+  // account 1 that already has someone's email stays theirs.
+  if (email && !owner?.email) {
     const [taken] = await query('SELECT id FROM users WHERE email = ? AND id <> 1', [email]);
     if (taken) console.warn(`OWNER_EMAIL ${email} already belongs to another account; the owner account keeps its email.`);
     else await query('UPDATE users SET email = ?, is_admin = 1 WHERE id = 1', [email]);
+  }
+  // Ownership moved to another account (OWNER_EMAIL names someone other than account 1's person):
+  // account 1 loses the admin flag it was made with, once. It stays an ordinary account with all its
+  // data. An admin can make it admin again in Settings > People, and that is not undone later.
+  const [first] = await query('SELECT email FROM users WHERE id = 1');
+  if (email && first?.email && first.email.toLowerCase() !== email) {
+    const [done] = await query("SELECT v FROM settings WHERE k = 'first_account_demoted'");
+    if (!done) {
+      await query('UPDATE users SET is_admin = 0 WHERE id = 1');
+      await query("INSERT INTO settings (k, v, updated_at) VALUES ('first_account_demoted', ?, ?)", [JSON.stringify(first.email), now]);
+      console.log(`Account 1 (${first.email}) is now an ordinary account; ${email} is the owner.`);
+    }
   }
 }
 

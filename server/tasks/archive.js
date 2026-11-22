@@ -10,6 +10,7 @@
 import { parseJson, query } from '../db/pool.js';
 import { checkLink, mapLimit } from '../lib/linkCheck.js';
 import { DAY_MS } from '../lib/time.js';
+import { forgetOldEvents } from '../lib/events.js';
 
 // Every open job's link is looked at about every two days (150 per run, two runs a day).
 const RECHECK_DAYS = 2;
@@ -106,6 +107,8 @@ export async function tidyJobs({ now = new Date(), linkChecker } = {}) {
   const links = await recheckLinks({ now, ...(linkChecker && { linkChecker }) });
   const archived = await archiveOldJobs(now);
   const deleted = await deleteOldJobs(now);
+  // Usage statistics are kept for six months only.
+  await forgetOldEvents(now).catch((err) => console.warn(`Could not clear old usage events: ${err.message}`));
   const summary = { closedByDeadline, linksChecked: links.checked, closedRemoved: links.closed, relinked: links.relinked, archived, deleted };
   await query('INSERT INTO fetch_log SET ?', [
     { source: 'cleanup', run_at: now, jobs_found: links.checked, jobs_new: 0, requests_used: 0, error: null },

@@ -3,6 +3,7 @@ import { ROLE_LABELS } from '../format.js';
 import { IconBookmark, IconBookmarkFilled, IconEyeOff } from '../icons.jsx';
 import { FitBadge } from './FitBadge.jsx';
 import { ApplyBadge, CompanyAvatar, ExperienceBadge, Salary, shortAge } from './JobBits.jsx';
+import { track } from '../track.js';
 
 // A compact result in the list (Glassdoor-style): company, title, place, pay, experience and age.
 // Cards rise in with a short stagger (`order` = position in the batch just loaded), slide out when
@@ -22,7 +23,10 @@ export default function JobCard({ ref, job, order = 0, selected, onOpen, actions
       aria-current={selected ? 'true' : undefined}
       onClick={(e) => {
         // Clicks on the card open details, but not clicks on its buttons and links.
-        if (!e.target.closest('a, button')) onOpen(job);
+        if (!e.target.closest('a, button')) {
+          track('job:open');
+          onOpen(job);
+        }
       }}
     >
       <div className="jc-head">

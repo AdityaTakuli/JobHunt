@@ -9,9 +9,10 @@ import { query } from './db/pool.js';
 import { authUrl, exchangeCode, GMAIL_SCOPE, googleConfigured, revoke } from './lib/google.js';
 import { seal } from './lib/secretBox.js';
 import { burnTime, verifyPassword } from './lib/password.js';
+import { recordEvent } from './lib/events.js';
 import { freeLimitsOn } from './lib/quota.js';
 import { isEnabled as paymentsOn, planStatus } from './lib/razorpay.js';
-import { findUser, findUserByEmail, OWNER_ID, sessionUser, signInWithGoogle } from './lib/users.js';
+import { findUser, findUserByEmail, OWNER_ID, ownerAccountId, sessionUser, signInWithGoogle } from './lib/users.js';
 import { readGmail } from './tasks/readGmail.js';
 
 const COOKIE = 'aj_session';
@@ -133,7 +134,10 @@ export async function login(req, res, next) {
   const id = String(req.body?.email ?? '').trim().toLowerCase();
   const password = String(req.body?.password ?? '');
   try {
-    if (id && id !== 'owner') {
+    // The owner's email with the owner password (APP_PASSWORD) signs in as the owner, the same as
+    // leaving the login ID empty.
+    const ownerById = Boolean(config.auth.password && config.auth.ownerEmail && id === config.auth.ownerEmail && safeEqual(password, config.auth.password));
+    if (id && id !== 'owner' && !ownerById) {
       const row = id.length <= 254 ? await findUserByEmail(id) : null;
       const ok = row?.password_hash ? await verifyPassword(password, row.password_hash) : (await burnTime(password), false);
       if (!ok) {
@@ -142,6 +146,7 @@ export async function login(req, res, next) {
       }
       failures.delete(ip);
       await query('UPDATE users SET last_login_at = ? WHERE id = ?', [new Date(), row.id]);
+      await recordEvent(row.id, 'login');
       res.setHeader('Set-Cookie', sessionCookie(row.id));
       return res.json({ ok: true });
     }
@@ -154,7 +159,9 @@ export async function login(req, res, next) {
       return res.status(401).json({ error: 'Wrong password.' });
     }
     failures.delete(ip);
-    res.setHeader('Set-Cookie', sessionCookie(OWNER_ID));
+    const ownerId = await ownerAccountId();
+    await recordEvent(ownerId, 'login');
+    res.setHeader('Set-Cookie', sessionCookie(ownerId));
     return res.json({ ok: true });
   } catch (err) {
     return next(err);

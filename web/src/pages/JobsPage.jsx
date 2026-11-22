@@ -14,6 +14,7 @@ import { useToast } from '../components/Toast.jsx';
 import { IconMapPin, IconSearch, IconX } from '../icons.jsx';
 import { quoteOfTheDay } from '../quotes.js';
 import { useJobActions } from '../useJobActions.js';
+import { track } from '../track.js';
 
 // Only drawn in the empty state, so GSAP loads only if the feed is ever empty.
 const Blueprint = lazy(() => import('../components/Blueprint.jsx'));
@@ -345,6 +346,7 @@ export default function JobsPage() {
   }
 
   async function runSearch({ q, location, exact = false }) {
+    track('search:run');
     setSearching(true);
     try {
       const result = await api('/search', { method: 'POST', body: { q, location, exact } });

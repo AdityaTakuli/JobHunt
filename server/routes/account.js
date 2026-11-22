@@ -6,7 +6,7 @@ import { revoke } from '../lib/google.js';
 import { open } from '../lib/secretBox.js';
 import { DAY_MS, istDateString } from '../lib/time.js';
 import { getSettings, saveSettings } from '../lib/settings.js';
-import { deleteUser, findUser, isAdmin, OWNER_ID } from '../lib/users.js';
+import { deleteUser, findUser, isAdmin, isOwner } from '../lib/users.js';
 import { readGmail } from '../tasks/readGmail.js';
 
 export const accountRouter = Router();
@@ -92,7 +92,7 @@ async function people() {
       email: u.email,
       name: u.name,
       picture: u.picture,
-      isOwner: u.id === OWNER_ID,
+      isOwner: isOwner(u),
       isAdmin: isAdmin(u),
       gmail: Boolean(u.gmail),
       tracked: Number(u.tracked),

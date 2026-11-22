@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { api } from './api.js';
 import { useMeta } from './App.jsx';
 import { useToast } from './components/Toast.jsx';
+import { track } from './track.js';
 
 // Save / apply / hide actions shared by the job list and the detail panel.
 // onChange(jobId, patch) lets the caller update its local copy of the job.
@@ -28,6 +29,7 @@ export function useJobActions(onChange) {
 
   const toggleSave = useCallback(
     async (job) => {
+      if (!job.application_status) track('job:save');
       if (job.application_status === 'saved') {
         try {
           await api(`/applications/${job.application_id}`, { method: 'DELETE' });
@@ -49,6 +51,7 @@ export function useJobActions(onChange) {
   // Called from the Apply link's click; the link itself opens the posting in a new tab.
   const promptApplied = useCallback(
     (job) => {
+      track('job:apply');
       if (['applied', 'interview', 'offer', 'rejected'].includes(job.application_status)) return;
       toast({
         id: `apply-${job.id}`,
@@ -71,6 +74,7 @@ export function useJobActions(onChange) {
 
   const hide = useCallback(
     async (job, reason = 'Not relevant', onUndo) => {
+      track('job:hide');
       try {
         await api(`/jobs/${job.id}/hide`, { method: 'POST', body: { reason } });
         onChange(job.id, { hidden: true });

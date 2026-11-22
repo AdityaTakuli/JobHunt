@@ -92,7 +92,7 @@ describe('integration', { skip: !dbReady }, () => {
   before(async () => {
     await migrate();
     await query('SET FOREIGN_KEY_CHECKS = 0');
-    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches', 'users', 'user_settings', 'job_hides', 'closed_jobs', 'mail_events', 'feature_uses', 'coupon_redemptions', 'coupons', 'payments']) {
+    for (const table of ['applications', 'jobs', 'firms', 'fetch_log', 'settings', 'ai_usage', 'searches', 'users', 'user_settings', 'job_hides', 'closed_jobs', 'mail_events', 'feature_uses', 'coupon_redemptions', 'coupons', 'payments', 'events']) {
       await query(`TRUNCATE TABLE ${table}`);
     }
     await query('SET FOREIGN_KEY_CHECKS = 1');
@@ -357,6 +357,81 @@ describe('integration', { skip: !dbReady }, () => {
       await query('DELETE FROM payments WHERE user_id IN (?, ?)', [a, b]);
       await query('DELETE FROM coupon_redemptions WHERE user_id IN (?, ?)', [a, b]);
       await query('DELETE FROM users WHERE id IN (?, ?)', [a, b]);
+    }
+  });
+
+  it('records usage events and shows them only to admins', async () => {
+    const r = await query('INSERT INTO users SET ?', [{ email: 'usage@example.com', name: 'Usage', created_at: NOW }]);
+    const uid = r.insertId;
+    const as = (id) => ({ cookie: `aj_session=${createSessionToken(id)}`, 'Content-Type': 'application/json' });
+    try {
+      const sent = await fetch(`${base}/api/events`, { method: 'POST', headers: as(uid), body: JSON.stringify({ events: ['page:jobs', 'job:open', 'job:open', 'not:a-thing', 42, 'search:run'] }) });
+      assert.equal((await sent.json()).kept, 4, 'unknown names are dropped');
+      await query('INSERT INTO feature_uses (user_id, feature, created_at) VALUES (?, ?, ?)', [uid, 'tailor', NOW]);
+      assert.equal((await fetch(`${base}/api/events`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } })).status, 401);
+
+      assert.equal((await fetch(`${base}/api/admin/overview`, { headers: as(uid) })).status, 403, 'not for regular users');
+      const overview = await (await fetch(`${base}/api/admin/overview?days=7`, { headers: as(1) })).json();
+      assert.ok(overview.totals.active7 >= 1);
+      assert.equal(overview.daily.length, 7);
+      assert.equal(overview.hours.length, 24);
+      assert.equal(overview.events.find((e) => e.name === 'job:open').count, 2);
+      assert.equal(overview.work.find((w) => w.feature === 'tailor').count, 1);
+
+      const list = await (await fetch(`${base}/api/admin/users`, { headers: as(1) })).json();
+      const me = list.users.find((u) => u.id === uid);
+      assert.deepEqual([me.events, me.activeDays, me.work.tailor, me.status], [4, 1, 1, 'free']);
+      const detail = await (await fetch(`${base}/api/admin/users/${uid}`, { headers: as(1) })).json();
+      assert.ok(detail.timeline.some((t) => t.label === 'Opened a job'));
+      assert.ok(detail.timeline.some((t) => t.kind === 'work'));
+      assert.equal((await fetch(`${base}/api/admin/payments`, { headers: as(1) })).status, 200);
+    } finally {
+      await query('DELETE FROM events WHERE user_id = ?', [uid]);
+      await query('DELETE FROM feature_uses WHERE user_id = ?', [uid]);
+      await query('DELETE FROM users WHERE id = ?', [uid]);
+    }
+  });
+
+  it('makes OWNER_EMAIL the owner, and account 1 an ordinary account when it is someone else', async () => {
+    const saved = config.auth.ownerEmail;
+    const [first] = await query('SELECT email FROM users WHERE id = 1');
+    try {
+      await query('UPDATE users SET email = ? WHERE id = 1', ['first-user@example.com']);
+      config.auth.ownerEmail = 'boss@example.com';
+      // Startup notices that ownership moved and takes account 1's admin flag, once.
+      await migrate();
+      const [demoted] = await query('SELECT is_admin FROM users WHERE id = 1');
+      assert.equal(demoted.is_admin, 0);
+      await query('UPDATE users SET is_admin = 1 WHERE id = 1');
+      await migrate();
+      assert.equal((await query('SELECT is_admin FROM users WHERE id = 1'))[0].is_admin, 1, 'made admin again by hand: not undone');
+      await query('UPDATE users SET is_admin = 0 WHERE id = 1');
+      const asOne = { cookie: `aj_session=${createSessionToken(1)}` };
+      const me = await (await fetch(`${base}/api/me`, { headers: asOne })).json();
+      assert.equal(me.user.isAdmin, false, 'account 1 is not admin when OWNER_EMAIL is someone else');
+      assert.equal((await fetch(`${base}/api/admin/overview`, { headers: asOne })).status, 403);
+
+      // The owner password opens the OWNER_EMAIL account (made on first use), not account 1.
+      const login = await request('/api/login', { method: 'POST', body: { password: 'test-password' }, auth: false });
+      assert.equal(login.status, 200);
+      const cookie = login.res.headers.get('set-cookie').split(';')[0];
+      const owner = await (await fetch(`${base}/api/me`, { headers: { cookie } })).json();
+      assert.equal(owner.user.email, 'boss@example.com');
+      assert.equal(owner.user.isAdmin, true);
+      assert.notEqual(owner.user.id, 1);
+
+      // The owner's email with the owner password works too; a wrong password does not.
+      const byEmail = await request('/api/login', { method: 'POST', body: { email: 'Boss@Example.com', password: 'test-password' }, auth: false });
+      assert.equal(byEmail.status, 200);
+      const viaEmail = await (await fetch(`${base}/api/me`, { headers: { cookie: byEmail.res.headers.get('set-cookie').split(';')[0] } })).json();
+      assert.equal(viaEmail.user.id, owner.user.id);
+      assert.equal((await request('/api/login', { method: 'POST', body: { email: 'boss@example.com', password: 'nope' }, auth: false })).status, 401);
+    } finally {
+      config.auth.ownerEmail = saved;
+      await query('UPDATE users SET email = ?, is_admin = 1 WHERE id = 1', [first?.email ?? null]);
+      await query("DELETE FROM settings WHERE k = 'first_account_demoted'");
+      await query("DELETE FROM events WHERE user_id IN (SELECT id FROM users WHERE email = 'boss@example.com')");
+      await query("DELETE FROM users WHERE email = 'boss@example.com'");
     }
   });
 

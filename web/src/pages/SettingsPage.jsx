@@ -7,6 +7,7 @@ import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDateTime, SOURCE_LABELS } from '../format.js';
 import { IconCheck } from '../icons.jsx';
+import { track } from '../track.js';
 
 // Connections, Activity and People are the owner's (and other admins'). Plan shows once Pro is on
 // sale or the weekly free limits run (and always to admins).
@@ -718,6 +719,7 @@ function PlanPanel() {
   const [starting, setStarting] = useState(false);
 
   async function startTrial() {
+    track('plan:trial');
     setStarting(true);
     try {
       await api('/billing/trial', { method: 'POST' });
@@ -735,6 +737,7 @@ function PlanPanel() {
     e.preventDefault();
     const typed = code.trim();
     if (!typed || checking) return;
+    track('coupon:apply');
     setChecking(true);
     setCouponError('');
     const results = await Promise.all(
@@ -772,6 +775,7 @@ function PlanPanel() {
   useEffect(load, [load]);
 
   async function buy(planId) {
+    track('plan:pay');
     setBusy(planId);
     try {
       const withCode = coupon?.prices[planId] ? coupon.code : undefined;
@@ -1360,6 +1364,11 @@ export default function SettingsPage() {
           <h1>Settings</h1>
           <p>Your account, search and alerts.</p>
         </div>
+        {isAdmin && (
+          <a className="btn btn-sm" href="#/admin">
+            Admin console
+          </a>
+        )}
       </header>
 
       <div className="tabs" role="tablist" aria-label="Settings sections" onKeyDown={onTabKey}>

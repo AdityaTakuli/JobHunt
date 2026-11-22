@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { track } from '../track.js';
 
 // Everything that points free accounts to ArchJobs Pro (Settings > Plan): the header button, the
 // strip on the Jobs page and the link next to a "weekly limit reached" message.
@@ -22,7 +23,7 @@ export function GoProButton({ me }) {
     );
   }
   return (
-    <a className="go-pro-btn" href={PLAN_HREF}>
+    <a className="go-pro-btn" href={PLAN_HREF} onClick={() => track('gopro:header')}>
       Go Pro
     </a>
   );
@@ -30,7 +31,7 @@ export function GoProButton({ me }) {
 
 export function GoProLink() {
   return (
-    <a className="btn btn-primary btn-sm go-pro-link" href={PLAN_HREF}>
+    <a className="btn btn-primary btn-sm go-pro-link" href={PLAN_HREF} onClick={() => track('gopro:limit')}>
       See Pro and the free trial
     </a>
   );
@@ -100,7 +101,7 @@ export function GoProBanner({ me }) {
           ? `Applying to a lot of firms? Try Pro free for ${trial} days: no weekly limits, no card needed, and it simply ends.`
           : `Applying to a lot of firms? Pro has no weekly limits, from ${rupees(cheapest)} a month, with a 7-day refund.`}
       </p>
-      <a className="btn btn-primary btn-sm" href={PLAN_HREF}>
+      <a className="btn btn-primary btn-sm" href={PLAN_HREF} onClick={() => track('gopro:banner')}>
         {trial ? 'Try Pro free' : 'See Pro'}
       </a>
       <button type="button" className="icon-btn go-pro-close" onClick={close} aria-label="Hide for a week" title="Hide for a week">

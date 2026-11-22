@@ -1,3 +1,5 @@
+import { track } from '../track.js';
+
 // Profile page: where to get ARCH in Chrome and what it does.
 
 export function ExtensionCard({ fillsToday, fillsPerDay, weekly = false, hideHead = false }) {
@@ -33,7 +35,7 @@ export function ExtensionCard({ fillsToday, fillsPerDay, weekly = false, hideHea
       </ul>
       <ol className="small extension-steps">
         <li>
-          <a className="btn btn-primary btn-sm" href="/api/extension.zip" download>
+          <a className="btn btn-primary btn-sm" href="/api/extension.zip" download onClick={() => track('extension:download')}>
             Download ARCH in Chrome
           </a>{' '}
           and unzip it.
