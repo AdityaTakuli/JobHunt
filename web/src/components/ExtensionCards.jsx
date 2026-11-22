@@ -1,22 +1,24 @@
 // Profile page: where to get ARCH in Chrome and what it does.
 
-export function ExtensionCard({ fillsToday, fillsPerDay, weekly = false }) {
+export function ExtensionCard({ fillsToday, fillsPerDay, weekly = false, hideHead = false }) {
   return (
     <section className="card profile-section extension-card">
-      <div className="extension-head">
-        <span className="extension-mark" aria-hidden="true">
-          A
-        </span>
-        <div>
-          <h2>ARCH in Chrome</h2>
-          <p className="small muted" style={{ margin: 0 }}>
-            Fills a job application when you ask it to: press Fill with ARCH on the form, or Alt+Shift+A. It never fills other sites by itself and never presses submit.
-          </p>
+      {!hideHead && (
+        <div className="extension-head">
+          <span className="extension-mark" aria-hidden="true">
+            A
+          </span>
+          <div>
+            <h2>ARCH in Chrome</h2>
+            <p className="small muted" style={{ margin: 0 }}>
+              Fills a job application when you ask it to: press Fill with ARCH on the form, or Alt+Shift+A. It never fills other sites by itself and never presses submit.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
       <ul className="small extension-points">
         <li>
-          <strong>Name, contact, address, college, marks, pay, notice period</strong> come straight from your application details above (blue outline).
+          <strong>Name, contact, address, college, marks, pay, notice period</strong> come straight from your application details (blue outline).
         </li>
         <li>
           <strong>Your CV and portfolio PDFs</strong> are attached to the upload boxes for you (My CV when you haven't uploaded one).

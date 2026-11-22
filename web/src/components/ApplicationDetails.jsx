@@ -80,7 +80,11 @@ export function ApplicationDetailsDialog({ open, onClose, state, onSaved }) {
     }
   }, [open, state?.details]);
 
-  const opts = { genders: state?.details_options?.genders || [], relocate: ['Yes', 'No'], disciplines: state?.details_options?.disciplines || [] };
+  const opts = {
+    genders: state?.details_options?.genders || [],
+    relocate: ['Yes', 'No'],
+    disciplines: state?.details_options?.disciplines || [],
+  };
 
   async function save() {
     setSaving(true);
@@ -185,7 +189,7 @@ export function ApplicationDetailsDialog({ open, onClose, state, onSaved }) {
 }
 
 // The card on the Profile page: what is saved at a glance, and the button that opens the form.
-export function ApplicationDetailsCard({ state, onOpen }) {
+export function ApplicationDetailsCard({ state, onOpen, hideTitle = false }) {
   const d = state?.details || {};
   const missing = state?.details_missing || [];
   const label = (k) => ALL.find(([key]) => key === k)?.[1] || k;
@@ -193,14 +197,16 @@ export function ApplicationDetailsCard({ state, onOpen }) {
   return (
     <section className="card profile-section details-card">
       <div className="profile-section-head">
-        <h2>Application details</h2>
+        {hideTitle ? <span className="small muted">{state?.details_saved ? 'Saved.' : 'Nothing saved yet.'}</span> : <h2>Application details</h2>}
         <button type="button" className="btn btn-primary btn-sm" onClick={onOpen}>
           {state?.details_saved ? 'Edit details' : 'Fill in details'}
         </button>
       </div>
-      <p className="small muted" style={{ marginTop: 0 }}>
-        Name, contact, address, college, marks, pay and notice period: what application forms ask for. ARCH in Chrome fills forms from these when you press Fill.
-      </p>
+      {!hideTitle && (
+        <p className="small muted" style={{ marginTop: 0 }}>
+          Name, contact, address, college, marks, pay and notice period: what application forms ask for. ARCH in Chrome fills forms from these when you press Fill.
+        </p>
+      )}
       {shown.length > 0 && (
         <dl className="details-summary small">
           {shown.map((k) => (

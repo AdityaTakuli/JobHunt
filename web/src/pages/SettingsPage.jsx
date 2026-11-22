@@ -6,6 +6,7 @@ import ChipInput from '../components/ChipInput.jsx';
 import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDateTime, SOURCE_LABELS } from '../format.js';
+import { IconCheck } from '../icons.jsx';
 
 // Connections, Activity and People are the owner's (and other admins'). Plan shows once Pro is on
 // sale or the weekly free limits run (and always to admins).
@@ -713,6 +714,7 @@ function PlanPanel() {
   const [coupon, setCoupon] = useState(null); // { code, prices: { planId: { amount, discount } } }
   const [couponError, setCouponError] = useState('');
   const [checking, setChecking] = useState(false);
+  const [couponOpen, setCouponOpen] = useState(false);
 
   // Checks the code against every plan (a code can be for one plan only).
   async function applyCode(e) {
@@ -742,6 +744,7 @@ function PlanPanel() {
     setCoupon(null);
     setCode('');
     setCouponError('');
+    setCouponOpen(false);
   }
 
   const load = useCallback(() => {
@@ -804,96 +807,159 @@ function PlanPanel() {
   if (!billing) return <RowsSkeleton rows={3} label="Loading your plan" />;
   const { quota } = billing;
   const pro = billing.active;
-  const resets = new Date(quota.resetsAt).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+  const unlimited = pro || quota.admin;
+  const day = (iso, opts) => new Date(iso).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', ...opts });
+  const resets = day(quota.resetsAt, { weekday: 'long', day: 'numeric', month: 'short' });
+  const onSale = billing.enabled && billing.plans.length > 0;
+  // Longest plan first: the yearly one is the better deal and leads.
+  const plans = [...billing.plans].sort((a, b) => b.days - a.days);
+  const monthly = billing.plans.find((p) => p.days <= 31);
 
   return (
     <div className="set-stack">
       <Section
         id="set-plan"
-        title="Your plan"
+        title={pro ? 'ArchJobs Pro' : quota.admin ? 'Admin' : 'Free plan'}
         description={
           pro
-            ? `ArchJobs Pro until ${new Date(billing.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' })}. No weekly limits.`
+            ? `Pro until ${day(billing.expiresAt, { day: 'numeric', month: 'long', year: 'numeric' })}. No weekly limits on the AI tools.`
             : quota.admin
-              ? 'Admin: no weekly limits.'
-              : 'Free. Job search, the digest, job emails, the tracker and Gmail reading are free for good. The AI tools below come with a few free uses every week.'
+              ? 'Admins have no weekly limits.'
+              : `A few free uses of each AI tool every week. They come back on ${resets}.`
         }
-        action={<StatusBadge ok={pro || quota.admin} okLabel={pro ? 'Pro' : 'Admin'} offLabel="Free" />}
+        action={<StatusBadge ok={unlimited} okLabel={pro ? 'Pro' : 'Admin'} offLabel="Free" />}
       >
-        {PLAN_FEATURES.map((f) => {
-          const q = quota.features[f.id];
-          return (
-            <Row key={f.id} label={f.label} hint={f.hint}>
-              <span className="plan-count">{q.limit == null ? `${q.used} this week · no limit` : `${Math.max(q.limit - q.used, 0)} of ${q.limit} free left`}</span>
-            </Row>
-          );
-        })}
-        {quota.limited && <p className="set-hint plan-reset">Free uses come back on {resets}.</p>}
+        <ul className="quota-grid" aria-label="This week's AI use">
+          {PLAN_FEATURES.map((f) => {
+            const q = quota.features[f.id];
+            const left = q.limit == null ? null : Math.max(q.limit - q.used, 0);
+            return (
+              <li key={f.id} className="quota-tile">
+                <span className="usage-name">{f.label}</span>
+                {left == null ? (
+                  <span className="usage-count">
+                    <strong>Unlimited</strong> · {q.used} this week
+                  </span>
+                ) : (
+                  <>
+                    <span className="usage-count">
+                      <strong>{left}</strong> of {q.limit} left
+                    </span>
+                    {/* A scale bar, as on a drawing: one segment per free use, filled while unused. */}
+                    <span className="scale-bar" aria-hidden="true">
+                      {Array.from({ length: q.limit }, (_, i) => (
+                        <span key={i} className={i < left ? 'is-left' : ''} />
+                      ))}
+                    </span>
+                  </>
+                )}
+                <span className="usage-hint">{f.hint}</span>
+              </li>
+            );
+          })}
+        </ul>
+        {!unlimited && <p className="plan-note">Always free: job search, the morning digest, job emails, the tracker and Gmail reading.</p>}
       </Section>
 
       {!pro && (
-        <Section id="set-pro" title="ArchJobs Pro" description="No weekly limits on tailored CVs and cover letters, AI job suggestions, ARCH answers and profile reads.">
-          {billing.enabled && billing.plans.length ? (
-            <div className="plan-grid">
-              {billing.plans.map((p) => {
-                const deal = coupon?.prices[p.id];
-                const price = deal ? deal.amount : p.amount;
-                return (
-                  <div key={p.id} className="plan-card">
-                    <span className="plan-price">
-                      {price === 0 ? 'Free' : rupees(price)}
-                      {deal && <s className="plan-was">{rupees(p.amount)}</s>}
-                    </span>
-                    <span className="plan-label">{p.label}</span>
-                    <span className="set-hint">
-                      {deal ? `${coupon.code}: ${rupees(deal.discount)} off` : p.days >= 360 ? `${rupees(Math.round(p.amount / 12))} a month, paid yearly` : `${p.days} days`}
-                    </span>
-                    <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => buy(p.id)}>
-                      {busy === p.id ? 'Opening…' : price === 0 ? 'Get Pro' : 'Upgrade'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="set-hint">Pro is not on sale yet.</p>
-          )}
-          {billing.enabled && billing.plans.length > 0 && (
-            <form className="coupon-row" onSubmit={applyCode}>
-              <label className="set-label" htmlFor="coupon-code">
-                Coupon code
-              </label>
-              <div className="coupon-controls">
-                <input
-                  id="coupon-code"
-                  className="input"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  maxLength={24}
-                  autoComplete="off"
-                  spellCheck={false}
-                  aria-describedby={couponError ? 'coupon-error' : undefined}
-                  aria-invalid={Boolean(couponError)}
-                />
-                {coupon ? (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={clearCode}>
+        <Section id="set-pro" title="Go Pro" description="No weekly limits. One payment, no auto-renewal.">
+          {onSale ? (
+            <div className="pro-body">
+              <ul className="pro-perks">
+                {['Unlimited tailored CVs and cover letters', 'Unlimited AI job suggestions', 'Unlimited AI answers in ARCH', 'Unlimited profile reads'].map((t) => (
+                  <li key={t}>
+                    <IconCheck size={16} />
+                    {t}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="plan-grid">
+                {plans.map((p) => {
+                  const deal = coupon?.prices[p.id];
+                  const price = deal ? deal.amount : p.amount;
+                  const yearly = p.days >= 360;
+                  const save = yearly && monthly ? Math.round((1 - p.amount / (monthly.amount * 12)) * 100) : 0;
+                  const best = yearly && plans.length > 1;
+                  return (
+                    <div key={p.id} className={`plan-card${best ? ' is-best' : ''}`}>
+                      <div className="plan-card-head">
+                        <span className="plan-label">{yearly ? 'Yearly' : 'Monthly'}</span>
+                        {save > 0 && <span className="plan-save">Save {save}%</span>}
+                      </div>
+                      <p className="plan-price">
+                        <span>{price === 0 ? 'Free' : rupees(price)}</span>
+                        {deal && <s className="plan-was">{rupees(p.amount)}</s>}
+                      </p>
+                      <p className="plan-per">
+                        {deal
+                          ? `${coupon.code} applied: ${rupees(deal.discount)} off`
+                          : yearly
+                            ? `₹${Math.round(p.amount / 1200)} a month for ${p.days} days`
+                            : `for ${p.days} days`}
+                      </p>
+                      <button
+                        type="button"
+                        className={`btn ${best || plans.length === 1 || deal ? 'btn-primary' : ''} plan-buy`}
+                        disabled={Boolean(busy)}
+                        onClick={() => buy(p.id)}
+                      >
+                        {busy === p.id ? 'Opening payment…' : price === 0 ? 'Get Pro free' : `Pay ${rupees(price)}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {coupon ? (
+                <p className="coupon-applied">
+                  Coupon <strong>{coupon.code}</strong> applied.
+                  <button type="button" className="link-btn" onClick={clearCode}>
                     Remove
                   </button>
-                ) : (
-                  <button type="submit" className="btn btn-ghost btn-sm" disabled={!code.trim() || checking}>
-                    {checking ? 'Checking…' : 'Apply'}
-                  </button>
-                )}
-              </div>
-              {couponError && (
-                <p className="form-error" id="coupon-error" role="alert">
-                  {couponError}
                 </p>
+              ) : couponOpen ? (
+                <form className="coupon-row" onSubmit={applyCode}>
+                  <label className="set-label" htmlFor="coupon-code">
+                    Coupon code
+                  </label>
+                  <div className="coupon-controls">
+                    <input
+                      id="coupon-code"
+                      className="input"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.toUpperCase())}
+                      maxLength={24}
+                      autoComplete="off"
+                      spellCheck={false}
+                      autoFocus
+                      aria-describedby={couponError ? 'coupon-error' : undefined}
+                      aria-invalid={Boolean(couponError)}
+                    />
+                    <button type="submit" className="btn" disabled={!code.trim() || checking}>
+                      {checking ? 'Checking…' : 'Apply'}
+                    </button>
+                  </div>
+                  {couponError && (
+                    <p className="form-error" id="coupon-error" role="alert">
+                      {couponError}
+                    </p>
+                  )}
+                </form>
+              ) : (
+                <button type="button" className="link-btn coupon-open" onClick={() => setCouponOpen(true)}>
+                  Have a coupon code?
+                </button>
               )}
-            </form>
+
+              <p className="plan-note">
+                {billing.mode === 'test' ? 'Test mode: no real money is taken. ' : ''}Paid securely through Razorpay with UPI, cards or net banking. Pro does not
+                renew by itself. <a href="/refunds">Refunds within 7 days</a>.
+              </p>
+            </div>
+          ) : (
+            <p className="plan-note pro-body">Pro is not on sale yet.</p>
           )}
-          {billing.enabled && billing.mode === 'test' && <p className="set-hint">Test mode: no real money is taken.</p>}
-          <p className="set-hint">Paid once through Razorpay (UPI, cards, net banking). It does not renew by itself.</p>
         </Section>
       )}
 

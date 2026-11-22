@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, uploadPdf } from '../api.js';
 import { useMeta } from '../App.jsx';
 import { formatDateTime } from '../format.js';
-import { IconAlert, IconRefresh, IconX } from '../icons.jsx';
+import { IconAlert, IconCheck, IconExternal, IconFileUser, IconRefresh, IconSparkle, IconX } from '../icons.jsx';
 import ChipInput from './ChipInput.jsx';
 import DocumentsCard from './DocumentsCard.jsx';
 import { ApplicationDetailsCard, ApplicationDetailsDialog } from './ApplicationDetails.jsx';
@@ -11,8 +11,10 @@ import MyCvCard from './MyCvCard.jsx';
 import { RowsSkeleton } from './Skeleton.jsx';
 import { useToast } from './Toast.jsx';
 
-// Settings → Profile: upload a CV and/or a portfolio PDF, watch the AI read them, correct what it
-// found, and see the portfolio review and the gaps against the current job feed.
+// The Profile page: a list of sections on the left (three set-up steps, then the tools) and one
+// section at a time on the right. Set up: upload a CV and/or portfolio, fill in application
+// details, check what the AI read. Then: feedback (portfolio review, gaps against the feed), the
+// CV ArchJobs writes and the files for forms, and ARCH in Chrome.
 
 const POLL_MS = 3000;
 const RUBRIC = [
@@ -28,6 +30,13 @@ const STAGES = [
   ['graduate', 'Graduated, under 2 years of work'],
   ['experienced', '2+ years of work'],
 ];
+
+const SECTION_IDS = ['files', 'details', 'profile', 'feedback', 'documents', 'arch'];
+function sectionFromHash() {
+  const asked = window.location.hash.match(/[?&]section=([a-z]+)/)?.[1];
+  if (SECTION_IDS.includes(asked)) return asked;
+  return /[?&]details=1/.test(window.location.hash) ? 'details' : null;
+}
 
 const mb = (bytes) => (bytes < 1048576 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1048576).toFixed(1)} MB`);
 
@@ -109,6 +118,32 @@ export default function ProfilePanel() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const wasBuilding = useRef(false);
   const askedDetails = useRef(false);
+  const [section, setSection] = useState(sectionFromHash);
+  const paneHeads = useRef({});
+  const railRef = useRef(null);
+
+  // #/profile?section=details opens that section; links from elsewhere in the app use it too.
+  useEffect(() => {
+    const onHash = () => {
+      const asked = sectionFromHash();
+      if (asked) setSection(asked);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const go = useCallback((id, focus = false) => {
+    setSection(id);
+    try {
+      window.history.replaceState(null, '', `#/profile?section=${id}`);
+    } catch {
+      // the address just doesn't follow along
+    }
+    // Moving focus to the section's heading tells a screen reader where it landed, and on phones
+    // brings the section into view below the section list.
+    if (focus) requestAnimationFrame(() => paneHeads.current[id]?.focus());
+  }, []);
+
 
   const load = useCallback(() => api('/profile').then(setState).catch((err) => toast({ message: err.message, error: true })), [toast]);
   const loadGaps = useCallback(() => api('/profile/gaps').then(setGaps).catch(() => setGaps(null)), []);
@@ -201,6 +236,15 @@ export default function ProfilePanel() {
     }
   }
 
+  // On phones the sections are one sideways row: keep the open one in view.
+  const openId = section || null;
+  useEffect(() => {
+    const rail = railRef.current;
+    const item = rail?.querySelector('[aria-current="true"]');
+    if (!rail || !item || rail.scrollWidth <= rail.clientWidth) return;
+    rail.scrollTo({ left: Math.max(item.offsetLeft - rail.offsetLeft - 16, 0), behavior: 'smooth' });
+  }, [openId, state?.status]);
+
   if (!state) return <RowsSkeleton rows={4} label="Loading your profile" />;
   const set = (k) => (v) => setEdits((e) => ({ ...e, [k]: v }));
   const shown = new Set(profile?.software.filter((s) => s.level === 'shown').map((s) => s.name));
@@ -214,6 +258,77 @@ export default function ProfilePanel() {
       edits.coa !== profile.coa ||
       Number(edits.experience_months) !== profile.experience_months);
 
+  const hasFiles = Boolean(state.resume || state.portfolio);
+  const missing = state.details_missing || [];
+  const detailsDone = Boolean(state.details_saved) && missing.length === 0;
+  const steps = [
+    {
+      id: 'files',
+      label: 'CV & portfolio',
+      done: hasFiles && state.status !== 'error',
+      note: building
+        ? 'Reading…'
+        : state.status === 'error'
+          ? 'Needs attention'
+          : hasFiles
+            ? [state.resume && 'CV', state.portfolio && 'Portfolio'].filter(Boolean).join(' + ')
+            : 'Start here',
+    },
+    {
+      id: 'details',
+      label: 'Application details',
+      done: detailsDone,
+      note: detailsDone ? 'Done' : missing.length ? `${missing.length} to fill` : 'Not filled',
+    },
+    {
+      id: 'profile',
+      label: 'Check your profile',
+      done: Boolean(profile),
+      note: profile ? 'Ready' : building ? 'Reading…' : 'After upload',
+    },
+  ];
+  const tools = [
+    {
+      id: 'feedback',
+      label: 'Feedback',
+      Icon: IconSparkle,
+      note: gaps?.jobs ? `${gaps.verdicts.strong} strong fits` : profile ? '' : 'After upload',
+    },
+    { id: 'documents', label: 'CV & documents', Icon: IconFileUser, note: '' },
+    { id: 'arch', label: 'ARCH in Chrome', Icon: IconExternal, note: '' },
+  ];
+  const doneCount = steps.filter((st) => st.done).length;
+  const current = section || steps.find((st) => !st.done)?.id || 'profile';
+  const toFiles = (
+    <button type="button" className="btn btn-primary btn-sm" onClick={() => go('files')}>
+      Upload a CV or portfolio
+    </button>
+  );
+
+  const navItem = (item, marker) => (
+    <li key={item.id}>
+      <button type="button" className="pnav-item" aria-current={current === item.id ? 'true' : undefined} onClick={() => go(item.id, true)}>
+        {marker}
+        <span className="pnav-text">
+          <span className="pnav-label">{item.label}</span>
+          {item.note && <span className="pnav-note">{item.note}</span>}
+        </span>
+      </button>
+    </li>
+  );
+
+  const pane = (id, title, description, children) => (
+    <section key={id} className="ppane" aria-labelledby={`ppane-${id}`} hidden={current !== id}>
+      <header className="ppane-head">
+        <h2 id={`ppane-${id}`} tabIndex={-1} ref={(el) => (paneHeads.current[id] = el)}>
+          {title}
+        </h2>
+        {description && <p>{description}</p>}
+      </header>
+      {children}
+    </section>
+  );
+
   return (
     <div className="profile-panel">
       {!state.available && (
@@ -221,78 +336,138 @@ export default function ProfilePanel() {
           Profile reading is not set up on this server: the AI gateway is not configured.
         </p>
       )}
-      <p className="small muted" style={{ marginTop: 0 }}>
-        Any field of study (architecture, interiors, civil, mechanical…): upload your CV, your portfolio, or both. Only a portfolio is fine too: ArchJobs writes a CV from it. The AI reads them once into a profile (software, skills, projects, what your portfolio shows), and every job then gets a fit score against it:
-        the ranking a hiring system does, shown openly. Your files stay private to you. {state.builds_today}/{state.limits.buildsPerDay} reads used {state.reads_period === 'week' ? 'this week' : 'today'}.
-      </p>
-
       {building && (
         <p className="profile-status" role="status" aria-live="polite">
-          <span className="ai-pulse" aria-hidden="true" /> {state.step || 'Reading'}…
+          <span className="ai-pulse" aria-hidden="true" /> {state.step || 'Reading'}… You can keep working: the page updates when it's done.
         </p>
       )}
       {state.status === 'error' && (
-        <p className="form-error" role="alert" aria-live="assertive">
+        <p className="form-error profile-error" role="alert" aria-live="assertive">
           <IconAlert size={16} /> {state.error}{' '}
           <button type="button" className="btn btn-sm" onClick={rebuild} disabled={!state.available}>
             Read again
           </button>
         </p>
       )}
-      {state.warnings?.length > 0 && !building && (
-        <div className="profile-warnings">
-          <ul className="small muted">
-            {state.warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-          {state.warnings.some((w) => /could not be read/.test(w)) && state.status !== 'error' && (
-            <p className="small">
-              The AI gateway was busy. Pages already read are kept, so reading again only sends the missing ones.{' '}
-              <button type="button" className="btn btn-sm" onClick={rebuild} disabled={!state.available}>
-                Read the missing pages
-              </button>
-            </p>
-          )}
-        </div>
-      )}
 
-      <div className={`profile-layout${profile && edits ? ' has-side' : ''}`}>
-        <div className="profile-col">
-          <div className="upload-grid">
-            <UploadCard kind="resume" title="CV / resume" hint="A text PDF (not a scan): education, internships, software, projects. Optional if you upload a portfolio." file={state.resume} limitMb={state.limits.resumeMb} busy={building} onUpload={upload} onRemove={remove} />
-            <UploadCard
-              kind="portfolio"
-              title="Portfolio"
-              hint={`Your portfolio, project report or work samples as one PDF. The first ${state.limits.portfolioPages} pages are read as images; export at screen quality to keep it small.`}
-              file={state.portfolio}
-              limitMb={state.limits.portfolioMb}
-              busy={building}
-              onUpload={upload}
-              onRemove={remove}
-            />
+      <div className="profile-shell">
+        <nav className="pnav" aria-label="Profile sections">
+          <div className="pnav-progress">
+            <span className="pnav-group">Set up</span>
+            <span className="pnav-count">
+              {doneCount} of {steps.length} done
+            </span>
+            <span className="scale-bar" aria-hidden="true">
+              {steps.map((st) => (
+                <span key={st.id} className={st.done ? 'is-on' : ''} />
+              ))}
+            </span>
           </div>
+          <div className="pnav-rail" ref={railRef}>
+          <ol className="pnav-list">
+            {steps.map((st, i) =>
+              navItem(
+                st,
+                <span className={`pnav-mark${st.done ? ' is-done' : ''}`} aria-hidden="true">
+                  {st.done ? <IconCheck size={14} /> : i + 1}
+                </span>,
+              ),
+            )}
+          </ol>
+          <span className="pnav-group pnav-group-2">Use it</span>
+          <ul className="pnav-list">
+            {tools.map((t) =>
+              navItem(
+                t,
+                <span className="pnav-mark is-tool" aria-hidden="true">
+                  <t.Icon size={15} />
+                </span>,
+              ),
+            )}
+          </ul>
+          </div>
+        </nav>
 
-          <ApplicationDetailsCard state={state} onOpen={() => setDetailsOpen(true)} />
-          <ApplicationDetailsDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} state={state} onSaved={setState} />
-          <MyCvCard hasResume={Boolean(state.resume)} ready={state.status === 'ready' || Boolean(profile)} />
-
-          <DocumentsCard refreshKey={`${state.resume?.uploaded_at || ''}${state.portfolio?.uploaded_at || ''}`} />
-          <ExtensionCard fillsToday={state.fills_today} fillsPerDay={state.fills_per_day} weekly={state.fills_period === 'week'} />
-        </div>
-
-        <div className="profile-col">
-          {profile && edits && (
+        <div className="ppanes">
+          {pane(
+            'files',
+            'CV & portfolio',
+            'Upload your CV, your portfolio, or both, as PDFs. The AI reads them once into a profile, and every job gets a fit score against it. A portfolio alone is fine: ArchJobs writes a CV from it. Your files stay private to you.',
             <>
+              <div className="upload-grid">
+                <UploadCard
+                  kind="resume"
+                  title="CV / resume"
+                  hint="A text PDF, not a scan: education, internships, software, projects."
+                  file={state.resume}
+                  limitMb={state.limits.resumeMb}
+                  busy={building}
+                  onUpload={upload}
+                  onRemove={remove}
+                />
+                <UploadCard
+                  kind="portfolio"
+                  title="Portfolio"
+                  hint={`Portfolio, project report or work samples as one PDF. The first ${state.limits.portfolioPages} pages are read; export at screen quality to keep it small.`}
+                  file={state.portfolio}
+                  limitMb={state.limits.portfolioMb}
+                  busy={building}
+                  onUpload={upload}
+                  onRemove={remove}
+                />
+              </div>
+              {state.warnings?.length > 0 && !building && (
+                <div className="card profile-warnings">
+                  <ul className="small muted">
+                    {state.warnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                  {state.warnings.some((w) => /could not be read/.test(w)) && state.status !== 'error' && (
+                    <p className="small">
+                      The AI was busy. Pages already read are kept, so reading again only sends the missing ones.{' '}
+                      <button type="button" className="btn btn-sm" onClick={rebuild} disabled={!state.available}>
+                        Read the missing pages
+                      </button>
+                    </p>
+                  )}
+                </div>
+              )}
+              <p className="ppane-foot">
+                {state.builds_today} of {state.limits.buildsPerDay} reads used {state.reads_period === 'week' ? 'this week' : 'today'}.
+                {hasFiles && !detailsDone && (
+                  <>
+                    {' '}
+                    Next:{' '}
+                    <button type="button" className="link-btn" onClick={() => go('details', true)}>
+                      fill in your application details
+                    </button>
+                  </>
+                )}
+              </p>
+            </>,
+          )}
+
+          {pane(
+            'details',
+            'Application details',
+            'Name, contact, address, college, marks, pay and notice period: what application forms ask for. ARCH in Chrome fills forms from these.',
+            <ApplicationDetailsCard state={state} onOpen={() => setDetailsOpen(true)} hideTitle />,
+          )}
+
+          {pane(
+            'profile',
+            'Check your profile',
+            'What the AI read from your files. Correct anything it got wrong: the fit score on every job uses this.',
+            profile && edits ? (
               <section className="card profile-section">
                 <div className="profile-section-head">
-                  <h2>What the AI read</h2>
                   <span className="small muted">
-                    Built {formatDateTime(state.built_at)} · {state.model}
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={rebuild} disabled={building || !state.available} title="Read the files again">
-                      <IconRefresh size={14} /> Read again
-                    </button>
+                    Read {formatDateTime(state.built_at)} · {state.model}
                   </span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={rebuild} disabled={building || !state.available} title="Read the files again">
+                    <IconRefresh size={14} /> Read again
+                  </button>
                 </div>
                 {profile.summary && <p>{profile.summary}</p>}
                 <div className="profile-grid">
@@ -319,7 +494,16 @@ export default function ProfilePanel() {
                   <span className="field-label">
                     Software <small className="muted">· tools seen in the portfolio are marked</small>
                   </span>
-                  <ChipInput id="profile-software" label="Software" value={edits.software} onChange={set('software')} placeholder="Revit, AutoCAD, SketchUp…" addLabel="Add a tool" max={30} maxLength={40} />
+                  <ChipInput
+                    id="profile-software"
+                    label="Software"
+                    value={edits.software}
+                    onChange={set('software')}
+                    placeholder="Revit, AutoCAD, SketchUp…"
+                    addLabel="Add a tool"
+                    max={30}
+                    maxLength={40}
+                  />
                   {shown.size > 0 && (
                     <p className="small muted" style={{ margin: '4px 0 0' }}>
                       Shown in portfolio: {[...shown].join(', ')}
@@ -328,126 +512,200 @@ export default function ProfilePanel() {
                 </div>
                 <div className="field">
                   <span className="field-label">Skills</span>
-                  <ChipInput id="profile-skills" label="Skills" value={edits.skills} onChange={set('skills')} placeholder="Working drawings, detailing…" addLabel="Add a skill" max={25} maxLength={80} />
+                  <ChipInput
+                    id="profile-skills"
+                    label="Skills"
+                    value={edits.skills}
+                    onChange={set('skills')}
+                    placeholder="Working drawings, detailing…"
+                    addLabel="Add a skill"
+                    max={25}
+                    maxLength={80}
+                  />
                 </div>
                 <div className="field">
                   <span className="field-label">Cities you can work in</span>
-                  <ChipInput id="profile-cities" label="Cities you can work in" value={edits.cities} onChange={set('cities')} placeholder="Bengaluru, Remote…" addLabel="Add a city" max={8} maxLength={60} />
+                  <ChipInput
+                    id="profile-cities"
+                    label="Cities you can work in"
+                    value={edits.cities}
+                    onChange={set('cities')}
+                    placeholder="Bengaluru, Remote…"
+                    addLabel="Add a city"
+                    max={8}
+                    maxLength={60}
+                  />
                 </div>
-                {profile.typologies.length > 0 && (
-                  <p className="small">
-                    <strong>Kinds of project:</strong> {profile.typologies.join(', ')}
-                  </p>
-                )}
-                {profile.education.length > 0 && (
-                  <p className="small">
-                    <strong>Education:</strong> {profile.education.map((e) => `${e.degree}${e.institution ? `, ${e.institution}` : ''}${e.year ? ` (${e.year})` : ''}`).join(' · ')}
-                  </p>
-                )}
-                {profile.experience.length > 0 && (
-                  <p className="small">
-                    <strong>Experience:</strong> {profile.experience.map((e) => `${e.role}${e.firm ? ` at ${e.firm}` : ''}${e.months ? `, ${e.months} mo` : ''}`).join(' · ')}
-                  </p>
-                )}
-                {profile.projects.length > 0 && (
-                  <p className="small">
-                    <strong>Projects on the CV:</strong> {profile.projects.map((p) => `${p.title}${p.typology ? ` (${p.typology})` : ''}`).join(' · ')}
-                  </p>
+                {(profile.typologies.length > 0 || profile.education.length > 0 || profile.experience.length > 0 || profile.projects.length > 0) && (
+                  <dl className="profile-facts small">
+                    {profile.typologies.length > 0 && (
+                      <div>
+                        <dt>Kinds of project</dt>
+                        <dd>{profile.typologies.join(', ')}</dd>
+                      </div>
+                    )}
+                    {profile.education.length > 0 && (
+                      <div>
+                        <dt>Education</dt>
+                        <dd>{profile.education.map((e) => `${e.degree}${e.institution ? `, ${e.institution}` : ''}${e.year ? ` (${e.year})` : ''}`).join(' · ')}</dd>
+                      </div>
+                    )}
+                    {profile.experience.length > 0 && (
+                      <div>
+                        <dt>Experience</dt>
+                        <dd>{profile.experience.map((e) => `${e.role}${e.firm ? ` at ${e.firm}` : ''}${e.months ? `, ${e.months} mo` : ''}`).join(' · ')}</dd>
+                      </div>
+                    )}
+                    {profile.projects.length > 0 && (
+                      <div>
+                        <dt>Projects on the CV</dt>
+                        <dd>{profile.projects.map((p) => `${p.title}${p.typology ? ` (${p.typology})` : ''}`).join(' · ')}</dd>
+                      </div>
+                    )}
+                  </dl>
                 )}
                 <div className="dialog-actions">
                   <button type="button" className="btn btn-primary btn-sm" onClick={save} disabled={!dirty || saving}>
-                    {saving ? 'Saving…' : 'Save corrections'}
+                    {saving ? 'Saving…' : dirty ? 'Save corrections' : 'Saved'}
                   </button>
                 </div>
               </section>
+            ) : (
+              <div className="card ppane-empty">
+                <p>
+                  {building
+                    ? 'The AI is reading your files. Your profile shows here when it is done.'
+                    : 'Upload a CV or portfolio first. The AI reads it into a profile you can check and correct here.'}
+                </p>
+                {!building && toFiles}
+              </div>
+            ),
+          )}
 
-              {profile.portfolio && (
-                <section className="card profile-section">
-                  <h2>Portfolio review</h2>
-                  <p className="small muted" style={{ marginTop: 0 }}>
-                    {profile.portfolio.read_pages} of {profile.portfolio.pages} pages read · projects seen: {profile.portfolio.projects.join(', ') || '—'} · drawings: {profile.portfolio.drawing_types.join(', ') || '—'}
-                  </p>
-                  {profile.portfolio.rubric && <Rubric rubric={profile.portfolio.rubric} />}
-                  {profile.portfolio.summary && <p>{profile.portfolio.summary}</p>}
-                  <div className="review-grid">
-                    {profile.portfolio.strengths.length > 0 && (
-                      <div>
-                        <h3>Strengths</h3>
-                        <ul className="small">
-                          {profile.portfolio.strengths.map((s) => (
-                            <li key={s}>{s}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {profile.portfolio.weaknesses.length > 0 && (
-                      <div>
-                        <h3>What a reviewer would miss</h3>
-                        <ul className="small">
-                          {profile.portfolio.weaknesses.map((s) => (
-                            <li key={s}>{s}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {profile.portfolio.improvements.length > 0 && (
-                      <div>
-                        <h3>Do first</h3>
-                        <ol className="small">
-                          {profile.portfolio.improvements.map((s) => (
-                            <li key={s}>{s}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
-                  </div>
-                  {profile.portfolio.best_for.length > 0 && (
-                    <p className="small">
-                      <strong>Best suited to:</strong> {profile.portfolio.best_for.join(', ')}
+          {pane(
+            'feedback',
+            'Feedback',
+            'How your portfolio reads to a reviewer, and what the open roles ask for that your profile lacks.',
+            profile ? (
+              <>
+                {profile.portfolio ? (
+                  <section className="card profile-section">
+                    <h3 className="ppane-sub">Portfolio review</h3>
+                    <p className="small muted" style={{ marginTop: 0 }}>
+                      {profile.portfolio.read_pages} of {profile.portfolio.pages} pages read · projects seen: {profile.portfolio.projects.join(', ') || '—'} · drawings:{' '}
+                      {profile.portfolio.drawing_types.join(', ') || '—'}
                     </p>
-                  )}
-                </section>
-              )}
-
-              {gaps && gaps.jobs > 0 && (
-                <section className="card profile-section">
-                  <h2>Against the current feed</h2>
-                  <p className="small muted" style={{ marginTop: 0 }}>
-                    Of {gaps.jobs} open roles: <strong>{gaps.verdicts.strong}</strong> strong fit, <strong>{gaps.verdicts.possible}</strong> possible, <strong>{gaps.verdicts.stretch}</strong> a stretch.{' '}
-                    <a href="#/jobs">Sort the feed by best fit →</a>
-                  </p>
-                  {gaps.gaps.length > 0 ? (
-                    <>
-                      <p className="small" style={{ fontWeight: 600 }}>
-                        What roles ask for that your profile lacks, most common first
+                    {profile.portfolio.rubric && <Rubric rubric={profile.portfolio.rubric} />}
+                    {profile.portfolio.summary && <p>{profile.portfolio.summary}</p>}
+                    <div className="review-grid">
+                      {profile.portfolio.strengths.length > 0 && (
+                        <div>
+                          <h4>Strengths</h4>
+                          <ul className="small">
+                            {profile.portfolio.strengths.map((x) => (
+                              <li key={x}>{x}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {profile.portfolio.weaknesses.length > 0 && (
+                        <div>
+                          <h4>What a reviewer would miss</h4>
+                          <ul className="small">
+                            {profile.portfolio.weaknesses.map((x) => (
+                              <li key={x}>{x}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {profile.portfolio.improvements.length > 0 && (
+                        <div>
+                          <h4>Do first</h4>
+                          <ol className="small">
+                            {profile.portfolio.improvements.map((x) => (
+                              <li key={x}>{x}</li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                    {profile.portfolio.best_for.length > 0 && (
+                      <p className="small">
+                        <strong>Best suited to:</strong> {profile.portfolio.best_for.join(', ')}
                       </p>
-                      <ul className="gap-list">
-                        {gaps.gaps.map((g) => (
-                          <li key={g.label}>
-                            <div className="gap-head">
-                              <strong>{g.label}</strong>
-                              <span className="small muted">
-                                {g.jobs} role{g.jobs === 1 ? '' : 's'}
-                                {g.required ? ` · required by ${g.required}` : ''}
-                              </span>
-                            </div>
-                            {g.tip && <p className="small">{g.tip}</p>}
-                            <p className="small muted">
-                              e.g. {g.examples.map((e) => `${e.title}${e.company ? ` (${e.company})` : ''}`).join(', ')}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : (
-                    <p className="small">Nothing the open roles ask for is missing from your profile.</p>
-                  )}
-                </section>
-              )}
-            </>
+                    )}
+                  </section>
+                ) : (
+                  <div className="card ppane-empty">
+                    <p>Upload a portfolio to get a review: range, process, technical depth, presentation and BIM evidence, scored.</p>
+                    <button type="button" className="btn btn-sm" onClick={() => go('files', true)}>
+                      Upload a portfolio
+                    </button>
+                  </div>
+                )}
+
+                {gaps && gaps.jobs > 0 && (
+                  <section className="card profile-section">
+                    <h3 className="ppane-sub">Against the current feed</h3>
+                    <p className="small muted" style={{ marginTop: 0 }}>
+                      Of {gaps.jobs} open roles: <strong>{gaps.verdicts.strong}</strong> strong fit, <strong>{gaps.verdicts.possible}</strong> possible,{' '}
+                      <strong>{gaps.verdicts.stretch}</strong> a stretch. <a href="#/jobs">Sort the feed by best fit →</a>
+                    </p>
+                    {gaps.gaps.length > 0 ? (
+                      <>
+                        <p className="small" style={{ fontWeight: 600 }}>
+                          What roles ask for that your profile lacks, most common first
+                        </p>
+                        <ul className="gap-list">
+                          {gaps.gaps.map((g) => (
+                            <li key={g.label}>
+                              <div className="gap-head">
+                                <strong>{g.label}</strong>
+                                <span className="small muted">
+                                  {g.jobs} role{g.jobs === 1 ? '' : 's'}
+                                  {g.required ? ` · required by ${g.required}` : ''}
+                                </span>
+                              </div>
+                              {g.tip && <p className="small">{g.tip}</p>}
+                              <p className="small muted">e.g. {g.examples.map((e) => `${e.title}${e.company ? ` (${e.company})` : ''}`).join(', ')}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : (
+                      <p className="small">Nothing the open roles ask for is missing from your profile.</p>
+                    )}
+                  </section>
+                )}
+              </>
+            ) : (
+              <div className="card ppane-empty">
+                <p>Feedback appears once the AI has read your CV or portfolio.</p>
+                {!building && toFiles}
+              </div>
+            ),
+          )}
+
+          {pane(
+            'documents',
+            'CV & documents',
+            'The CV ArchJobs writes for you, and the files ARCH in Chrome attaches to application forms.',
+            <>
+              <MyCvCard hasResume={Boolean(state.resume)} ready={state.status === 'ready' || Boolean(profile)} />
+              <DocumentsCard refreshKey={`${state.resume?.uploaded_at || ''}${state.portfolio?.uploaded_at || ''}`} />
+            </>,
+          )}
+
+          {pane(
+            'arch',
+            'ARCH in Chrome',
+            'Fills a job application when you ask it to: press Fill with ARCH on the form, or Alt+Shift+A. It never fills other sites by itself and never presses submit.',
+            <ExtensionCard fillsToday={state.fills_today} fillsPerDay={state.fills_per_day} weekly={state.fills_period === 'week'} hideHead />,
           )}
         </div>
       </div>
+
+      <ApplicationDetailsDialog open={detailsOpen} onClose={() => setDetailsOpen(false)} state={state} onSaved={setState} />
     </div>
   );
 }
