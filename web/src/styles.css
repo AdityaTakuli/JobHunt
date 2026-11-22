@@ -1,35 +1,36 @@
 :root {
   color-scheme: light;
-  /* Light: drafting paper. A warm grey page with white cards on it, so every card stands off the
-     page (LinkedIn, Apple and Glassdoor all do this), and one calm blue for actions. */
-  --bg: #f4f2ee;
-  --surface: #ffffff;
-  --surface-2: #ebe8e1;
-  --border: #e4e0d7;
-  --border-strong: #cdc7bb;
-  --text: #1b1c20;
-  --text-2: #4a4e57;
-  --text-3: #5d616b;
+  /* Light: stone paper and ink, the language of the owner's own sites (Luup, LexAgent, the
+     portfolio): a warm neutral page, warm-white cards on it, near-black ink and black primary
+     buttons. Colour is kept for meaning only (fit, status); the logo carries the brand blue. */
+  --bg: #ecebe6;
+  --surface: #fbfaf7;
+  --surface-2: #e5e3dd;
+  --border: #dbd8d0;
+  --border-strong: #c3bfb5;
+  --text: #1a1917;
+  --text-2: #4c4943;
+  --text-3: #625e57;
   --line: var(--border);
   --muted: var(--text-3);
-  --ok: #157347;
-  --ok-bg: #e4f2e8;
-  --accent: #1d5fd1;
+  --ok: #2f6b3f;
+  --ok-bg: #e2eadf;
+  --accent: #1a1917;
   --logo-ink: var(--text);
-  --accent-hover: #174fae;
-  --accent-contrast: #ffffff;
-  --accent-soft: #e7eefc;
-  --accent-text: #1a52b8;
-  --amber-bg: #fbeed4;
-  --amber-text: #6f4500;
-  --red-bg: #f9e2de;
-  --red-text: #9a2318;
-  --focus: #1d5fd1;
-  --shadow: 0 1px 2px rgb(45 38 22 / 6%), 0 2px 10px rgb(45 38 22 / 5%);
-  --shadow-lg: 0 12px 40px rgb(45 38 22 / 16%);
-  --shadow-hover: 0 2px 4px rgb(45 38 22 / 6%), 0 10px 28px rgb(45 38 22 / 9%);
+  --accent-hover: #3a3833;
+  --accent-contrast: #fbfaf7;
+  --accent-soft: #e5e3dd;
+  --accent-text: #1a1917;
+  --amber-bg: #f1e6cf;
+  --amber-text: #6b4a0e;
+  --red-bg: #f3e0dc;
+  --red-text: #8f2a1d;
+  --focus: #1a1917;
+  --shadow: 0 1px 2px rgb(40 36 28 / 6%), 0 2px 10px rgb(40 36 28 / 4%);
+  --shadow-lg: 0 12px 40px rgb(40 36 28 / 14%);
+  --shadow-hover: 0 2px 4px rgb(40 36 28 / 6%), 0 10px 28px rgb(40 36 28 / 8%);
   --glint: rgb(255 255 255 / 70%);
-  --grid-line: color-mix(in srgb, var(--accent) 8%, transparent);
+  --grid-line: color-mix(in srgb, var(--text) 6%, transparent);
   --radius: 12px;
   --radius-sm: 8px;
   --header-h: 64px;
@@ -43,65 +44,65 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    /* Dark: blueprint. Deep navy instead of black, with lighter navy cards, so layers read
-       apart and long reading is easy on the eyes. */
-    --bg: #0b1322;
-    --surface: #131d31;
-    --surface-2: #1a2640;
-    --border: #22304a;
-    --border-strong: #314263;
-    --text: #e8edf6;
-    --text-2: #b0bccf;
-    --text-3: #8c99b0;
-    --ok: #5fd08f;
-    --ok-bg: #0f2b24;
-    --accent: #5b9bff;
+    /* Dark: charcoal steps, page, then card, then inner tile, each a little lighter, with
+       warm white ink. No blue: easy on the eyes and never black on black. */
+    --bg: #111110;
+    --surface: #1c1b19;
+    --surface-2: #262522;
+    --border: #2f2e2a;
+    --border-strong: #403e39;
+    --text: #f0eee9;
+    --text-2: #bdb9b0;
+    --text-3: #94908a;
+    --ok: #8cc59a;
+    --ok-bg: #1d2a20;
+    --accent: #f0eee9;
     --logo-ink: #f1e8d8;
-    --accent-hover: #7cb0ff;
-    --accent-contrast: #061127;
-    --accent-soft: #142a52;
-    --accent-text: #9cc2ff;
-    --amber-bg: #3a2e14;
-    --amber-text: #f6cd7a;
-    --red-bg: #3d1d22;
-    --red-text: #f6a8a0;
-    --focus: #7cb0ff;
-    --shadow: 0 0 0 1px rgb(255 255 255 / 3%), 0 1px 2px rgb(2 6 15 / 55%), 0 4px 14px rgb(2 6 15 / 22%);
-    --shadow-lg: 0 12px 40px rgb(2 6 15 / 60%);
-    --shadow-hover: 0 2px 4px rgb(2 6 15 / 45%), 0 10px 28px rgb(2 6 15 / 40%);
-    --glint: rgb(255 255 255 / 5%);
-    --grid-line: color-mix(in srgb, var(--accent) 8%, transparent);
+    --accent-hover: #ffffff;
+    --accent-contrast: #151413;
+    --accent-soft: #2c2b27;
+    --accent-text: #f0eee9;
+    --amber-bg: #2f2716;
+    --amber-text: #e7c27c;
+    --red-bg: #34201d;
+    --red-text: #eca79c;
+    --focus: #f0eee9;
+    --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 50%);
+    --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
+    --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 35%);
+    --glint: rgb(255 255 255 / 4%);
+    --grid-line: color-mix(in srgb, var(--text) 5%, transparent);
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0b1322;
-  --surface: #131d31;
-  --surface-2: #1a2640;
-  --border: #22304a;
-  --border-strong: #314263;
-  --text: #e8edf6;
-  --text-2: #b0bccf;
-  --text-3: #8c99b0;
-  --ok: #5fd08f;
-  --ok-bg: #0f2b24;
-  --accent: #5b9bff;
+  --bg: #111110;
+  --surface: #1c1b19;
+  --surface-2: #262522;
+  --border: #2f2e2a;
+  --border-strong: #403e39;
+  --text: #f0eee9;
+  --text-2: #bdb9b0;
+  --text-3: #94908a;
+  --ok: #8cc59a;
+  --ok-bg: #1d2a20;
+  --accent: #f0eee9;
   --logo-ink: #f1e8d8;
-  --accent-hover: #7cb0ff;
-  --accent-contrast: #061127;
-  --accent-soft: #142a52;
-  --accent-text: #9cc2ff;
-  --amber-bg: #3a2e14;
-  --amber-text: #f6cd7a;
-  --red-bg: #3d1d22;
-  --red-text: #f6a8a0;
-  --focus: #7cb0ff;
-  --shadow: 0 0 0 1px rgb(255 255 255 / 3%), 0 1px 2px rgb(2 6 15 / 55%), 0 4px 14px rgb(2 6 15 / 22%);
-  --shadow-lg: 0 12px 40px rgb(2 6 15 / 60%);
-  --shadow-hover: 0 2px 4px rgb(2 6 15 / 45%), 0 10px 28px rgb(2 6 15 / 40%);
-  --glint: rgb(255 255 255 / 5%);
-  --grid-line: color-mix(in srgb, var(--accent) 8%, transparent);
+  --accent-hover: #ffffff;
+  --accent-contrast: #151413;
+  --accent-soft: #2c2b27;
+  --accent-text: #f0eee9;
+  --amber-bg: #2f2716;
+  --amber-text: #e7c27c;
+  --red-bg: #34201d;
+  --red-text: #eca79c;
+  --focus: #f0eee9;
+  --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 50%);
+  --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
+  --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 35%);
+  --glint: rgb(255 255 255 / 4%);
+  --grid-line: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 *,
@@ -783,6 +784,10 @@ main {
 .job-card {
   position: relative;
   display: grid;
+  /* One column no wider than the card. Without it iPhone Safari sized the column to a long firm
+     name ("VREP Construction & Consultants PVT Ltd"), pushing the hide button and the age out of
+     the card and making the whole page wider than the screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 14px 14px 12px 16px;
   border: 1px solid var(--border);
@@ -5808,16 +5813,15 @@ dialog.dialog:has(.details-form) {
 }
 
 .plan-guarantee {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 0;
   font-size: 14px;
+  line-height: 1.5;
 }
 
 .plan-guarantee svg {
-  flex: none;
-  color: var(--accent-text);
+  margin-right: 6px;
+  vertical-align: -3px;
+  color: var(--ok);
 }
 
 /* Feedback: colour says what kind of note it is. Green for strengths, amber for what a reviewer
@@ -5923,5 +5927,34 @@ dialog.dialog:has(.details-form) {
   .origin-switch button {
     flex: 1 1 auto;
   }
+}
+
+
+/* Small uppercase labels in mono, as on the owner's portfolio: section names, table heads, facts. */
+.detail-section h3,
+.table th,
+.home-eyebrow,
+.home-tag,
+.search-history-title,
+.facts dt,
+.co-roles-label,
+.plan-label,
+.pnav-group {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+/* Long firm names and titles wrap or cut instead of widening their box, on every page. */
+.job-card > *,
+.quota-tile > *,
+.plan-card > *,
+.ppane > *,
+.pnav-text > * {
+  min-width: 0;
+}
+.jc-title,
+.detail-title {
+  overflow-wrap: anywhere;
 }
 
