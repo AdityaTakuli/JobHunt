@@ -7,9 +7,11 @@ import { RowsSkeleton } from '../components/Skeleton.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { formatDateTime, SOURCE_LABELS } from '../format.js';
 
-// Connections, Activity and People are the owner's (and other admins').
+// Connections, Activity and People are the owner's (and other admins'). Plan shows once Pro is on
+// sale or the weekly free limits run (and always to admins).
 const ALL_TABS = [
   { id: 'account', label: 'Account' },
+  { id: 'plan', label: 'Plan', plans: true },
   { id: 'preferences', label: 'Preferences' },
   { id: 'connections', label: 'Connections', admin: true },
   { id: 'activity', label: 'Activity', admin: true },
@@ -672,6 +674,144 @@ function AccountPanel({ onLogout }) {
   );
 }
 
+/* ---------- Plan (Pro and the weekly free limits) ---------- */
+
+const PLAN_FEATURES = [
+  { id: 'tailor', label: 'Tailored CV + cover letter', hint: 'A CV and cover letter written for one job.' },
+  { id: 'analysis', label: 'AI job suggestions', hint: 'Fit, missing skills and what to fix, for one job.' },
+  { id: 'fill', label: 'AI answers in ARCH', hint: 'Open questions on application forms. Fields filled from your details are always free.' },
+  { id: 'profile', label: 'Profile reads', hint: 'Reading your CV or portfolio with AI after an upload.' },
+];
+const rupees = (paise) => `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+// Razorpay's Checkout script, loaded the first time someone presses Upgrade.
+let checkoutScript = null;
+function loadCheckout() {
+  if (window.Razorpay) return Promise.resolve();
+  checkoutScript ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => {
+      checkoutScript = null;
+      s.remove();
+      reject(new Error('Could not load the payment window. Check your connection and try again.'));
+    };
+    document.head.appendChild(s);
+  });
+  return checkoutScript;
+}
+
+function PlanPanel() {
+  const { toast } = useToast();
+  const [billing, setBilling] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+
+  const load = useCallback(() => {
+    api('/billing')
+      .then((d) => {
+        setBilling(d);
+        setError('');
+      })
+      .catch((err) => setError(err.message));
+  }, []);
+  useEffect(load, [load]);
+
+  async function buy(planId) {
+    setBusy(planId);
+    try {
+      await loadCheckout();
+      const order = await api('/billing/order', { method: 'POST', body: { plan: planId } });
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      const checkout = new window.Razorpay({
+        key: order.keyId,
+        order_id: order.orderId,
+        amount: order.amount,
+        currency: order.currency,
+        name: order.name,
+        description: order.description,
+        prefill: order.prefill,
+        ...(accent.startsWith('#') ? { theme: { color: accent } } : {}),
+        handler: async (paid) => {
+          try {
+            await api('/billing/verify', { method: 'POST', body: paid });
+            toast({ message: 'Payment done. You are on ArchJobs Pro: no weekly limits.', duration: 7000 });
+          } catch (err) {
+            toast({ message: `${err.message} If money left your account, Pro turns on within a few minutes.`, error: true, duration: 9000 });
+          } finally {
+            setBusy('');
+            load();
+          }
+        },
+        modal: { ondismiss: () => setBusy('') },
+      });
+      checkout.on('payment.failed', (r) => toast({ message: r?.error?.description || 'The payment did not go through. Nothing was charged.', error: true, duration: 7000 }));
+      checkout.open();
+    } catch (err) {
+      toast({ message: err.message, error: true });
+      setBusy('');
+    }
+  }
+
+  if (error) return <p className="form-error" role="alert">{error}</p>;
+  if (!billing) return <RowsSkeleton rows={3} label="Loading your plan" />;
+  const { quota } = billing;
+  const pro = billing.active;
+  const resets = new Date(quota.resetsAt).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
+  return (
+    <div className="set-stack">
+      <Section
+        id="set-plan"
+        title="Your plan"
+        description={
+          pro
+            ? `ArchJobs Pro until ${new Date(billing.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' })}. No weekly limits.`
+            : quota.admin
+              ? 'Admin: no weekly limits.'
+              : 'Free. Job search, the digest, job emails, the tracker and Gmail reading are free for good. The AI tools below come with a few free uses every week.'
+        }
+        action={<StatusBadge ok={pro || quota.admin} okLabel={pro ? 'Pro' : 'Admin'} offLabel="Free" />}
+      >
+        {PLAN_FEATURES.map((f) => {
+          const q = quota.features[f.id];
+          return (
+            <Row key={f.id} label={f.label} hint={f.hint}>
+              <span className="plan-count">{q.limit == null ? `${q.used} this week · no limit` : `${Math.max(q.limit - q.used, 0)} of ${q.limit} free left`}</span>
+            </Row>
+          );
+        })}
+        {quota.limited && <p className="set-hint plan-reset">Free uses come back on {resets}.</p>}
+      </Section>
+
+      {!pro && !quota.admin && (
+        <Section id="set-pro" title="ArchJobs Pro" description="No weekly limits on tailored CVs and cover letters, AI job suggestions, ARCH answers and profile reads.">
+          {billing.enabled && billing.plans.length ? (
+            <div className="plan-grid">
+              {billing.plans.map((p) => (
+                <div key={p.id} className="plan-card">
+                  <span className="plan-price">{rupees(p.amount)}</span>
+                  <span className="plan-label">{p.label}</span>
+                  <span className="set-hint">{p.days >= 360 ? `${rupees(Math.round(p.amount / 12))} a month, paid yearly` : `${p.days} days`}</span>
+                  <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => buy(p.id)}>
+                    {busy === p.id ? 'Opening…' : 'Upgrade'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="set-hint">Pro is not on sale yet.</p>
+          )}
+          {billing.enabled && billing.mode === 'test' && <p className="set-hint">Test mode: no real money is taken.</p>}
+          <p className="set-hint">Paid once through Razorpay (UPI, cards, net banking). It does not renew by itself.</p>
+        </Section>
+      )}
+    </div>
+  );
+}
+
 /* ---------- People (admins) ---------- */
 
 function PeoplePanel() {
@@ -800,7 +940,8 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const { me } = useMeta();
   const isAdmin = Boolean(me?.isAdmin);
-  const TABS = useMemo(() => ALL_TABS.filter((t) => !t.admin || isAdmin), [isAdmin]);
+  const showPlans = Boolean(me?.plans) || isAdmin;
+  const TABS = useMemo(() => ALL_TABS.filter((t) => (!t.admin || isAdmin) && (!t.plans || showPlans)), [isAdmin, showPlans]);
   const [tab, setTab] = useState(() => loadTab(TABS));
   const [system, setSystem] = useState(null);
   const tabRefs = useRef({});
@@ -865,6 +1006,7 @@ export default function SettingsPage() {
 
   const panels = {
     account: <AccountPanel onLogout={logout} />,
+    plan: showPlans ? <PlanPanel /> : null,
     people: isAdmin ? <PeoplePanel /> : null,
     preferences: <PreferencesPanel />,
     connections: <ConnectionsPanel system={system} onRan={loadSystem} />,

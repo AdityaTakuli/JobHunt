@@ -12,6 +12,7 @@ import { LlmError } from '../lib/llm.js';
 import { askJson, profileAvailable } from '../lib/profileBuild.js';
 import { getRow } from '../lib/profileStore.js';
 import { loadAtsData } from '../lib/atsKeywords.js';
+import { quotaFor, recordUse, weeklyBlock } from '../lib/quota.js';
 import { contactOf, GENERAL_KEY, renderPdf, tailor, TAILOR_VERSION } from '../lib/tailor.js';
 import { istDateString, startOfIstDay } from '../lib/time.js';
 
@@ -99,8 +100,10 @@ tailorRouter.get('/', async (req, res) => {
     if (job) [row] = await query('SELECT * FROM tailored_docs WHERE user_id = ? AND job_id = ? ORDER BY id DESC LIMIT 1', [uid, job.id]);
     else if (key) [row] = await query('SELECT * FROM tailored_docs WHERE user_id = ? AND page_key = ? ORDER BY id DESC LIMIT 1', [uid, key]);
   }
-  const used = await usedToday(uid);
-  res.json({ tailored: serialize(row), available: profileAvailable(), today: used, limit: config.profile.dailyTailors });
+  // Free accounts see this week's free CVs; Pro, admins and everyone before payments see today's.
+  const weekly = (await quotaFor(req.user)).features.tailor;
+  const count = weekly.limit != null ? { today: weekly.used, limit: weekly.limit, period: 'week' } : { today: await usedToday(uid), limit: config.profile.dailyTailors, period: 'day' };
+  res.json({ tailored: serialize(row), available: profileAvailable(), ...count });
 });
 
 // Body: { jobId } or { url, posting: { jsonld, text, title, company } }, and refresh: true for a new one.
@@ -124,6 +127,8 @@ tailorRouter.post('/', async (req, res) => {
   if ((await usedToday(uid)) >= config.profile.dailyTailors) {
     return res.status(429).json({ error: `You have made today's ${config.profile.dailyTailors} tailored CVs. More tomorrow.` });
   }
+  const blocked = await weeklyBlock(req.user, 'tailor');
+  if (blocked) return res.status(429).json({ error: blocked.message, upgrade: true });
 
   const flightKey = `${uid}:${job ? `j${job.id}` : key}`;
   if (!inFlight.has(flightKey)) {
@@ -158,6 +163,7 @@ tailorRouter.post('/', async (req, res) => {
         created_at: new Date(),
       };
       const saved = await query('INSERT INTO tailored_docs SET ?', [row]);
+      await recordUse(uid, 'tailor');
       return { ...row, id: saved.insertId };
     })().finally(() => inFlight.delete(flightKey));
     inFlight.set(flightKey, run);

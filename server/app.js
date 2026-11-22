@@ -23,7 +23,8 @@ const WEB_DIST = path.join(ROOT_DIR, 'web', 'dist');
 
 // Content-Security-Policy: the page runs only its own scripts (plus the small inline theme script
 // in index.html, allowed by its hash), talks only to this server, and can't be framed. A job
-// title or email text that somehow carried a script would not run.
+// title or email text that somehow carried a script would not run. Razorpay Checkout is the one
+// outside script, for payments.
 function contentSecurityPolicy() {
   const hashes = [];
   try {
@@ -36,13 +37,15 @@ function contentSecurityPolicy() {
   }
   return [
     "default-src 'self'",
-    `script-src 'self' ${hashes.join(' ')}`.trim(),
+    // Razorpay Checkout (Settings > Plan) loads its script and opens its payment window in a frame.
+    `script-src 'self' ${hashes.join(' ')} https://checkout.razorpay.com`.replace(/\s+/g, ' '),
     // React and the animation library set style attributes.
     "style-src 'self' 'unsafe-inline'",
     // Company icons and Google profile pictures come from other sites.
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' https://*.razorpay.com",
+    'frame-src https://api.razorpay.com https://checkout.razorpay.com',
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -62,8 +65,9 @@ export function createApp() {
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Content-Security-Policy', csp);
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+    // Bank and UPI pages that Razorpay opens in a popup need to report back to this window.
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self "https://api.razorpay.com" "https://checkout.razorpay.com")');
     // Browsers that have seen the site once use HTTPS only (production is HTTPS behind a proxy).
     if (config.isProduction) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     next();

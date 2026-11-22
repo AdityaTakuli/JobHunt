@@ -9,6 +9,8 @@ import { query } from './db/pool.js';
 import { authUrl, exchangeCode, GMAIL_SCOPE, googleConfigured, revoke } from './lib/google.js';
 import { seal } from './lib/secretBox.js';
 import { burnTime, verifyPassword } from './lib/password.js';
+import { freeLimitsOn } from './lib/quota.js';
+import { isEnabled as paymentsOn } from './lib/razorpay.js';
 import { findUser, findUserByEmail, OWNER_ID, sessionUser, signInWithGoogle } from './lib/users.js';
 import { readGmail } from './tasks/readGmail.js';
 
@@ -186,7 +188,8 @@ export async function me(req, res, next) {
       google: googleConfigured(),
       passwordLogin: Boolean(config.auth.password || config.auth.demoEmail),
       ownerPassword: Boolean(config.auth.password),
-      user: found ? accountView(found.row) : null,
+      // plans: whether Settings shows the Plan tab (Pro on sale, or weekly free limits running).
+      user: found ? { ...accountView(found.row), plans: paymentsOn(config.razorpay) || freeLimitsOn() } : null,
     });
   } catch (err) {
     next(err);

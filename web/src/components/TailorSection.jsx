@@ -44,7 +44,7 @@ export default function TailorSection({ jobId }) {
     let alive = true;
     setState({ loading: true });
     api(`/tailor?jobId=${jobId}`)
-      .then((d) => alive && setState({ tailored: d.tailored, available: d.available, today: d.today, limit: d.limit }))
+      .then((d) => alive && setState({ tailored: d.tailored, available: d.available, today: d.today, limit: d.limit, period: d.period }))
       .catch(() => alive && setState({ available: false }));
     return () => {
       alive = false;
@@ -147,7 +147,7 @@ export default function TailorSection({ jobId }) {
           )}
           <footer className="ai-foot">
             <span className="small muted">
-              Made {formatDateTime(t.created_at)} from your CV. ARCH in Chrome attaches this CV when you apply. {state.limit ? `${state.today ?? 0}/${state.limit} today.` : ''}
+              Made {formatDateTime(t.created_at)} from your CV. ARCH in Chrome attaches this CV when you apply. {state.limit ? `${state.today ?? 0}/${state.limit} ${state.period === 'week' ? 'free this week' : 'today'}.` : ''}
             </span>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => make(true)}>
               <IconRefresh size={15} /> Make again

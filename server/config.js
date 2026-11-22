@@ -234,6 +234,18 @@ export const config = {
     timeoutMs: 15_000,
   },
 
+  // Weekly free use of the paid features (lib/quota.js). Admins and people on a paid plan have no
+  // weekly limit, only the daily caps above. FREE_LIMITS=auto (the default) turns the limits on
+  // together with payments; on / off force them.
+  freeLimits: {
+    mode: ['on', 'off'].includes(env.FREE_LIMITS) ? env.FREE_LIMITS : 'auto',
+    weekly: {
+      tailor: num(env.FREE_WEEKLY_TAILORS, 2),
+      analysis: num(env.FREE_WEEKLY_ANALYSES, 5),
+      fill: num(env.FREE_WEEKLY_FILLS, 10),
+      profile: num(env.FREE_WEEKLY_PROFILE_READS, 3),
+    },
+  },
   smtp: {
     host: env.SMTP_HOST || 'smtp.hostinger.com',
     port: num(env.SMTP_PORT, 465),

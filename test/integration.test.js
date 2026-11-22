@@ -23,6 +23,10 @@ Object.assign(process.env, {
   GROQ_API_KEY: '',
   GEMINI_API_KEY: '',
   SMTP_USER: '',
+  DEMO_EMAIL: '',
+  DEMO_PASSWORD: '',
+  RAZORPAY_ENABLED: 'false',
+  FREE_LIMITS: 'auto',
 });
 
 const { config } = await import('../server/config.js');
@@ -186,6 +190,41 @@ describe('integration', { skip: !dbReady }, () => {
       assert.equal(JSON.stringify(me).includes('scrypt'), false);
     } finally {
       await query('DELETE FROM users WHERE id = ?', [res.insertId]);
+    }
+  });
+
+  it('counts weekly free uses and lifts them for Pro', async () => {
+    const { quotaFor, weeklyBlock, recordUse } = await import('../server/lib/quota.js');
+    const res = await query('INSERT INTO users SET ?', [{ email: 'free-user@example.com', name: 'Free', created_at: NOW }]);
+    const user = { id: res.insertId, isAdmin: false };
+    const mode = config.freeLimits.mode;
+    try {
+      config.freeLimits.mode = 'off';
+      assert.equal(await weeklyBlock(user, 'tailor'), null, 'no limits before payments');
+      config.freeLimits.mode = 'on';
+      await query('INSERT INTO feature_uses (user_id, feature, created_at) VALUES (?, ?, ?)', [user.id, 'tailor', new Date(NOW.getTime() - 9 * 86_400_000)]);
+      await recordUse(user.id, 'tailor');
+      assert.equal(await weeklyBlock(user, 'tailor'), null, "last week's use is not counted");
+      await recordUse(user.id, 'tailor');
+      const blocked = await weeklyBlock(user, 'tailor');
+      assert.equal(blocked.limit, config.freeLimits.weekly.tailor);
+      assert.match(blocked.message, /Settings > Plan/);
+      assert.equal(await weeklyBlock(user, 'analysis'), null);
+      assert.equal(await weeklyBlock({ ...user, isAdmin: true }, 'tailor'), null, 'admins have no weekly limit');
+
+      const token = createSessionToken(user.id);
+      const tailor = await (await fetch(`${base}/api/tailor`, { headers: { cookie: `aj_session=${token}` } })).json();
+      assert.deepEqual([tailor.today, tailor.limit, tailor.period], [2, config.freeLimits.weekly.tailor, 'week']);
+
+      await query('UPDATE users SET plan = ?, plan_expires_at = ? WHERE id = ?', ['pro_month', new Date(NOW.getTime() + 86_400_000), user.id]);
+      const pro = await quotaFor(user);
+      assert.equal(pro.limited, false);
+      assert.equal(pro.features.tailor.limit, null);
+      assert.equal(await weeklyBlock(user, 'tailor'), null, 'Pro has no weekly limit');
+    } finally {
+      config.freeLimits.mode = mode;
+      await query('DELETE FROM feature_uses WHERE user_id = ?', [user.id]);
+      await query('DELETE FROM users WHERE id = ?', [user.id]);
     }
   });
 

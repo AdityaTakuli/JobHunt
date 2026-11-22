@@ -5128,3 +5128,46 @@ dialog.dialog:has(.details-form) {
   flex: none;
   margin: 2px;
 }
+
+/* Settings > Plan */
+.plan-count {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.plan-reset {
+  margin-top: 12px;
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+
+.plan-card .btn {
+  margin-top: 10px;
+}
+
+.plan-price {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-label {
+  font-weight: 600;
+}

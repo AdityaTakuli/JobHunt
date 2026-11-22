@@ -223,7 +223,7 @@ export default function ProfilePanel() {
       )}
       <p className="small muted" style={{ marginTop: 0 }}>
         Any field of study (architecture, interiors, civil, mechanical…): upload your CV, your portfolio, or both. Only a portfolio is fine too: ArchJobs writes a CV from it. The AI reads them once into a profile (software, skills, projects, what your portfolio shows), and every job then gets a fit score against it:
-        the ranking a hiring system does, shown openly. Your files stay private to you. {state.builds_today}/{state.limits.buildsPerDay} reads used today.
+        the ranking a hiring system does, shown openly. Your files stay private to you. {state.builds_today}/{state.limits.buildsPerDay} reads used {state.reads_period === 'week' ? 'this week' : 'today'}.
       </p>
 
       {building && (
@@ -278,7 +278,7 @@ export default function ProfilePanel() {
           <MyCvCard hasResume={Boolean(state.resume)} ready={state.status === 'ready' || Boolean(profile)} />
 
           <DocumentsCard refreshKey={`${state.resume?.uploaded_at || ''}${state.portfolio?.uploaded_at || ''}`} />
-          <ExtensionCard fillsToday={state.fills_today} fillsPerDay={state.fills_per_day} />
+          <ExtensionCard fillsToday={state.fills_today} fillsPerDay={state.fills_per_day} weekly={state.fills_period === 'week'} />
         </div>
 
         <div className="profile-col">

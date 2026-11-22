@@ -1,6 +1,6 @@
 // Profile page: where to get ARCH in Chrome and what it does.
 
-export function ExtensionCard({ fillsToday, fillsPerDay }) {
+export function ExtensionCard({ fillsToday, fillsPerDay, weekly = false }) {
   return (
     <section className="card profile-section extension-card">
       <div className="extension-head">
@@ -45,7 +45,7 @@ export function ExtensionCard({ fillsToday, fillsPerDay }) {
       </ol>
       {fillsPerDay ? (
         <p className="small muted" style={{ margin: 0 }}>
-          AI answers today: {fillsToday} of {fillsPerDay}. Fields filled straight from your details don't count.
+          {weekly ? 'Free AI answers this week' : 'AI answers today'}: {fillsToday} of {fillsPerDay}. Fields filled straight from your details don't count.
         </p>
       ) : null}
     </section>

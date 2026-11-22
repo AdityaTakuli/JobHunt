@@ -12,6 +12,7 @@ import { factsFor } from '../lib/fitCache.js';
 import { LlmError } from '../lib/llm.js';
 import { findOtp } from '../lib/otp.js';
 import { findUser } from '../lib/users.js';
+import { quotaFor, recordUse, weeklyBlock } from '../lib/quota.js';
 import { openPdf, PdfError } from '../lib/pdf.js';
 import { cleanDetails, DISCIPLINES, GENDERS, hasDetails, missingEssentials, prefillDetails } from '../lib/details.js';
 import { applyProfileEdits, PROFILE_VERSION } from '../lib/profile.js';
@@ -101,6 +102,7 @@ function startBuild(uid) {
         version: PROFILE_VERSION,
         built_at: new Date(),
       });
+      await recordUse(uid, 'profile');
     } catch (err) {
       const message = err instanceof LlmError || err instanceof PdfError ? err.message : 'The profile could not be built. Try again in a few minutes.';
       if (!(err instanceof LlmError) && !(err instanceof PdfError)) console.error(`Profile build for user ${uid} failed:`, err);
@@ -117,8 +119,19 @@ function startBuild(uid) {
 
 const acct = (req) => ({ name: req.user.name, email: req.user.email });
 
+// The profile, with this week's free reads and AI answers in place of today's on a free account.
+async function profileView(req) {
+  const view = serialize(await getRow(req.user.id), req.user.id, acct(req));
+  const { features } = await quotaFor(req.user);
+  view.reads_period = 'day';
+  view.fills_period = 'day';
+  if (features.profile.limit != null) Object.assign(view, { builds_today: features.profile.used, limits: { ...view.limits, buildsPerDay: features.profile.limit }, reads_period: 'week' });
+  if (features.fill.limit != null) Object.assign(view, { fills_today: features.fill.used, fills_per_day: features.fill.limit, fills_period: 'week' });
+  return view;
+}
+
 profileRouter.get('/', async (req, res) => {
-  res.json(serialize(await getRow(req.user.id), req.user.id, acct(req)));
+  res.json(await profileView(req));
 });
 
 // "Application details" (the popup form): what ARCH in Chrome fills forms with. Saved apart from
@@ -136,7 +149,7 @@ profileRouter.put('/details', async (req, res) => {
   }
   const sent = req.body && typeof req.body === 'object' ? req.body : {};
   const rejected = Object.keys(details).filter((k) => typeof sent[k] === 'string' && sent[k].trim() && !details[k]);
-  res.json({ ...serialize(await getRow(uid), uid, acct(req)), rejected });
+  res.json({ ...await profileView(req), rejected });
 });
 
 // The PDF itself is the request body (Content-Type: application/pdf); the name comes in a header.
@@ -161,6 +174,8 @@ profileRouter.put('/:kind', express.raw({ type: ['application/pdf', 'application
   if ((await buildsToday(row)) >= config.profile.dailyBuilds) {
     return res.status(429).json({ error: `You have used today's ${config.profile.dailyBuilds} profile reads. More tomorrow.` });
   }
+  const blocked = await weeklyBlock(req.user, 'profile');
+  if (blocked) return res.status(429).json({ error: blocked.message, upgrade: true });
   // The browser sends the name URI-encoded (headers are ASCII); decode it, then keep it plain.
   let rawName = String(req.get('x-file-name') || `${kind}.pdf`);
   try {
@@ -179,7 +194,7 @@ profileRouter.put('/:kind', express.raw({ type: ['application/pdf', 'application
     ...(kind === 'portfolio' ? { pages: null } : {}),
   });
   startBuild(uid).catch(() => {});
-  res.status(202).json(serialize(await getRow(uid), uid, acct(req)));
+  res.status(202).json(await profileView(req));
 });
 
 // Read the stored files again (after the models were down, or to apply a newer reader).
@@ -190,8 +205,10 @@ profileRouter.post('/build', async (req, res) => {
   if (!profileAvailable()) return res.status(503).json({ error: 'Profile reading is not set up on this server (no AI gateway).' });
   if (building.has(uid)) return res.status(409).json({ error: 'Your profile is being built right now.' });
   if ((await buildsToday(row)) >= config.profile.dailyBuilds) return res.status(429).json({ error: `You have used today's ${config.profile.dailyBuilds} profile reads. More tomorrow.` });
+  const blocked = await weeklyBlock(req.user, 'profile');
+  if (blocked) return res.status(429).json({ error: blocked.message, upgrade: true });
   startBuild(uid).catch(() => {});
-  res.status(202).json(serialize(await getRow(uid), uid, acct(req)));
+  res.status(202).json(await profileView(req));
 });
 
 profileRouter.delete('/:kind', async (req, res) => {
@@ -211,8 +228,10 @@ profileRouter.delete('/:kind', async (req, res) => {
     ...(other ? {} : { status: 'empty', profile: null, pages: null, warnings: null, error: null, built_at: null }),
   });
   // What is left is read again so the profile matches the files.
-  if (other && profileAvailable() && (await buildsToday(await getRow(uid))) < config.profile.dailyBuilds) startBuild(uid).catch(() => {});
-  res.json(serialize(await getRow(uid), uid, acct(req)));
+  if (other && profileAvailable() && (await buildsToday(await getRow(uid))) < config.profile.dailyBuilds && !(await weeklyBlock(req.user, 'profile'))) {
+    startBuild(uid).catch(() => {});
+  }
+  res.json(await profileView(req));
 });
 
 // Corrections to the extracted profile (software, skills, cities, stage...).
@@ -222,7 +241,7 @@ profileRouter.patch('/', async (req, res) => {
   if (row?.status !== 'ready') return res.status(400).json({ error: 'No profile to edit yet.' });
   const profile = applyProfileEdits(parseJson(row.profile, {}), req.body || {});
   await upsertRow(uid, { profile: JSON.stringify(profile) });
-  res.json(serialize(await getRow(uid), uid, acct(req)));
+  res.json(await profileView(req));
 });
 
 // ---- ARCH in Chrome (extension/) ----
@@ -265,9 +284,15 @@ profileRouter.get('/extension', async (req, res) => {
     resume: Boolean(row?.resume_uploaded_at),
     portfolio: Boolean(row?.portfolio_uploaded_at),
     ai: profileAvailable(),
-    fills: { today: fillsToday(row), limit: config.profile.dailyFills },
+    fills: await fillCount(req.user, row),
   });
 });
+
+// AI answers used and allowed: this week's free ones on a free account, else today's.
+async function fillCount(user, row) {
+  const weekly = (await quotaFor(user)).features.fill;
+  return weekly.limit != null ? { today: weekly.used, limit: weekly.limit, period: 'week' } : { today: fillsToday(row), limit: config.profile.dailyFills, period: 'day' };
+}
 
 // The stored PDF, so the extension can drop it into a form's upload box.
 profileRouter.get('/file/:kind', async (req, res) => {
@@ -302,7 +327,8 @@ profileRouter.post('/fill', async (req, res) => {
   const page = { url: str(req.body?.page?.url, 500), title: str(req.body?.page?.title, 200), text: str(req.body?.page?.text, 4_000) };
   const wantAi = req.body?.ai !== false && profileAvailable();
   const used = fillsToday(row);
-  const aiAllowed = wantAi && used < config.profile.dailyFills;
+  const weekly = wantAi ? await weeklyBlock(req.user, 'fill') : null;
+  const aiAllowed = wantAi && used < config.profile.dailyFills && !weekly;
   const today = istDateString();
   let aiUsed = false;
   // A CV tailored to this posting (ARCH's "Tailor" button) is attached instead of the stored one.
@@ -336,10 +362,14 @@ profileRouter.post('/fill', async (req, res) => {
       });
     },
   });
-  if (aiUsed) await upsertRow(uid, { fills_on: today, fills_count: used + 1 });
+  if (aiUsed) {
+    await upsertRow(uid, { fills_on: today, fills_count: used + 1 });
+    await recordUse(uid, 'fill');
+  }
+  const count = await fillCount(req.user, await getRow(uid));
   res.json({
     ...result,
-    ai: { ...result.ai, used: aiUsed, limited: wantAi && !aiAllowed, today: used + (aiUsed ? 1 : 0), limit: config.profile.dailyFills },
+    ai: { ...result.ai, used: aiUsed, limited: wantAi && !aiAllowed, ...count, ...(weekly ? { note: weekly.message } : {}) },
     files: { resume: Boolean(row?.resume_uploaded_at) || Boolean(general), portfolio: Boolean(row?.portfolio_uploaded_at) },
     tailoredId: tailored?.id || null,
   });

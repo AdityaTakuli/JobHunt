@@ -8,6 +8,7 @@ import { COMPANIES } from '../lib/companies.js';
 import { findPosting, jobUrlPatterns, MIN_POSTING, MIN_USEFUL, postingFromJsonLd } from '../lib/jobPage.js';
 import { LlmError } from '../lib/llm.js';
 import { hostOf } from '../lib/normalize.js';
+import { recordUse, weeklyBlock } from '../lib/quota.js';
 import { getUserSettings } from '../lib/settings.js';
 import { istDateString, startOfIstDay } from '../lib/time.js';
 
@@ -134,6 +135,8 @@ analysisRouter.post('/:id/analysis', async (req, res) => {
   if ((await usedToday(req.user.id)) >= config.analysis.dailyPerPerson) {
     return res.status(429).json({ error: `You have used today's ${config.analysis.dailyPerPerson} AI analyses. More tomorrow.` });
   }
+  const blocked = await weeklyBlock(req.user, 'analysis');
+  if (blocked) return res.status(429).json({ error: blocked.message, upgrade: true });
 
   if (!inFlight.has(id)) {
     const run = (async () => {
@@ -159,6 +162,7 @@ analysisRouter.post('/:id/analysis', async (req, res) => {
         created_at: new Date(),
       };
       await query('INSERT INTO job_analyses SET ? ON DUPLICATE KEY UPDATE ?', [row, row]);
+      await recordUse(req.user.id, 'analysis');
       // The analysis says which requirements are must-haves: the job's fit score is worked out again.
       forgetJob(id);
       return row;

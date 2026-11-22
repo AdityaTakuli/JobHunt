@@ -19,7 +19,7 @@ function show(s) {
       `<div class="line"><span>Profile read from your CV / portfolio</span>${s.ready ? yes : no}</div>` +
       `<div class="line"><span>CV to attach</span>${s.resume ? yes : s.general_cv ? '<span class="ok">My CV</span>' : no}</div>` +
       `<div class="line"><span>Portfolio uploaded</span>${s.portfolio ? yes : no}</div>` +
-      `<div class="line"><span>AI answers today</span><span>${s.fills?.today ?? 0} / ${s.fills?.limit ?? '–'}${s.ai ? '' : ' (off)'}</span></div>` +
+      `<div class="line"><span>${s.fills?.period === 'week' ? 'Free AI answers this week' : 'AI answers today'}</span><span>${s.fills?.today ?? 0} / ${s.fills?.limit ?? '–'}${s.ai ? '' : ' (off)'}</span></div>` +
       (s.status === 'building' ? '<p class="muted" style="margin-top:6px">Your profile is being read right now.</p>' : '') +
       (s.details_missing?.length ? `<p class="muted" style="margin-top:6px">Still needed in your details: ${esc(s.details_missing.join(', ').replace(/_/g, ' '))}.</p>` : '') +
       (!s.ready && s.status !== 'building' ? '<p class="muted" style="margin-top:6px">Fill in your application details (or upload your CV) in ArchJobs so there is something to fill from.</p>' : '');

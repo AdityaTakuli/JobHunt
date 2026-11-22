@@ -14,7 +14,7 @@ export default function MyCvCard({ hasResume, ready }) {
   useEffect(() => {
     let alive = true;
     api('/tailor?general=1')
-      .then((d) => alive && setState({ cv: d.tailored, available: d.available, today: d.today, limit: d.limit }))
+      .then((d) => alive && setState({ cv: d.tailored, available: d.available, today: d.today, limit: d.limit, period: d.period }))
       .catch(() => alive && setState({ available: false }));
     return () => {
       alive = false;
@@ -90,7 +90,7 @@ export default function MyCvCard({ hasResume, ready }) {
             </details>
           )}
           <p className="small muted">
-            Made {formatDateTime(cv.created_at)}. {state.limit ? `${state.today ?? 0}/${state.limit} CVs made today.` : ''} Tailored versions for each job are on the job's page.
+            Made {formatDateTime(cv.created_at)}. {state.limit ? `${state.today ?? 0}/${state.limit} CVs made ${state.period === 'week' ? 'this week (free)' : 'today'}.` : ''} Tailored versions for each job are on the job's page.
           </p>
         </>
       )}

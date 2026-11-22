@@ -343,3 +343,13 @@ CREATE TABLE IF NOT EXISTS payments (
   UNIQUE KEY uq_payments_order (order_id),
   KEY idx_payments_user (user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One row per use of a paid feature (tailor, analysis, fill, profile), for the weekly free limits
+-- (lib/quota.js). Removed with the account.
+CREATE TABLE IF NOT EXISTS feature_uses (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  feature VARCHAR(16) NOT NULL,
+  created_at DATETIME NOT NULL,
+  KEY idx_feature_uses_user (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

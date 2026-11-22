@@ -12,6 +12,7 @@ import {
   verifyPaymentSignature,
   verifyWebhookSignature,
 } from '../lib/razorpay.js';
+import { quotaFor } from '../lib/quota.js';
 import { startOfIstDay } from '../lib/time.js';
 
 // Payments with Razorpay Checkout: POST /order makes an order, the page opens Checkout with it,
@@ -36,6 +37,7 @@ billingRouter.get('/', async (req, res, next) => {
       keyId: enabled ? rz().keyId : null,
       plans: enabled ? rz().plans.map(({ id, label, amount, currency, days }) => ({ id, label, amount, currency, days })) : [],
       ...(await userPlan(req.user.id)),
+      quota: await quotaFor(req.user),
     });
   } catch (err) {
     next(err);

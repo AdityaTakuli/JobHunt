@@ -1154,7 +1154,7 @@
         noteBlock() +
         tailorBlock(state) +
         `<p class="sum"><span class="pill b">${done.length} from your CV</span><span class="pill a">${aiDone.length} written by AI</span><span class="pill r">${need.length} need you</span></p>` +
-        (ai?.limited ? `<p class="sum muted">Today's ${ai.limit} AI fills are used, so open questions were left for you.</p>` : '') +
+        (ai?.limited ? `<p class="sum muted">${ai.period === 'week' ? `This week's ${ai.limit} free AI fills are used (go Pro in ArchJobs Settings > Plan for more)` : `Today's ${ai.limit} AI fills are used`}, so open questions were left for you.</p>` : '') +
         (ai?.error ? '<p class="sum muted">The AI could not answer the open questions just now. Fill again in a minute.</p>' : '') +
         (need.length ? `<h4>Needs you</h4>${rows(need, 'need')}` : '') +
         (aiDone.length ? `<h4>Written by the AI · read these</h4>${rows(aiDone, 'ai')}` : '') +
