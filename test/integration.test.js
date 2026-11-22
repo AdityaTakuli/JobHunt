@@ -714,6 +714,13 @@ describe('integration', { skip: !dbReady }, () => {
       assert.match(html, /<title>Privacy policy · ArchJobs<\/title>/);
       assert.match(html, /Limited Use\s+requirements/, 'the statement Google asks of apps that read Gmail');
     }
+    // The pages Razorpay checks before it allows payments on the site.
+    for (const [path, title] of [['/terms', 'Terms of service'], ['/refunds', 'Cancellation and refund policy'], ['/contact', 'Contact us']]) {
+      const res = await fetch(`${base}${path}`);
+      assert.equal(res.status, 200, path);
+      assert.match(await res.text(), new RegExp(`<title>${title} · ArchJobs</title>`));
+      assert.equal((await fetch(`${base}${path}.html`, { redirect: 'manual' })).headers.get('location'), path);
+    }
   });
 
   it('signs in with Google, then reads LinkedIn alerts from Gmail', async () => {

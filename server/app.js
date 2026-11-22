@@ -20,6 +20,8 @@ import { settingsRouter } from './routes/settings.js';
 import { runTask, TASKS } from './tasks/index.js';
 
 const WEB_DIST = path.join(ROOT_DIR, 'web', 'dist');
+// Plain pages in web/public, open to anyone: /privacy, /terms, /refunds, /contact.
+const POLICY_PAGES = ['privacy', 'terms', 'refunds', 'contact'];
 
 // Content-Security-Policy: the page runs only its own scripts (plus the small inline theme script
 // in index.html, allowed by its hash), talks only to this server, and can't be framed. A job
@@ -131,7 +133,7 @@ export function createApp() {
     });
     // One address per page for search engines: the .html copies redirect to the clean URLs.
     app.get('/index.html', (req, res) => res.redirect(301, '/'));
-    app.get('/privacy.html', (req, res) => res.redirect(301, '/privacy'));
+    for (const page of POLICY_PAGES) app.get(`/${page}.html`, (req, res) => res.redirect(301, `/${page}`));
     // Built files carry a content hash in their name, so they never change: cache them for a year.
     // Everything else (icons, robots.txt) for an hour; index.html is never cached (below).
     app.use(
@@ -146,8 +148,8 @@ export function createApp() {
     // A built file that isn't here is from an older deploy: a plain 404 (not the app's HTML), so
     // the old tab's loader fails cleanly and reloads to the new build (web/src/staleBuild.js).
     app.get('/assets/{*splat}', (req, res) => res.status(404).type('text').send('Not found.'));
-    // Public, for Google's consent screen and anyone not signed in.
-    app.get('/privacy', (req, res) => res.sendFile(path.join(WEB_DIST, 'privacy.html')));
+    // Public, for Google's consent screen, Razorpay's website check and anyone not signed in.
+    for (const page of POLICY_PAGES) app.get(`/${page}`, (req, res) => res.sendFile(path.join(WEB_DIST, `${page}.html`)));
     // The app routes with #hashes, so `/` is its only real page. Any other path still shows the app
     // (an old link keeps working) but answers 404 so search engines don't index endless copies.
     app.get('/{*splat}', (req, res) => {

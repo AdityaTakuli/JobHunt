@@ -318,7 +318,10 @@ export default function HomePage({ google = false, theme = 'system', onCycleThem
             <Wordmark /> — built by Velocity Technologies, Dehradun.
           </p>
           <nav aria-label="Footer">
+            <a href="/terms">Terms</a>
             <a href="/privacy">Privacy policy</a>
+            <a href="/refunds">Refunds</a>
+            <a href="/contact">Contact</a>
             <a href="mailto:adityatakuli51@gmail.com">adityatakuli51@gmail.com</a>
           </nav>
         </div>
