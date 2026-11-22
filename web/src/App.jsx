@@ -138,7 +138,7 @@ function AccountButton({ me }) {
 
 function Shell() {
   const [auth, setAuth] = useState('checking'); // checking | in | out
-  const [login, setLogin] = useState({ google: false, passwordLogin: true });
+  const [login, setLogin] = useState({ google: false, passwordLogin: true, ownerPassword: true });
   const [me, setMe] = useState(null);
   const [meta, setMeta] = useState(null);
   const [welcome, setWelcome] = useState(false);
@@ -153,7 +153,7 @@ function Shell() {
     setUnauthorizedHandler(() => setAuth('out'));
     api('/me')
       .then((res) => {
-        setLogin({ google: res.google, passwordLogin: res.passwordLogin });
+        setLogin({ google: res.google, passwordLogin: res.passwordLogin, ownerPassword: res.ownerPassword ?? res.passwordLogin });
         setMe(res.user);
         setAuth(res.authenticated ? 'in' : 'out');
         if (res.authenticated && !welcomedToday()) setWelcome(true);
@@ -211,6 +211,7 @@ function Shell() {
             <LoginPage
               google={login.google}
               passwordLogin={login.passwordLogin}
+              ownerPassword={login.ownerPassword}
               onLogin={() => {
                 window.location.hash = '#/jobs';
                 setAuth('in');

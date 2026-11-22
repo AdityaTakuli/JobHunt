@@ -8,6 +8,7 @@ import { COMPANIES } from '../lib/companies.js';
 import { parseExperience } from '../lib/rules.js';
 import { namesFromLink } from '../sources/jobEmail.js';
 import { isDesignRole } from '../sources/companyFeeds.js';
+import { hashPassword, verifyPassword } from '../lib/password.js';
 import { closePool, parseJson, query } from './pool.js';
 
 const schemaPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql');
@@ -37,6 +38,9 @@ const ADDED_COLUMNS = [
   ['profiles', 'fills_on', 'DATE NULL AFTER resume_text'],
   ['profiles', 'fills_count', 'SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER fills_on'],
   ['profiles', 'details', 'JSON NULL AFTER fills_count'],
+  ['users', 'password_hash', 'VARCHAR(200) NULL AFTER gmail_error'],
+  ['users', 'plan', 'VARCHAR(32) NULL AFTER password_hash'],
+  ['users', 'plan_expires_at', 'DATETIME NULL AFTER plan'],
 ];
 
 async function hasIndex(table, name) {
@@ -87,6 +91,18 @@ async function ensureOwner() {
     if (taken) console.warn(`OWNER_EMAIL ${email} already belongs to another account; the owner account keeps its email.`);
     else await query('UPDATE users SET email = ?, is_admin = 1 WHERE id = 1', [email]);
   }
+}
+
+// The demo account (DEMO_EMAIL + DEMO_PASSWORD) signs in with its password. An existing account with
+// that email (a Google sign-in) gets the password, and a changed DEMO_PASSWORD replaces the old one.
+async function ensureDemoAccount(now = new Date()) {
+  const { demoEmail: email, demoPassword: password } = config.auth;
+  if (!email || !password) return;
+  const [row] = await query('SELECT id, password_hash FROM users WHERE email = ?', [email]);
+  if (row && (await verifyPassword(password, row.password_hash))) return;
+  const hash = await hashPassword(password);
+  if (row) await query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, row.id]);
+  else await query('INSERT INTO users SET ?', [{ email, name: 'Demo', password_hash: hash, created_at: now }]);
 }
 
 // "Apply by" dates for jobs stored before deadlines were read.
@@ -232,6 +248,7 @@ export async function migrate() {
   await addMissingColumns();
   await addMissingIndexes();
   await ensureOwner();
+  await ensureDemoAccount();
   await backfillExperience();
   await backfillApplyOptions();
   await backfillDeadlines();

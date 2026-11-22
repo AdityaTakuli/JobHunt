@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
+import { parsePlans } from './lib/razorpay.js';
 
 export const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -44,6 +45,10 @@ export const config = {
     // Who may sign in with Google besides the owner and admins: a list of emails, or * for anyone.
     // Admins can also add people in Settings > People.
     allowedEmails: emailList(env.ALLOWED_EMAILS),
+    // A demo account that signs in with email + password on the sign-in page. Created (or given
+    // this password, if the email already has an account) on every start.
+    demoEmail: emailList(env.DEMO_EMAIL)[0] || '',
+    demoPassword: env.DEMO_PASSWORD || '',
     // Encrypts stored Gmail tokens. Falls back to SESSION_SECRET.
     tokenSecret: env.TOKEN_SECRET || '',
   },
@@ -215,6 +220,19 @@ export const config = {
     },
   },
 
+
+  // Razorpay payments (routes/billing.js). Off unless RAZORPAY_ENABLED=true, both keys are set and
+  // RAZORPAY_PLANS has at least one plan.
+  razorpay: {
+    enabled: env.RAZORPAY_ENABLED === 'true',
+    keyId: env.RAZORPAY_KEY_ID || '',
+    keySecret: env.RAZORPAY_KEY_SECRET || '',
+    webhookSecret: env.RAZORPAY_WEBHOOK_SECRET || '',
+    plans: parsePlans(env.RAZORPAY_PLANS),
+    // Orders one person may start per IST day.
+    dailyOrders: num(env.RAZORPAY_DAILY_ORDERS, 10),
+    timeoutMs: 15_000,
+  },
 
   smtp: {
     host: env.SMTP_HOST || 'smtp.hostinger.com',

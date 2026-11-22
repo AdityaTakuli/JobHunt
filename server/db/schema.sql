@@ -145,6 +145,9 @@ CREATE TABLE IF NOT EXISTS users (
   gmail_apps_synced_at DATETIME NULL,        -- last read of her application emails
   gmail_jobs_synced_at DATETIME NULL,        -- last full read of job emails from other sites
   gmail_error VARCHAR(300) NULL,
+  password_hash VARCHAR(200) NULL,           -- email + password sign-in (lib/password.js), NULL = none
+  plan VARCHAR(32) NULL,                     -- paid plan id from RAZORPAY_PLANS, NULL = free
+  plan_expires_at DATETIME NULL,             -- the plan is active until then
   created_at DATETIME NOT NULL,
   last_login_at DATETIME NULL,
   UNIQUE KEY uq_users_email (email),
@@ -320,4 +323,23 @@ CREATE TABLE IF NOT EXISTS cv_examples (
   source VARCHAR(16) NOT NULL DEFAULT 'seed',
   updated_at DATETIME NOT NULL,
   UNIQUE KEY uq_cv_example (ex_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Razorpay orders (routes/billing.js). Each paid order adds its plan's days to users.plan_expires_at.
+-- Kept when an account is removed, as the record of money received.
+CREATE TABLE IF NOT EXISTS payments (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  plan VARCHAR(32) NOT NULL,
+  days SMALLINT UNSIGNED NOT NULL,
+  amount INT UNSIGNED NOT NULL,              -- in paise
+  currency CHAR(3) NOT NULL DEFAULT 'INR',
+  order_id VARCHAR(40) NOT NULL,             -- Razorpay order_...
+  payment_id VARCHAR(40) NULL,               -- Razorpay pay_...
+  status VARCHAR(12) NOT NULL DEFAULT 'created', -- created / paid / failed
+  mode VARCHAR(4) NOT NULL,                  -- test / live, from the key used
+  created_at DATETIME NOT NULL,
+  paid_at DATETIME NULL,
+  UNIQUE KEY uq_payments_order (order_id),
+  KEY idx_payments_user (user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

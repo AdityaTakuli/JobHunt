@@ -1,5 +1,6 @@
-// Sign-in. Two ways in, both ending in an HMAC-signed, HttpOnly session cookie naming the account:
+// Sign-in. Three ways in, all ending in an HMAC-signed, HttpOnly session cookie naming the account:
 //   - the owner's password (APP_PASSWORD) opens the owner account (user 1);
+//   - an email + password, for accounts that have one (the demo account, DEMO_EMAIL);
 //   - "Continue with Google" opens the account for that Google email (lib/users.js decides who
 //     may join). Connecting Gmail is a second Google step from Settings, with its own consent.
 import crypto from 'node:crypto';
@@ -7,7 +8,8 @@ import { config } from './config.js';
 import { query } from './db/pool.js';
 import { authUrl, exchangeCode, GMAIL_SCOPE, googleConfigured, revoke } from './lib/google.js';
 import { seal } from './lib/secretBox.js';
-import { findUser, OWNER_ID, sessionUser, signInWithGoogle } from './lib/users.js';
+import { burnTime, verifyPassword } from './lib/password.js';
+import { findUser, findUserByEmail, OWNER_ID, sessionUser, signInWithGoogle } from './lib/users.js';
 import { readGmail } from './tasks/readGmail.js';
 
 const COOKIE = 'aj_session';
@@ -16,7 +18,7 @@ const MAX_FAILS = 5;
 const LOCK_MS = 15 * 60_000;
 const failures = new Map(); // ip -> { count, until }
 
-const authEnabled = () => Boolean(config.auth.password) || googleConfigured();
+const authEnabled = () => Boolean(config.auth.password) || Boolean(config.auth.demoEmail) || googleConfigured();
 
 function secret() {
   // Without SESSION_SECRET, sessions are tied to the password: changing it logs everyone out.
@@ -111,26 +113,50 @@ export function requireAdmin(req, res, next) {
   return res.status(403).json({ error: 'Only the owner can do that.' });
 }
 
-export function login(req, res) {
+function noteFailure(ip, state) {
+  // Forget old entries now and then, so a flood of addresses can't grow this without end.
+  if (failures.size > 10_000) for (const [key, s] of failures) if (!(s.until > Date.now())) failures.delete(key);
+  const count = (state?.count || 0) + 1;
+  failures.set(ip, { count: count >= MAX_FAILS ? 0 : count, until: count >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
+}
+
+// POST /api/login { email, password }: an account's own password (the demo account, for one),
+// or { password } alone / login ID "owner" with APP_PASSWORD for the owner account.
+export async function login(req, res, next) {
   const ip = req.ip || 'unknown';
   const state = failures.get(ip);
   if (state?.until > Date.now()) {
     return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
   }
-  if (!config.auth.password) {
-    if (!authEnabled() && !config.isProduction) return res.json({ ok: true });
-    return res.status(400).json({ error: 'Password sign-in is off. Use Continue with Google.' });
+  const id = String(req.body?.email ?? '').trim().toLowerCase();
+  const password = String(req.body?.password ?? '');
+  try {
+    if (id && id !== 'owner') {
+      const row = id.length <= 254 ? await findUserByEmail(id) : null;
+      const ok = row?.password_hash ? await verifyPassword(password, row.password_hash) : (await burnTime(password), false);
+      if (!ok) {
+        noteFailure(ip, state);
+        return res.status(401).json({ error: 'Wrong login ID or password.' });
+      }
+      failures.delete(ip);
+      await query('UPDATE users SET last_login_at = ? WHERE id = ?', [new Date(), row.id]);
+      res.setHeader('Set-Cookie', sessionCookie(row.id));
+      return res.json({ ok: true });
+    }
+    if (!config.auth.password) {
+      if (!authEnabled() && !config.isProduction) return res.json({ ok: true });
+      return res.status(400).json({ error: 'Owner password sign-in is off. Use your email, or Continue with Google.' });
+    }
+    if (!safeEqual(password, config.auth.password)) {
+      noteFailure(ip, state);
+      return res.status(401).json({ error: 'Wrong password.' });
+    }
+    failures.delete(ip);
+    res.setHeader('Set-Cookie', sessionCookie(OWNER_ID));
+    return res.json({ ok: true });
+  } catch (err) {
+    return next(err);
   }
-  if (!safeEqual(req.body?.password ?? '', config.auth.password)) {
-    // Forget old entries now and then, so a flood of addresses can't grow this without end.
-    if (failures.size > 10_000) for (const [key, s] of failures) if (!(s.until > Date.now())) failures.delete(key);
-    const count = (state?.count || 0) + 1;
-    failures.set(ip, { count: count >= MAX_FAILS ? 0 : count, until: count >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
-    return res.status(401).json({ error: 'Wrong password.' });
-  }
-  failures.delete(ip);
-  res.setHeader('Set-Cookie', sessionCookie(OWNER_ID));
-  return res.json({ ok: true });
 }
 
 export function logout(req, res) {
@@ -158,7 +184,8 @@ export async function me(req, res, next) {
       authenticated: Boolean(found),
       authRequired: authEnabled() || config.isProduction,
       google: googleConfigured(),
-      passwordLogin: Boolean(config.auth.password),
+      passwordLogin: Boolean(config.auth.password || config.auth.demoEmail),
+      ownerPassword: Boolean(config.auth.password),
       user: found ? accountView(found.row) : null,
     });
   } catch (err) {

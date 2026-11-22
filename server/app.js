@@ -7,6 +7,7 @@ import { config, ROOT_DIR } from './config.js';
 import { zipDirectory } from './lib/zip.js';
 import { accountRouter } from './routes/account.js';
 import { analysisRouter } from './routes/analysis.js';
+import { billingRouter, razorpayWebhook } from './routes/billing.js';
 import { profileRouter } from './routes/profile.js';
 import { tailorRouter } from './routes/tailor.js';
 import { documentsRouter } from './routes/documents.js';
@@ -67,6 +68,8 @@ export function createApp() {
     if (config.isProduction) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     next();
   });
+  // Razorpay signs the raw body, so its webhook is read before the JSON parser (and before sign-in).
+  app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: '100kb' }), razorpayWebhook);
   app.use(express.json({ limit: '1mb' }));
   // API answers (job data, the extension zip) are never search results.
   app.use('/api', (req, res, next) => {
@@ -97,6 +100,7 @@ export function createApp() {
   app.use('/api/profile', profileRouter);
   app.use('/api/tailor', tailorRouter);
   app.use('/api/documents', documentsRouter);
+  app.use('/api/billing', billingRouter);
   // ARCH in Chrome, zipped from extension/ (unzip, then chrome://extensions → Load unpacked).
   app.get('/api/extension.zip', async (req, res, next) => {
     try {

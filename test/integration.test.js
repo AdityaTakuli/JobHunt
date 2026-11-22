@@ -168,6 +168,27 @@ describe('integration', { skip: !dbReady }, () => {
     assert.equal((await request('/api/me')).data.authenticated, true);
   });
 
+  it('signs in with login ID and password', async () => {
+    const { hashPassword } = await import('../server/lib/password.js');
+    const res = await query('INSERT INTO users SET ?', [
+      { email: 'demo-login@example.com', name: 'Demo', password_hash: await hashPassword('Demo-pass@1'), created_at: NOW },
+    ]);
+    try {
+      const wrong = await request('/api/login', { method: 'POST', body: { email: 'demo-login@example.com', password: 'nope' }, auth: false });
+      assert.equal(wrong.status, 401);
+      const unknown = await request('/api/login', { method: 'POST', body: { email: 'nobody@example.com', password: 'Demo-pass@1' }, auth: false });
+      assert.equal(unknown.status, 401);
+      const ok = await request('/api/login', { method: 'POST', body: { email: ' Demo-Login@example.com ', password: 'Demo-pass@1' }, auth: false });
+      assert.equal(ok.status, 200);
+      const demoCookie = ok.res.headers.get('set-cookie').split(';')[0];
+      const me = await (await fetch(`${base}/api/me`, { headers: { cookie: demoCookie } })).json();
+      assert.equal(me.user.id, res.insertId);
+      assert.equal(JSON.stringify(me).includes('scrypt'), false);
+    } finally {
+      await query('DELETE FROM users WHERE id = ?', [res.insertId]);
+    }
+  });
+
   it('serves the filtered job feed', async () => {
     const feed = await request('/api/jobs?city=Bengaluru');
     assert.equal(feed.status, 200);

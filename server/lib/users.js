@@ -32,6 +32,11 @@ export async function findUser(id) {
   return row || null;
 }
 
+export async function findUserByEmail(email) {
+  const [row] = await query('SELECT * FROM users WHERE email = ?', [lower(email)]);
+  return row || null;
+}
+
 // Who may sign in with Google: the owner, admins, people already signed up, ALLOWED_EMAILS
 // (or * for anyone) and the list admins keep in Settings > People.
 export async function mayJoin(email) {

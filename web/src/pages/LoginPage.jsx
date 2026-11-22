@@ -38,10 +38,11 @@ function GoogleMark() {
   );
 }
 
-export default function LoginPage({ onLogin, google = false, passwordLogin = true }) {
+export default function LoginPage({ onLogin, google = false, passwordLogin = true, ownerPassword = true }) {
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(readAuthError);
-  // With Google on, the owner's password form folds away behind a link.
+  // With Google on, the login ID + password form folds away behind a link.
   const [showPassword, setShowPassword] = useState(!google);
   const [busy, setBusy] = useState(false);
   const [quote] = useState(randomQuote);
@@ -85,7 +86,7 @@ export default function LoginPage({ onLogin, google = false, passwordLogin = tru
     setBusy(true);
     setError('');
     try {
-      await api('/login', { method: 'POST', body: { password } });
+      await api('/login', { method: 'POST', body: { email: loginId.trim(), password } });
       onLogin();
     } catch (err) {
       setError(err.message);
@@ -131,14 +132,31 @@ export default function LoginPage({ onLogin, google = false, passwordLogin = tru
             )}
             {passwordLogin && google && !showPassword && (
               <button type="button" className="text-btn login-reveal login-switch" onClick={() => setShowPassword(true)}>
-                Sign in with the owner password
+                Sign in with login ID and password
               </button>
             )}
             {passwordLogin && showPassword && (
               <>
                 {google && <div className="login-or">or</div>}
                 <label className="field login-reveal">
-                  <span>{google ? 'Owner password' : 'Password'}</span>
+                  <span>Login ID</span>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="email"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="you@example.com"
+                    value={loginId}
+                    onChange={(e) => setLoginId(e.target.value)}
+                    required={!ownerPassword}
+                    aria-describedby={ownerPassword ? 'login-id-note' : undefined}
+                    autoFocus
+                  />
+                </label>
+                <label className="field login-reveal">
+                  <span>Password</span>
                   <input
                     className="input"
                     type="password"
@@ -146,9 +164,13 @@ export default function LoginPage({ onLogin, google = false, passwordLogin = tru
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    autoFocus
                   />
                 </label>
+                {ownerPassword && (
+                  <p className="login-note login-reveal" id="login-id-note">
+                    Owner: leave Login ID empty and use the owner password.
+                  </p>
+                )}
                 <button className="btn btn-primary login-reveal" type="submit" disabled={busy || !password}>
                   {busy ? 'Signing in…' : 'Sign in'}
                 </button>
