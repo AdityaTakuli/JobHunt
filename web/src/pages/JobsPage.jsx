@@ -504,14 +504,18 @@ export default function JobsPage() {
         linkedinOnly={filters.linkedin}
         onLinkedin={() => setFilters((f) => ({ ...f, linkedin: !f.linkedin }))}
       />
-      <p className="search-hint">
-        {meta?.search?.configured === false
-          ? 'Google search is not set up on the server yet.'
-          : `Searches Google Jobs live${meta?.search ? ` · ${meta.search.leftToday} search${meta.search.leftToday === 1 ? '' : 'es'} left today` : ''}. The same search again within 6 hours is free.`}
-      </p>
+      {/* One line under the search: searches left on the left, Gmail on the right. */}
+      <div className="jobs-meta">
+        <p className="search-hint">
+          {meta?.search?.configured === false
+            ? 'Google search is not set up on the server yet.'
+            : `Searches Google Jobs live${meta?.search ? ` · ${meta.search.leftToday} search${meta.search.leftToday === 1 ? '' : 'es'} left today` : ''}. The same search again within 6 hours is free.`}
+        </p>
+        <GmailBar onSynced={reload} />
+      </div>
 
-      <GmailBar onSynced={reload} />
-
+      {/* Internships / jobs and where they came from, side by side. */}
+      <div className="switch-row">
       <div className="segmented role-switch" role="group" aria-label="Internships or jobs">
         {ROLE_SWITCH.map(([value, label]) => (
           <button key={value || 'all'} type="button" aria-pressed={filters.role === value} onClick={() => setFilters((f) => ({ ...f, role: value }))}>
@@ -526,6 +530,7 @@ export default function JobsPage() {
             {label}
           </button>
         ))}
+      </div>
       </div>
 
       <JobFilters filters={filters} setFilters={setFilters} cityOptions={cityOptions} cityCounts={meta?.cities || []} searchMode={Boolean(search)} />

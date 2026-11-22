@@ -1,38 +1,41 @@
 :root {
   color-scheme: light;
-  /* Light: stone paper and ink, the language of the owner's own sites (Luup, LexAgent, the
-     portfolio): a warm neutral page, warm-white cards on it, near-black ink and black primary
-     buttons. Colour is kept for meaning only (fit, status); the logo and blueprint drawing keep the brand blue. */
-  --bg: #ecebe6;
-  --surface: #fbfaf7;
-  --surface-2: #e5e3dd;
-  --border: #dbd8d0;
-  --border-strong: #c3bfb5;
-  --text: #1a1917;
-  --text-2: #4c4943;
-  --text-3: #625e57;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --border: #e2e5ea;
+  --border-strong: #cbd1d9;
+  --text: #11141a;
+  --text-2: #4a5160;
+  --text-3: #5b6476;
   --line: var(--border);
   --muted: var(--text-3);
-  --ok: #2f6b3f;
-  --ok-bg: #e2eadf;
-  --accent: #1a1917;
+  --ok: #157347;
+  --ok-bg: #e3f4ea;
+  --accent: #2563eb;
   --logo-ink: var(--text);
-  /* The brand blue, kept for the logo and the blueprint drawing only. */
+  /* The logo, the blueprint drawing and promotions (Go Pro, the trial, the yearly deal) use
+     the brand blue. */
   --logo-blue: #2563eb;
-  --accent-hover: #3a3833;
-  --accent-contrast: #fbfaf7;
-  --accent-soft: #e5e3dd;
-  --accent-text: #1a1917;
-  --amber-bg: #f1e6cf;
-  --amber-text: #6b4a0e;
-  --red-bg: #f3e0dc;
-  --red-text: #8f2a1d;
-  --focus: #1a1917;
-  --shadow: 0 1px 2px rgb(40 36 28 / 6%), 0 2px 10px rgb(40 36 28 / 4%);
-  --shadow-lg: 0 12px 40px rgb(40 36 28 / 14%);
-  --shadow-hover: 0 2px 4px rgb(40 36 28 / 6%), 0 10px 28px rgb(40 36 28 / 8%);
+  --promo: #2563eb;
+  --promo-hover: #1d4ed8;
+  --promo-contrast: #ffffff;
+  --promo-soft: #e8efff;
+  --promo-text: #1d4ed8;
+  --accent-hover: #1d4ed8;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e8efff;
+  --accent-text: #1d4ed8;
+  --amber-bg: #fcefd2;
+  --amber-text: #744800;
+  --red-bg: #fae2df;
+  --red-text: #9c2219;
+  --focus: #2563eb;
+  --shadow: 0 1px 2px rgb(20 20 18 / 6%), 0 2px 8px rgb(20 20 18 / 5%);
+  --shadow-lg: 0 12px 40px rgb(20 20 18 / 18%);
+  --shadow-hover: 0 2px 4px rgb(20 20 18 / 6%), 0 8px 24px rgb(20 20 18 / 8%);
   --glint: rgb(255 255 255 / 70%);
-  --grid-line: color-mix(in srgb, var(--logo-blue) 9%, transparent);
+  --grid-line: color-mix(in srgb, var(--accent) 9%, transparent);
   --radius: 12px;
   --radius-sm: 8px;
   --header-h: 64px;
@@ -46,67 +49,75 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    /* Dark: charcoal steps, page, then card, then inner tile, each a little lighter, with
-       warm white ink. No blue: easy on the eyes and never black on black. */
-    --bg: #111110;
-    --surface: #1c1b19;
-    --surface-2: #262522;
-    --border: #2f2e2a;
-    --border-strong: #403e39;
-    --text: #f0eee9;
-    --text-2: #bdb9b0;
-    --text-3: #94908a;
-    --ok: #8cc59a;
-    --ok-bg: #1d2a20;
-    --accent: #f0eee9;
+    --bg: #050505;
+    --surface: #0e0e0e;
+    --surface-2: #171717;
+    --border: #232323;
+    --border-strong: #333333;
+    --text: #ededed;
+    --text-2: #a8a8a8;
+    --text-3: #8f8f8f;
+    --ok: #5fd08f;
+    --ok-bg: #0f2a1b;
+    --accent: #4f8cff;
     --logo-ink: #f1e8d8;
     --logo-blue: #4f8cff;
-    --accent-hover: #ffffff;
-    --accent-contrast: #151413;
-    --accent-soft: #2c2b27;
-    --accent-text: #f0eee9;
-    --amber-bg: #2f2716;
-    --amber-text: #e7c27c;
-    --red-bg: #34201d;
-    --red-text: #eca79c;
-    --focus: #f0eee9;
-    --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 50%);
+    --promo: #4f8cff;
+    --promo-hover: #72a3ff;
+    --promo-contrast: #030b1f;
+    --promo-soft: #0c1a36;
+    --promo-text: #93b8ff;
+    --accent-hover: #72a3ff;
+    --accent-contrast: #030b1f;
+    --accent-soft: #0c1a36;
+    --accent-text: #93b8ff;
+    --amber-bg: #3d2e0f;
+    --amber-text: #f6cd7a;
+    --red-bg: #401b18;
+    --red-text: #f6a8a0;
+    --focus: #72a3ff;
+    --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 60%);
     --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
-    --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 35%);
-    --glint: rgb(255 255 255 / 4%);
-    --grid-line: color-mix(in srgb, var(--logo-blue) 7%, transparent);
+    --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+    --glint: rgb(255 255 255 / 5%);
+    --grid-line: color-mix(in srgb, var(--accent) 7%, transparent);
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #111110;
-  --surface: #1c1b19;
-  --surface-2: #262522;
-  --border: #2f2e2a;
-  --border-strong: #403e39;
-  --text: #f0eee9;
-  --text-2: #bdb9b0;
-  --text-3: #94908a;
-  --ok: #8cc59a;
-  --ok-bg: #1d2a20;
-  --accent: #f0eee9;
+  --bg: #050505;
+  --surface: #0e0e0e;
+  --surface-2: #171717;
+  --border: #232323;
+  --border-strong: #333333;
+  --text: #ededed;
+  --text-2: #a8a8a8;
+  --text-3: #8f8f8f;
+  --ok: #5fd08f;
+  --ok-bg: #0f2a1b;
+  --accent: #4f8cff;
   --logo-ink: #f1e8d8;
   --logo-blue: #4f8cff;
-  --accent-hover: #ffffff;
-  --accent-contrast: #151413;
-  --accent-soft: #2c2b27;
-  --accent-text: #f0eee9;
-  --amber-bg: #2f2716;
-  --amber-text: #e7c27c;
-  --red-bg: #34201d;
-  --red-text: #eca79c;
-  --focus: #f0eee9;
-  --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 50%);
+  --promo: #4f8cff;
+  --promo-hover: #72a3ff;
+  --promo-contrast: #030b1f;
+  --promo-soft: #0c1a36;
+  --promo-text: #93b8ff;
+  --accent-hover: #72a3ff;
+  --accent-contrast: #030b1f;
+  --accent-soft: #0c1a36;
+  --accent-text: #93b8ff;
+  --amber-bg: #3d2e0f;
+  --amber-text: #f6cd7a;
+  --red-bg: #401b18;
+  --red-text: #f6a8a0;
+  --focus: #72a3ff;
+  --shadow: 0 0 0 1px rgb(255 255 255 / 2%), 0 1px 2px rgb(0 0 0 / 60%);
   --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
-  --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 35%);
-  --glint: rgb(255 255 255 / 4%);
-  --grid-line: color-mix(in srgb, var(--logo-blue) 7%, transparent);
+  --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+  --glint: rgb(255 255 255 / 5%);
+  --grid-line: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
 *,
@@ -5935,20 +5946,6 @@ dialog.dialog:has(.details-form) {
 }
 
 
-/* Small uppercase labels in mono, as on the owner's portfolio: section names, table heads, facts. */
-.detail-section h3,
-.table th,
-.home-eyebrow,
-.home-tag,
-.search-history-title,
-.facts dt,
-.co-roles-label,
-.plan-label,
-.pnav-group {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-}
 
 /* Long firm names and titles wrap or cut instead of widening their box, on every page. */
 .job-card > *,
@@ -5963,3 +5960,193 @@ dialog.dialog:has(.details-form) {
   overflow-wrap: anywhere;
 }
 
+
+/* ---- Phones: smaller, lighter type and tighter spacing ----
+   iPhone Safari draws the fallback system font (SF Pro) larger and heavier than desktop fonts at
+   the same size, so on phones text steps down a notch and bold steps down to semibold. Desktop is
+   untouched. */
+@media (max-width: 599px) {
+  :root {
+    --header-h: 56px;
+  }
+  body {
+    font-size: 14px;
+  }
+  .app-header-inner {
+    gap: 10px;
+  }
+  .app-header .logo {
+    gap: 9px;
+  }
+  .app-header .logo-mark {
+    width: 23px;
+    height: 26px;
+  }
+  .app-header .logo-word {
+    font-size: 18px;
+  }
+  .go-pro-btn {
+    height: 30px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+  .account-btn {
+    width: 30px;
+    height: 30px;
+  }
+  .settings-head h1 {
+    font-size: 28px;
+  }
+  .settings-head p,
+  .ppane-head p {
+    font-size: 13px;
+  }
+  .ppane-head h2 {
+    font-size: 19px;
+  }
+
+  .job-list {
+    gap: 8px;
+  }
+  .job-card {
+    padding: 12px 12px 10px 14px;
+  }
+  .jc-head {
+    margin-bottom: 6px;
+  }
+  .jc-company {
+    font-size: 12px;
+  }
+  .jc-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .jc-place,
+  .jc-pay {
+    font-size: 12.5px;
+  }
+  .jc-foot {
+    margin-top: 8px;
+  }
+  .badge {
+    height: 22px;
+    padding: 0 7px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .detail-title {
+    font-size: 18px;
+  }
+  .segmented button {
+    font-size: 12px;
+  }
+  .bottom-nav a {
+    font-size: 11px;
+  }
+  .set-section-head h2 {
+    font-size: 14px;
+  }
+  .set-label,
+  .usage-name,
+  .pnav-label {
+    font-size: 13px;
+  }
+  .plan-price {
+    font-size: 28px;
+  }
+}
+
+/* ---- Promotions in the brand blue ---- */
+.go-pro-btn {
+  background: var(--promo);
+  color: var(--promo-contrast);
+}
+.go-pro-btn:hover {
+  background: var(--promo-hover);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--promo) 22%, transparent);
+}
+.pro-badge {
+  background: var(--promo-soft);
+  color: var(--promo-text);
+}
+.go-pro-banner {
+  border-color: color-mix(in srgb, var(--promo) 45%, var(--border));
+  background: var(--promo-soft);
+}
+.go-pro-banner strong {
+  color: var(--promo-text);
+}
+.go-pro-banner .btn-primary,
+.go-pro-link.btn-primary,
+.trial-row .btn-primary,
+.plan-card.is-best .btn-primary {
+  border-color: var(--promo);
+  background: var(--promo);
+  color: var(--promo-contrast);
+}
+.go-pro-banner .btn-primary:hover,
+.go-pro-link.btn-primary:hover,
+.trial-row .btn-primary:hover,
+.plan-card.is-best .btn-primary:hover {
+  border-color: var(--promo-hover);
+  background: var(--promo-hover);
+}
+.trial-row {
+  border-color: color-mix(in srgb, var(--promo) 55%, var(--border));
+  background: var(--promo-soft);
+}
+.plan-card.is-best {
+  border-color: var(--promo);
+  box-shadow: 0 0 0 1px var(--promo);
+  background: color-mix(in srgb, var(--promo-soft) 55%, var(--surface));
+}
+.plan-save {
+  background: var(--promo);
+  color: var(--promo-contrast);
+}
+
+
+/* ---- Jobs page: fewer rows above the list ----
+   Under the search: one line with the searches left and the Gmail status. Then one row with
+   Internships/Jobs next to where the jobs came from, then the filters, then a rule that separates
+   the controls from the results. */
+.jobs-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 24px;
+  margin: 8px 4px 14px;
+}
+.jobs-meta .search-hint {
+  margin: 0;
+}
+.jobs-meta .gmail-bar {
+  margin: 0;
+}
+.switch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 10px;
+}
+.switch-row .segmented {
+  margin: 0;
+}
+.jobs-page .filter-bar {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+@media (max-width: 599px) {
+  .jobs-meta {
+    margin: 6px 2px 10px;
+  }
+  .switch-row .segmented {
+    width: 100%;
+  }
+  .switch-row .segmented button {
+    flex: 1 1 auto;
+  }
+}
