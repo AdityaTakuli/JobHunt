@@ -705,9 +705,44 @@ function loadCheckout() {
 
 function PlanPanel() {
   const { toast } = useToast();
+  const { me } = useMeta();
   const [billing, setBilling] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [code, setCode] = useState('');
+  const [coupon, setCoupon] = useState(null); // { code, prices: { planId: { amount, discount } } }
+  const [couponError, setCouponError] = useState('');
+  const [checking, setChecking] = useState(false);
+
+  // Checks the code against every plan (a code can be for one plan only).
+  async function applyCode(e) {
+    e.preventDefault();
+    const typed = code.trim();
+    if (!typed || checking) return;
+    setChecking(true);
+    setCouponError('');
+    const results = await Promise.all(
+      billing.plans.map((p) =>
+        api('/billing/coupon', { method: 'POST', body: { plan: p.id, code: typed } })
+          .then((d) => ({ id: p.id, d }))
+          .catch((err) => ({ id: p.id, err })),
+      ),
+    );
+    setChecking(false);
+    const ok = results.filter((r) => r.d);
+    if (!ok.length) {
+      setCoupon(null);
+      setCouponError(results[0]?.err?.message || 'That coupon code is not valid.');
+      return;
+    }
+    setCoupon({ code: ok[0].d.code, prices: Object.fromEntries(ok.map((r) => [r.id, { amount: r.d.amount, discount: r.d.discount }])) });
+  }
+
+  function clearCode() {
+    setCoupon(null);
+    setCode('');
+    setCouponError('');
+  }
 
   const load = useCallback(() => {
     api('/billing')
@@ -722,8 +757,17 @@ function PlanPanel() {
   async function buy(planId) {
     setBusy(planId);
     try {
+      const withCode = coupon?.prices[planId] ? coupon.code : undefined;
+      const order = await api('/billing/order', { method: 'POST', body: { plan: planId, coupon: withCode } });
+      // A coupon that makes Pro free needs no payment.
+      if (order.free) {
+        toast({ message: 'Coupon applied. You are on ArchJobs Pro: no weekly limits.', duration: 7000 });
+        setBusy('');
+        clearCode();
+        load();
+        return;
+      }
       await loadCheckout();
-      const order = await api('/billing/order', { method: 'POST', body: { plan: planId } });
       const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
       const checkout = new window.Razorpay({
         key: order.keyId,
@@ -738,6 +782,7 @@ function PlanPanel() {
           try {
             await api('/billing/verify', { method: 'POST', body: paid });
             toast({ message: 'Payment done. You are on ArchJobs Pro: no weekly limits.', duration: 7000 });
+            clearCode();
           } catch (err) {
             toast({ message: `${err.message} If money left your account, Pro turns on within a few minutes.`, error: true, duration: 9000 });
           } finally {
@@ -790,25 +835,199 @@ function PlanPanel() {
         <Section id="set-pro" title="ArchJobs Pro" description="No weekly limits on tailored CVs and cover letters, AI job suggestions, ARCH answers and profile reads.">
           {billing.enabled && billing.plans.length ? (
             <div className="plan-grid">
-              {billing.plans.map((p) => (
-                <div key={p.id} className="plan-card">
-                  <span className="plan-price">{rupees(p.amount)}</span>
-                  <span className="plan-label">{p.label}</span>
-                  <span className="set-hint">{p.days >= 360 ? `${rupees(Math.round(p.amount / 12))} a month, paid yearly` : `${p.days} days`}</span>
-                  <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => buy(p.id)}>
-                    {busy === p.id ? 'Opening…' : 'Upgrade'}
-                  </button>
-                </div>
-              ))}
+              {billing.plans.map((p) => {
+                const deal = coupon?.prices[p.id];
+                const price = deal ? deal.amount : p.amount;
+                return (
+                  <div key={p.id} className="plan-card">
+                    <span className="plan-price">
+                      {price === 0 ? 'Free' : rupees(price)}
+                      {deal && <s className="plan-was">{rupees(p.amount)}</s>}
+                    </span>
+                    <span className="plan-label">{p.label}</span>
+                    <span className="set-hint">
+                      {deal ? `${coupon.code}: ${rupees(deal.discount)} off` : p.days >= 360 ? `${rupees(Math.round(p.amount / 12))} a month, paid yearly` : `${p.days} days`}
+                    </span>
+                    <button type="button" className="btn btn-primary btn-sm" disabled={Boolean(busy)} onClick={() => buy(p.id)}>
+                      {busy === p.id ? 'Opening…' : price === 0 ? 'Get Pro' : 'Upgrade'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="set-hint">Pro is not on sale yet.</p>
+          )}
+          {billing.enabled && billing.plans.length > 0 && (
+            <form className="coupon-row" onSubmit={applyCode}>
+              <label className="set-label" htmlFor="coupon-code">
+                Coupon code
+              </label>
+              <div className="coupon-controls">
+                <input
+                  id="coupon-code"
+                  className="input"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  maxLength={24}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-describedby={couponError ? 'coupon-error' : undefined}
+                  aria-invalid={Boolean(couponError)}
+                />
+                {coupon ? (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={clearCode}>
+                    Remove
+                  </button>
+                ) : (
+                  <button type="submit" className="btn btn-ghost btn-sm" disabled={!code.trim() || checking}>
+                    {checking ? 'Checking…' : 'Apply'}
+                  </button>
+                )}
+              </div>
+              {couponError && (
+                <p className="form-error" id="coupon-error" role="alert">
+                  {couponError}
+                </p>
+              )}
+            </form>
           )}
           {billing.enabled && billing.mode === 'test' && <p className="set-hint">Test mode: no real money is taken.</p>}
           <p className="set-hint">Paid once through Razorpay (UPI, cards, net banking). It does not renew by itself.</p>
         </Section>
       )}
+
+      {me?.isAdmin && <CouponsSection plans={billing.plans} />}
     </div>
+  );
+}
+
+const EMPTY_COUPON = { code: '', kind: 'percent', value: '', plan: '', maxUses: '', expiresOn: '' };
+
+// Admins make and switch off coupon codes.
+function CouponsSection({ plans }) {
+  const { toast } = useToast();
+  const [coupons, setCoupons] = useState(null);
+  const [form, setForm] = useState(EMPTY_COUPON);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api('/billing/coupons')
+      .then((d) => setCoupons(d.coupons))
+      .catch((err) => setError(err.message));
+  }, []);
+
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: key === 'code' ? e.target.value.toUpperCase() : e.target.value }));
+
+  async function create(e) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const { coupon } = await api('/billing/coupons', {
+        method: 'POST',
+        body: {
+          code: form.code,
+          [form.kind === 'percent' ? 'percentOff' : 'rupeesOff']: form.value,
+          plan: form.plan || null,
+          maxUses: form.maxUses,
+          expiresOn: form.expiresOn,
+        },
+      });
+      setCoupons((list) => [coupon, ...(list || [])]);
+      setForm(EMPTY_COUPON);
+      toast({ message: `Coupon ${coupon.code} made.` });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggle(c) {
+    try {
+      const { coupon } = await api(`/billing/coupons/${encodeURIComponent(c.code)}`, { method: 'PATCH', body: { active: !c.active } });
+      setCoupons((list) => list.map((x) => (x.code === coupon.code ? coupon : x)));
+    } catch (err) {
+      toast({ message: err.message, error: true });
+    }
+  }
+
+  const planName = (id) => plans.find((p) => p.id === id)?.label || id;
+  const off = (c) => (c.percentOff != null ? `${c.percentOff}% off` : `${rupees(c.amountOff)} off`);
+
+  return (
+    <Section id="set-coupons" title="Coupon codes" description="Codes people type in the coupon box above. Each person can use a code once. 100% off turns Pro on with no payment.">
+      <form className="coupon-form" onSubmit={create}>
+        <label>
+          <span className="set-label">Code</span>
+          <input className="input" value={form.code} onChange={set('code')} maxLength={24} placeholder="DIWALI50" required autoComplete="off" spellCheck={false} />
+        </label>
+        <label>
+          <span className="set-label">Discount</span>
+          <span className="coupon-controls">
+            <input className="input" type="number" min="1" max={form.kind === 'percent' ? 100 : 100000} value={form.value} onChange={set('value')} required aria-label="Discount amount" />
+            <select className="input" value={form.kind} onChange={set('kind')} aria-label="Discount type">
+              <option value="percent">% off</option>
+              <option value="rupees">₹ off</option>
+            </select>
+          </span>
+        </label>
+        <label>
+          <span className="set-label">Plan</span>
+          <select className="input" value={form.plan} onChange={set('plan')}>
+            <option value="">Every plan</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="set-label">Uses (blank: no limit)</span>
+          <input className="input" type="number" min="1" value={form.maxUses} onChange={set('maxUses')} />
+        </label>
+        <label>
+          <span className="set-label">Last day (blank: never ends)</span>
+          <input className="input" type="date" value={form.expiresOn} onChange={set('expiresOn')} />
+        </label>
+        <div className="coupon-submit">
+          <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
+            {busy ? 'Making…' : 'Make coupon'}
+          </button>
+        </div>
+      </form>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {coupons?.length > 0 && (
+        <ul className="coupon-list">
+          {coupons.map((c) => (
+            <li key={c.code} className={c.active ? '' : 'is-off'}>
+              <div>
+                <strong>{c.code}</strong> · {off(c)}
+                {c.plan ? ` · ${planName(c.plan)}` : ''}
+                <span className="set-hint">
+                  {' '}
+                  Used {c.uses}
+                  {c.maxUses != null ? ` of ${c.maxUses}` : ''}
+                  {c.expiresAt ? ` · until ${new Date(c.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}` : ''}
+                  {c.active ? '' : ' · off'}
+                </span>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => toggle(c)}>
+                {c.active ? 'Turn off' : 'Turn on'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
 

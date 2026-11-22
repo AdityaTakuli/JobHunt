@@ -41,6 +41,8 @@ const ADDED_COLUMNS = [
   ['users', 'password_hash', 'VARCHAR(200) NULL AFTER gmail_error'],
   ['users', 'plan', 'VARCHAR(32) NULL AFTER password_hash'],
   ['users', 'plan_expires_at', 'DATETIME NULL AFTER plan'],
+  ['payments', 'coupon', 'VARCHAR(24) NULL AFTER mode'],
+  ['payments', 'list_amount', 'INT UNSIGNED NULL AFTER coupon'],
 ];
 
 async function hasIndex(table, name) {

@@ -12,6 +12,8 @@ import {
   verifyPaymentSignature,
   verifyWebhookSignature,
 } from '../lib/razorpay.js';
+import { requireAdmin } from '../auth.js';
+import { cleanCoupon, CouponError, couponView, priceWithCoupon } from '../lib/coupons.js';
 import { quotaFor } from '../lib/quota.js';
 import { startOfIstDay } from '../lib/time.js';
 
@@ -44,41 +46,70 @@ billingRouter.get('/', async (req, res, next) => {
   }
 });
 
+// The price of a plan with a coupon code, before paying. Body: { plan, code }.
+billingRouter.post('/coupon', async (req, res, next) => {
+  try {
+    if (!isEnabled(rz())) return off(res);
+    const plan = rz().plans.find((p) => p.id === req.body?.plan);
+    if (!plan) return res.status(400).json({ error: 'Unknown plan.' });
+    res.json({ plan: plan.id, listAmount: plan.amount, ...(await priceWithCoupon(req.body?.code, plan, req.user.id)) });
+  } catch (err) {
+    if (err instanceof CouponError) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Body: { plan, coupon? }. A coupon that makes the plan free turns Pro on here, with no Razorpay.
 billingRouter.post('/order', async (req, res, next) => {
   try {
     if (!isEnabled(rz())) return off(res);
     const plan = rz().plans.find((p) => p.id === req.body?.plan);
     if (!plan) return res.status(400).json({ error: 'Unknown plan.' });
+    let priced = { code: null, amount: plan.amount };
+    if (req.body?.coupon) {
+      try {
+        priced = await priceWithCoupon(req.body.coupon, plan, req.user.id);
+      } catch (err) {
+        if (err instanceof CouponError) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+    }
     const [{ n }] = await query('SELECT COUNT(*) AS n FROM payments WHERE user_id = ? AND created_at >= ?', [
       req.user.id,
       startOfIstDay(),
     ]);
     if (Number(n) >= rz().dailyOrders) return res.status(429).json({ error: 'Too many payment attempts today. Try again tomorrow.' });
 
+    const payment = {
+      user_id: req.user.id,
+      plan: plan.id,
+      days: plan.days,
+      amount: priced.amount,
+      currency: plan.currency,
+      status: 'created',
+      coupon: priced.code,
+      list_amount: priced.code ? plan.amount : null,
+      created_at: new Date(),
+    };
+    if (priced.amount === 0) {
+      const orderId = `free_${crypto.randomBytes(12).toString('hex')}`;
+      await query('INSERT INTO payments SET ?', [{ ...payment, order_id: orderId, mode: 'free' }]);
+      await markPaid({ orderId, paymentId: null });
+      return res.json({ free: true, ...(await userPlan(req.user.id)) });
+    }
+
     const receipt = `u${req.user.id}-${crypto.randomBytes(6).toString('hex')}`;
     const order = await createOrder(rz(), {
-      amount: plan.amount,
+      amount: priced.amount,
       currency: plan.currency,
       receipt,
-      notes: { user_id: String(req.user.id), plan: plan.id },
+      notes: { user_id: String(req.user.id), plan: plan.id, ...(priced.code ? { coupon: priced.code } : {}) },
     });
-    await query('INSERT INTO payments SET ?', [
-      {
-        user_id: req.user.id,
-        plan: plan.id,
-        days: plan.days,
-        amount: plan.amount,
-        currency: plan.currency,
-        order_id: order.id,
-        status: 'created',
-        mode: keyMode(rz().keyId),
-        created_at: new Date(),
-      },
-    ]);
+    await query('INSERT INTO payments SET ?', [{ ...payment, order_id: order.id, mode: keyMode(rz().keyId) }]);
     res.json({
       keyId: rz().keyId,
       orderId: order.id,
-      amount: plan.amount,
+      amount: priced.amount,
       currency: plan.currency,
       name: 'ArchJobs',
       description: plan.label,
@@ -109,6 +140,7 @@ export async function markPaid({ orderId, paymentId, amount }, now = new Date())
   ]);
   // Another request (Checkout vs webhook) got there first.
   if (!result.affectedRows) return true;
+  if (pay.coupon) await query('UPDATE coupons SET uses = uses + 1 WHERE code = ?', [pay.coupon]);
   const [user] = await query('SELECT plan, plan_expires_at FROM users WHERE id = ?', [pay.user_id]);
   const until = extendUntil(user?.plan === pay.plan ? user.plan_expires_at : null, pay.days, now);
   await query('UPDATE users SET plan = ?, plan_expires_at = ? WHERE id = ?', [pay.plan, until, pay.user_id]);
@@ -160,3 +192,46 @@ export async function razorpayWebhook(req, res) {
     res.status(500).json({ error: 'Try again.' });
   }
 }
+
+// ---- Coupon codes (admins) ----
+
+billingRouter.get('/coupons', requireAdmin, async (req, res, next) => {
+  try {
+    const rows = await query('SELECT * FROM coupons ORDER BY created_at DESC LIMIT 200');
+    res.json({ coupons: rows.map(couponView) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Body: { code, percentOff | rupeesOff, plan?, maxUses?, expiresOn? (YYYY-MM-DD) }.
+billingRouter.post('/coupons', requireAdmin, async (req, res, next) => {
+  try {
+    let coupon;
+    try {
+      coupon = cleanCoupon(req.body, rz().plans);
+    } catch (err) {
+      if (err instanceof CouponError) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+    const [taken] = await query('SELECT id FROM coupons WHERE code = ?', [coupon.code]);
+    if (taken) return res.status(409).json({ error: 'There is already a coupon with that code.' });
+    await query('INSERT INTO coupons SET ?', [{ ...coupon, created_by: req.user.id, created_at: new Date() }]);
+    const [row] = await query('SELECT * FROM coupons WHERE code = ?', [coupon.code]);
+    res.status(201).json({ coupon: couponView(row) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Turn a code off (or back on). Body: { active }.
+billingRouter.patch('/coupons/:code', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await query('UPDATE coupons SET active = ? WHERE code = ?', [req.body?.active ? 1 : 0, String(req.params.code).toUpperCase()]);
+    if (!result.affectedRows) return res.status(404).json({ error: 'Coupon not found.' });
+    const [row] = await query('SELECT * FROM coupons WHERE code = ?', [String(req.params.code).toUpperCase()]);
+    res.json({ coupon: couponView(row) });
+  } catch (err) {
+    next(err);
+  }
+});

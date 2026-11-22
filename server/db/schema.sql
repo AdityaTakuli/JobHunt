@@ -337,7 +337,9 @@ CREATE TABLE IF NOT EXISTS payments (
   order_id VARCHAR(40) NOT NULL,             -- Razorpay order_...
   payment_id VARCHAR(40) NULL,               -- Razorpay pay_...
   status VARCHAR(12) NOT NULL DEFAULT 'created', -- created / paid / failed
-  mode VARCHAR(4) NOT NULL,                  -- test / live, from the key used
+  mode VARCHAR(4) NOT NULL,                  -- test / live, from the key used, or free (a 100% coupon)
+  coupon VARCHAR(24) NULL,                   -- coupon code used, if any
+  list_amount INT UNSIGNED NULL,             -- the plan price before the coupon, in paise
   created_at DATETIME NOT NULL,
   paid_at DATETIME NULL,
   UNIQUE KEY uq_payments_order (order_id),
@@ -352,4 +354,21 @@ CREATE TABLE IF NOT EXISTS feature_uses (
   feature VARCHAR(16) NOT NULL,
   created_at DATETIME NOT NULL,
   KEY idx_feature_uses_user (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Coupon codes for ArchJobs Pro, made by admins in Settings > Plan (lib/coupons.js). uses counts
+-- paid payments. A code takes either percent_off or amount_off (paise).
+CREATE TABLE IF NOT EXISTS coupons (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(24) NOT NULL,
+  percent_off TINYINT UNSIGNED NULL,
+  amount_off INT UNSIGNED NULL,
+  plan VARCHAR(32) NULL,                     -- only this plan, or NULL for every plan
+  max_uses INT UNSIGNED NULL,                -- NULL for no limit
+  uses INT UNSIGNED NOT NULL DEFAULT 0,
+  expires_at DATETIME NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL,
+  UNIQUE KEY uq_coupons_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

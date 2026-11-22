@@ -228,6 +228,47 @@ describe('integration', { skip: !dbReady }, () => {
     }
   });
 
+  it('makes coupons (admins only) and turns Pro on with a 100% code', async () => {
+    const { parsePlans } = await import('../server/lib/razorpay.js');
+    const saved = { ...config.razorpay };
+    Object.assign(config.razorpay, { enabled: true, keyId: 'rzp_test_x', keySecret: 'k', plans: parsePlans('pro_month:19900:30:Pro monthly,pro_year:149900:365:Pro yearly') });
+    const res = await query('INSERT INTO users SET ?', [{ email: 'coupon-user@example.com', name: 'Buyer', created_at: NOW }]);
+    const as = (id) => ({ cookie: `aj_session=${createSessionToken(id)}`, 'Content-Type': 'application/json' });
+    const post = async (path, body, id) => {
+      const r = await fetch(`${base}${path}`, { method: 'POST', headers: as(id), body: JSON.stringify(body) });
+      return { status: r.status, data: await r.json() };
+    };
+    try {
+      assert.equal((await post('/api/billing/coupons', { code: 'SNEAKY', percentOff: 100 }, res.insertId)).status, 403);
+      const made = await post('/api/billing/coupons', { code: 'friends', percentOff: 100, plan: 'pro_month', maxUses: 2 }, 1);
+      assert.equal(made.status, 201);
+      assert.equal(made.data.coupon.code, 'FRIENDS');
+      assert.equal((await post('/api/billing/coupons', { code: 'FRIENDS', percentOff: 10 }, 1)).status, 409);
+      assert.equal((await post('/api/billing/coupons', { code: 'HALF', percentOff: 50 }, 1)).status, 201);
+
+      const half = await post('/api/billing/coupon', { plan: 'pro_year', code: 'half' }, res.insertId);
+      assert.deepEqual([half.data.amount, half.data.discount], [74950, 74950]);
+      const wrongPlan = await post('/api/billing/coupon', { plan: 'pro_year', code: 'FRIENDS' }, res.insertId);
+      assert.match(wrongPlan.data.error, /different plan/);
+
+      const free = await post('/api/billing/order', { plan: 'pro_month', coupon: 'friends' }, res.insertId);
+      assert.equal(free.status, 200);
+      assert.equal(free.data.free, true);
+      assert.equal(free.data.active, true);
+      const [pay] = await query('SELECT * FROM payments WHERE user_id = ?', [res.insertId]);
+      assert.deepEqual([pay.status, pay.mode, pay.amount, pay.list_amount, pay.coupon], ['paid', 'free', 0, 19900, 'FRIENDS']);
+      const [c] = await query('SELECT uses FROM coupons WHERE code = ?', ['FRIENDS']);
+      assert.equal(c.uses, 1);
+      const again = await post('/api/billing/order', { plan: 'pro_month', coupon: 'FRIENDS' }, res.insertId);
+      assert.match(again.data.error, /already used/);
+    } finally {
+      Object.assign(config.razorpay, saved);
+      await query('DELETE FROM payments WHERE user_id = ?', [res.insertId]);
+      await query("DELETE FROM coupons WHERE code IN ('FRIENDS', 'HALF')");
+      await query('DELETE FROM users WHERE id = ?', [res.insertId]);
+    }
+  });
+
   it('serves the filtered job feed', async () => {
     const feed = await request('/api/jobs?city=Bengaluru');
     assert.equal(feed.status, 200);

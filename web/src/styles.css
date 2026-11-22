@@ -5171,3 +5171,60 @@ dialog.dialog:has(.details-form) {
 .plan-label {
   font-weight: 600;
 }
+
+.plan-was {
+  margin-left: 8px;
+  color: var(--text-3);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.coupon-row {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  margin-bottom: 12px;
+}
+
+.coupon-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.coupon-controls .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.coupon-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.coupon-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.coupon-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.coupon-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.coupon-list li.is-off strong {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
