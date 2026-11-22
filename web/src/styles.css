@@ -2,7 +2,7 @@
   color-scheme: light;
   /* Light: stone paper and ink, the language of the owner's own sites (Luup, LexAgent, the
      portfolio): a warm neutral page, warm-white cards on it, near-black ink and black primary
-     buttons. Colour is kept for meaning only (fit, status); the logo carries the brand blue. */
+     buttons. Colour is kept for meaning only (fit, status); the logo and blueprint drawing keep the brand blue. */
   --bg: #ecebe6;
   --surface: #fbfaf7;
   --surface-2: #e5e3dd;
@@ -17,6 +17,8 @@
   --ok-bg: #e2eadf;
   --accent: #1a1917;
   --logo-ink: var(--text);
+  /* The brand blue, kept for the logo and the blueprint drawing only. */
+  --logo-blue: #2563eb;
   --accent-hover: #3a3833;
   --accent-contrast: #fbfaf7;
   --accent-soft: #e5e3dd;
@@ -30,7 +32,7 @@
   --shadow-lg: 0 12px 40px rgb(40 36 28 / 14%);
   --shadow-hover: 0 2px 4px rgb(40 36 28 / 6%), 0 10px 28px rgb(40 36 28 / 8%);
   --glint: rgb(255 255 255 / 70%);
-  --grid-line: color-mix(in srgb, var(--text) 6%, transparent);
+  --grid-line: color-mix(in srgb, var(--logo-blue) 9%, transparent);
   --radius: 12px;
   --radius-sm: 8px;
   --header-h: 64px;
@@ -58,6 +60,7 @@
     --ok-bg: #1d2a20;
     --accent: #f0eee9;
     --logo-ink: #f1e8d8;
+    --logo-blue: #4f8cff;
     --accent-hover: #ffffff;
     --accent-contrast: #151413;
     --accent-soft: #2c2b27;
@@ -71,7 +74,7 @@
     --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
     --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 35%);
     --glint: rgb(255 255 255 / 4%);
-    --grid-line: color-mix(in srgb, var(--text) 5%, transparent);
+    --grid-line: color-mix(in srgb, var(--logo-blue) 7%, transparent);
   }
 }
 
@@ -89,6 +92,7 @@
   --ok-bg: #1d2a20;
   --accent: #f0eee9;
   --logo-ink: #f1e8d8;
+  --logo-blue: #4f8cff;
   --accent-hover: #ffffff;
   --accent-contrast: #151413;
   --accent-soft: #2c2b27;
@@ -102,7 +106,7 @@
   --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
   --shadow-hover: 0 2px 4px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 35%);
   --glint: rgb(255 255 255 / 4%);
-  --grid-line: color-mix(in srgb, var(--text) 5%, transparent);
+  --grid-line: color-mix(in srgb, var(--logo-blue) 7%, transparent);
 }
 
 *,
@@ -244,7 +248,7 @@ main:focus:not(:focus-visible) {
 }
 
 .logo-mark .lm-outer {
-  stroke: var(--accent);
+  stroke: var(--logo-blue);
   stroke-width: 4.5;
 }
 
@@ -281,7 +285,7 @@ main:focus:not(:focus-visible) {
 
 .logo-word b {
   font-weight: 700;
-  color: var(--accent);
+  color: var(--logo-blue);
 }
 
 .top-nav {
@@ -1869,7 +1873,8 @@ dialog.dialog::backdrop {
 @media (min-width: 760px) {
   .home-data {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
+    /* Both cards the same height, side by side. */
+    align-items: stretch;
   }
 }
 
@@ -2044,7 +2049,7 @@ dialog.dialog::backdrop {
   display: block;
   width: 100%;
   height: auto;
-  color: var(--accent);
+  color: var(--logo-blue);
   overflow: visible;
 }
 
