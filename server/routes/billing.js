@@ -268,7 +268,9 @@ billingRouter.post('/coupons', requireAdmin, async (req, res, next) => {
       throw err;
     }
     const [taken] = await query('SELECT id FROM coupons WHERE code = ?', [coupon.code]);
-    if (taken) return res.status(409).json({ error: 'There is already a coupon with that code.' });
+    if (taken) {
+      return res.status(409).json({ error: `${coupon.code} already exists: it is in the list below. Turn it on there, or pick another code for different settings.` });
+    }
     await query('INSERT INTO coupons SET ?', [{ ...coupon, created_by: req.user.id, created_at: new Date() }]);
     const [row] = await query('SELECT * FROM coupons WHERE code = ?', [coupon.code]);
     res.status(201).json({ coupon: couponView(row) });

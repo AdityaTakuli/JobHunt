@@ -1012,11 +1012,16 @@ function CouponsSection({ plans }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const loadCoupons = useCallback(
+    () =>
+      api('/billing/coupons')
+        .then((d) => setCoupons(d.coupons))
+        .catch((err) => setError(err.message)),
+    [],
+  );
   useEffect(() => {
-    api('/billing/coupons')
-      .then((d) => setCoupons(d.coupons))
-      .catch((err) => setError(err.message));
-  }, []);
+    loadCoupons();
+  }, [loadCoupons]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: key === 'code' ? e.target.value.toUpperCase() : e.target.value }));
 
@@ -1041,6 +1046,8 @@ function CouponsSection({ plans }) {
       toast({ message: `Coupon ${coupon.code} made.` });
     } catch (err) {
       setError(err.message);
+      // The code exists already: show the list as it is now (another tab may have changed it).
+      if (err.status === 409) loadCoupons();
     } finally {
       setBusy(false);
     }
