@@ -9,7 +9,7 @@ import { memoryUsageStore } from '../server/lib/aiBudget.js';
 import { JOB_EMAIL_QUERY } from '../server/lib/google.js';
 import { createMailTriage } from '../server/lib/mailTriage.js';
 import { parseSalary } from '../server/lib/salary.js';
-import { emailToText, glassdoorListing, jobsFromEmail, mightListJobs, namesFromLink, publisherOf, resolveJobLink, stripRating, stripTracking, validateJobList } from '../server/sources/jobEmail.js';
+import { emailToText, glassdoorJobLink, glassdoorListing, jobsFromEmail, mightListJobs, namesFromLink, publisherOf, resolveJobLink, stripRating, stripTracking, validateJobList } from '../server/sources/jobEmail.js';
 
 const html = readFileSync(new URL('./fixtures/glassdoor-alert.html', import.meta.url), 'utf8');
 const MAIL = {
@@ -121,13 +121,25 @@ describe('job email answer', () => {
 describe('job email links', () => {
   it('follows click trackers to the job page and drops tracking parameters', async () => {
     const hops = {
-      'https://click.example.com/c/abc?e=student%40example.com': 'https://www.glassdoor.co.in/partner/jobListing.htm?jobListingId=1009&utm_source=jobalert&uid=42&pos=3',
+      'https://click.example.com/c/abc?e=student%40example.com': 'https://www.example.com/jobs/1009?utm_source=jobalert&uid=42&pos=3',
     };
     const fetchImpl = async (url, init) => {
       assert.equal(init.redirect, 'manual');
       return hops[url] ? new Response(null, { status: 302, headers: { location: hops[url] } }) : new Response('job page', { status: 200 });
     };
-    assert.equal(await resolveJobLink('https://click.example.com/c/abc?e=student%40example.com', { fetchImpl }), 'https://www.glassdoor.co.in/partner/jobListing.htm?jobListingId=1009&pos=3');
+    assert.equal(await resolveJobLink('https://click.example.com/c/abc?e=student%40example.com', { fetchImpl }), 'https://www.example.com/jobs/1009?pos=3');
+  });
+
+  it('turns Glassdoor alert links into the lasting job link without opening them', async () => {
+    const alert =
+      'https://www.glassdoor.sg/partner/jobListing.htm?pos=101&ao=1136043&guid=000001a17ce087c6&src=GD_JOB_AD&t=JA&uido=1E46E34BD252FD91&jobListingId=1010307459224&jrtk=5-yul1-0-1k5uern5kl02v800&tgt=GD_JOB_VIEW&utm_medium=email&ja=430796264';
+    const fetchImpl = async () => {
+      throw new Error('should not be opened');
+    };
+    assert.equal(await resolveJobLink(alert, { fetchImpl }), 'https://www.glassdoor.co.in/job-listing/j?jl=1010307459224');
+    assert.equal(glassdoorJobLink('https://www.glassdoor.com/job-listing/senior-architect-wsp-JV_IC2940587_KO0,16_KE17,20.htm?jl=1010307459224&utm_source=x'), 'https://www.glassdoor.co.in/job-listing/senior-architect-wsp-JV_IC2940587_KO0,16_KE17,20.htm?jl=1010307459224');
+    assert.equal(glassdoorJobLink('https://www.glassdoor.sg/Job/bengaluru-architect-jobs-SRCH_IL.0,9_IC2940587.htm?ja=4307'), null, 'a search page has no listing id');
+    assert.equal(glassdoorJobLink('https://evil.example.com/?jobListingId=1010307459224'), null);
   });
 
   it('keeps a tracker link whole when it cannot be followed', async () => {

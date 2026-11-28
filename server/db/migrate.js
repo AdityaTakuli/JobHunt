@@ -6,7 +6,7 @@ import { parseDeadline } from '../lib/deadline.js';
 import { rankApplyOptions } from '../lib/normalize.js';
 import { COMPANIES } from '../lib/companies.js';
 import { parseExperience } from '../lib/rules.js';
-import { namesFromLink } from '../sources/jobEmail.js';
+import { glassdoorJobLink, namesFromLink } from '../sources/jobEmail.js';
 import { isDesignRole } from '../sources/companyFeeds.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { closePool, parseJson, query } from './pool.js';
@@ -233,6 +233,37 @@ async function fixNamesFromLinks() {
   }
 }
 
+// Jobs stored from Glassdoor alert emails before 2026-11-29 kept the raw click-tracker link
+// (her account, an expiring token) and stopped opening. Swaps in Glassdoor's lasting job link.
+async function fixGlassdoorLinks() {
+  const rows = await query(
+    "SELECT id, company, apply_url, apply_options, sources FROM jobs WHERE apply_url LIKE '%glassdoor.%jobListingId=%' OR apply_options LIKE '%glassdoor.%jobListingId=%'",
+  );
+  const fix = (url) => (typeof url === 'string' && url.includes('jobListingId=') && glassdoorJobLink(url)) || url;
+  for (const row of rows) {
+    // Ranked again: a glassdoor.sg link counted as an unknown site, the Indian one as a job board.
+    const stored = parseJson(row.apply_options, []);
+    const options = rankApplyOptions(
+      (stored.length ? stored : [{ url: row.apply_url }]).map((o) => (fix(o.url) === o.url ? o : { url: fix(o.url), publisher: o.publisher })),
+      row.company,
+    );
+    if (!options.length) continue;
+    const sources = parseJson(row.sources, []).map((s) => ({ ...s, url: fix(s.url) }));
+    await query('UPDATE jobs SET ? WHERE id = ?', [
+      {
+        apply_url: options[0].url.slice(0, 1000),
+        apply_url_rank: options[0].rank,
+        apply_kind: options[0].kind,
+        apply_options: JSON.stringify(options),
+        sources: JSON.stringify(sources),
+        link_status: 'unknown',
+        updated_at: new Date(),
+      },
+      row.id,
+    ]);
+  }
+}
+
 // The built-in ATS term list and CV playbook, mirrored into their tables so they can be seen and
 // extended in the database. Only 'seed' rows are overwritten; rows added by hand are left alone.
 async function seedAtsData() {
@@ -269,6 +300,7 @@ export async function migrate() {
   await backfillApplyOptions();
   await backfillDeadlines();
   await fixNamesFromLinks();
+  await fixGlassdoorLinks();
   await syncCompanies();
   await requeueMislabeled();
   await seedAtsData();

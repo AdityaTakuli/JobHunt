@@ -197,12 +197,37 @@ export function stripTracking(url) {
   }
 }
 
+// Glassdoor alert links (/partner/jobListing.htm?jobListingId=...&jrtk=...&uido=...) carry her
+// account and a click token that expires, and Glassdoor answers servers with a 403 "Security"
+// page, so they can't be followed. The listing id is all a link needs: /job-listing/j?jl=<id> is
+// Glassdoor's own share link and stays valid while the job is up. Indian site, since the jobs
+// here are in India; a named listing page keeps its path (it spells out title and employer).
+const GLASSDOOR_HOST = /(^|\.)glassdoor\.[a-z.]+$/i;
+const GLASSDOOR_SITE = 'https://www.glassdoor.co.in';
+
+/** Glassdoor's lasting link for a Glassdoor job URL, or null when it isn't one. */
+export function glassdoorJobLink(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!GLASSDOOR_HOST.test(u.hostname)) return null;
+  const id = (u.searchParams.get('jobListingId') || u.searchParams.get('jl') || '').match(/^\d{5,20}$/)?.[0];
+  if (!id) return null;
+  const named = /^\/job-listing\/[^/]+-JV_[^/]*\.htm$/i.test(u.pathname) ? u.pathname : '/job-listing/j';
+  return `${GLASSDOOR_SITE}${named}?jl=${id}`;
+}
+
 /**
  * Email links usually go through a click tracker carrying her identity. Follows the redirects to
  * the job page itself and drops the tracking parameters, so the shared Jobs list holds a clean
  * link. Keeps the original link when it can't be followed.
  */
 export async function resolveJobLink(url, { fetchImpl = safeFetch, timeoutMs = 8_000, maxHops = 6 } = {}) {
+  const direct = glassdoorJobLink(url);
+  if (direct) return direct;
   let current = url;
   try {
     for (let hop = 0; hop < maxHops; hop += 1) {
@@ -224,7 +249,7 @@ export async function resolveJobLink(url, { fetchImpl = safeFetch, timeoutMs = 8
     // Timeout or network error: keep what was reached so far.
   }
   // A tracker that was never left still needs its own parameters to work.
-  return current === url ? url : stripTracking(current);
+  return glassdoorJobLink(current) || (current === url ? url : stripTracking(current));
 }
 
 const aligned = (a, b) => Boolean(a && b) && (a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`));
